@@ -1,0 +1,118 @@
+body {
+    padding-top: 56px; /* Adjust if navbar height changes */
+    padding-bottom: 60px; /* Adjust if footer height changes */
+}
+
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    background-color: #f8f9fa; /* Standard Bootstrap light gray */
+    z-index: 1030; /* Ensure footer is above other content but below modals if any */
+}
+
+/* Fixed table layout for standings to prevent team names from squishing columns too much */
+.fixed-table-layout {
+    table-layout: fixed;
+    word-wrap: break-word;
+}
+
+.fixed-table-layout th,
+.fixed-table-layout td {
+    overflow: hidden; /* Could also be ellipsis if preferred */
+}
+
+/* Adjust column widths for standings table - you might need to tweak these */
+.fixed-table-layout th:nth-child(1), /* # */
+.fixed-table-layout td:nth-child(1) {
+    width: 5%; 
+}
+.fixed-table-layout th:nth-child(2), /* Team */
+.fixed-table-layout td:nth-child(2) {
+    width: 25%; 
+}
+.fixed-table-layout th:nth-child(3), /* SP */
+.fixed-table-layout td:nth-child(3),
+.fixed-table-layout th:nth-child(4), /* S */
+.fixed-table-layout td:nth-child(4),
+.fixed-table-layout th:nth-child(5), /* OTS */
+.fixed-table-layout td:nth-child(5),
+.fixed-table-layout th:nth-child(6), /* PS */
+.fixed-table-layout td:nth-child(6),
+.fixed-table-layout th:nth-child(7), /* N */
+.fixed-table-layout td:nth-child(7),
+.fixed-table-layout th:nth-child(8), /* OTN */
+.fixed-table-layout td:nth-child(8),
+.fixed-table-layout th:nth-child(9), /* PN */
+.fixed-table-layout td:nth-child(9) {
+    width: 5%;
+    text-align: center;
+}
+
+.fixed-table-layout th:nth-child(10), /* Tore */
+.fixed-table-layout td:nth-child(10) {
+    width: 10%;
+    text-align: center;
+}
+.fixed-table-layout th:nth-child(11), /* Diff */
+.fixed-table-layout td:nth-child(11) {
+    width: 8%;
+    text-align: center;
+}
+.fixed-table-layout th:nth-child(12), /* Pkt */
+.fixed-table-layout td:nth-child(12) {
+    width: 7%;
+    text-align: center;
+}
+
+/* Style for game result input form to make it more compact */
+.table td .form-control-sm {
+    padding: .25rem .5rem;
+    font-size: .875rem;
+    line-height: 1.5;
+    border-radius: .2rem;
+    height: auto; /* Override fixed height if necessary */
+}
+
+.table td input[type="number"].form-control-sm {
+    width: 60px; /* More specific width for score inputs */
+}
+
+.table td select.form-control-sm {
+    width: auto; /* Allow select to size based on content */
+    min-width: 80px;
+}
+
+.table .btn-sm {
+    padding: .25rem .5rem;
+    font-size: .875rem;
+    line-height: 1.5;
+    border-radius: .2rem;
+}
+
+
+/* Ensure flash messages have enough contrast */
+.alert-success {
+    color: #155724;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+.alert-danger {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}
+
+.alert-warning {
+    color: #856404;
+    background-color: #fff3cd;
+    border-color: #ffeeba;
+}
+
+.alert-info {
+    color: #0c5460;
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+} 

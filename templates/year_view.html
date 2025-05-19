@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+
+{% block title %}WM {{ year.year }} - IIHF Tabellenrechner{% endblock %}
+
+{% block content %}
+<h1>WM {{ year.year }} - Spielplan und Tabellen</h1>
+
+{% if not year.fixture_path or not games_by_round %}
+    <div class="alert alert-warning" role="alert">
+        Für dieses Jahr wurde noch kein Spielplan hochgeladen oder der Spielplan ist leer.
+        <a href="{{ url_for('index') }}" class="alert-link">Zurück zur Startseite, um einen Spielplan hochzuladen.</a>
+    </div>
+{% else %}
+
+    {# Tabs für Runden und Tabellen #}
+    <ul class="nav nav-tabs mb-3" id="yearTabs" role="tablist">
+        {% if standings.get('Group A') or standings.get('Group B') %}
+            <li class="nav-item" role="presentation">
+                <a class="nav-link active" id="standings-tab" data-toggle="tab" href="#standings" role="tab" aria-controls="standings" aria-selected="true">Tabellen Vorrunde</a>
+            </li>
+        {% endif %}
+        {% for round_name, games_in_round in games_by_round.items() %}
+            <li class="nav-item" role="presentation">
+                <a class="nav-link {% if not (standings.get('Group A') or standings.get('Group B')) and loop.first %}active{% endif %}" id="{{ round_name|replace(' ', '-')|lower }}-tab" data-toggle="tab" href="#{{ round_name|replace(' ', '-')|lower }}" role="tab" aria-controls="{{ round_name|replace(' ', '-')|lower }}" aria-selected="false">{{ round_name }} ({{ games_in_round|length }})</a>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <div class="tab-content" id="yearTabsContent">
+        {# Tabellen Vorrunde #}
+        {% if standings.get('Group A') or standings.get('Group B') %}
+        <div class="tab-pane fade show active" id="standings" role="tabpanel" aria-labelledby="standings-tab">
+            <h2>Tabellen der Vorrunde</h2>
+            <div class="row">
+                {% for group_name, group_standings in standings.items() %}
+                <div class="col-md-6 mb-4">
+                    <h3>{{ group_name }}</h3>
+                    {% if group_standings %}
+                    <table class="table table-sm table-striped table-hover fixed-table-layout">
+                        <thead class="thead-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Team</th>
+                                <th title="Spiele">SP</th>
+                                <th title="Siege">S</th>
+                                <th title="OT-Siege">OTS</th>
+                                <th title="Penalty-Siege">PS</th>
+                                <th title="Niederlagen">N</th>
+                                <th title="OT-Niederlagen">OTN</th>
+                                <th title="Penalty-Niederlagen">PN</th>
+                                <th title="Tore">Tore</th>
+                                <th title="Differenz">Diff.</th>
+                                <th title="Punkte">Pkt.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for team_stat in group_standings %}
+                            {% set iso_code = team_iso_codes.get(team_stat.name) %}
+                            <tr 
+                                {% if loop.index <= 4 %} class="table-success" data-toggle="tooltip" title="Qualifiziert für Viertelfinale" {% endif %}
+                                {% if loop.index == 8 %} class="table-danger" data-toggle="tooltip" title="Absteiger" {% endif %}
+                            >
+                                <td>{{ loop.index }}</td>
+                                <td>
+                                    {% if iso_code %}<img src="https://flagcdn.com/w20/{{ iso_code }}.png" alt="{{ team_stat.name }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    {{ team_stat.name }}
+                                </td>
+                                <td>{{ team_stat.gp }}</td>
+                                <td>{{ team_stat.w }}</td>
+                                <td>{{ team_stat.otw }}</td>
+                                <td>{{ team_stat.sow }}</td>
+                                <td>{{ team_stat.l }}</td>
+                                <td>{{ team_stat.otl }}</td>
+                                <td>{{ team_stat.sol }}</td>
+                                <td>{{ team_stat.gf }}:{{ team_stat.ga }}</td>
+                                <td>{{ team_stat.gd }}</td>
+                                <td><strong>{{ team_stat.pts }}</strong></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p>Keine Daten für diese Gruppe vorhanden oder keine Spiele gespielt.</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <small class="form-text text-muted">
+                Punkte: Sieg=3, OT/Penalty-Sieg=2, OT/Penalty-Niederlage=1. Sortierung: Punkte, Tordifferenz, Erzielte Tore.<br>
+                <span class="badge badge-success">&nbsp;</span> Top 4: Viertelfinale. 
+                <span class="badge badge-danger">&nbsp;</span> Platz 8: Absteiger (Regelungen können je nach Turnier variieren).
+            </small>
+        </div>
+        {% endif %}
+
+        {# Spiele pro Runde #}
+        {% for round_name, games_in_round in games_by_round.items() %}
+        <div class="tab-pane fade {% if not (standings.get('Group A') or standings.get('Group B')) and loop.first %}show active{% endif %}" id="{{ round_name|replace(' ', '-')|lower }}" role="tabpanel" aria-labelledby="{{ round_name|replace(' ', '-')|lower }}-tab">
+            <h2>{{ round_name }}</h2>
+            {% if games_in_round %}
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Nr.</th>
+                            <th>Datum</th>
+                            <th>Zeit</th>
+                            {% if round_name == "Preliminary Round" %}<th>Gruppe</th>{% endif %}
+                            <th>Heim</th>
+                            <th>Gast</th>
+                            <th colspan="3" class="text-center">Ergebnis</th>
+                            <th>Ort</th>
+                            <th>Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for game in games_in_round %}
+                        {# Resolve team codes using playoff_team_map #}
+                        {% set p1_original_code = game.team1_code %}
+                        {% set p2_original_code = game.team2_code %}
+
+                        {% set p1_intermediate_code = playoff_team_map.get(p1_original_code, p1_original_code) %}
+                        {% set p2_intermediate_code = playoff_team_map.get(p2_original_code, p2_original_code) %}
+
+                        {# --- Logic to resolve standings placeholders like "1A" for Team 1 --- #}
+                        {% set p1_display_name = p1_intermediate_code %}
+                        {% set p1_display_iso = team_iso_codes.get(p1_display_name) %}
+                        {% set standings_digits = "12345678" %} {# Assuming max 8 teams for rank #}
+                        {% set standings_groups = ['A', 'B', 'C', 'D'] %} {# Add more group letters if needed #}
+                        {% if p1_intermediate_code and p1_intermediate_code|length == 2 and p1_intermediate_code[0] in standings_groups and p1_intermediate_code[1] in standings_digits %}
+                            {% set group_letter = p1_intermediate_code[0] %}
+                            {% set rank = (p1_intermediate_code[1] | int) - 1 %} {# 0-indexed #}
+                            {% set group_name = "Group " + group_letter %}
+                            {% if standings.get(group_name) and 0 <= rank < standings[group_name]|length %}
+                                {% set p1_display_name = standings[group_name][rank].name %}
+                                {% set p1_display_iso = team_iso_codes.get(p1_display_name) %}
+                            {% endif %}
+                        {% endif %}
+
+                        {# --- Logic to resolve standings placeholders like "1A" for Team 2 --- #}
+                        {% set p2_display_name = p2_intermediate_code %}
+                        {% set p2_display_iso = team_iso_codes.get(p2_display_name) %}
+                        {% if p2_intermediate_code and p2_intermediate_code|length == 2 and p2_intermediate_code[0] in standings_groups and p2_intermediate_code[1] in standings_digits %}
+                            {% set group_letter = p2_intermediate_code[0] %}
+                            {% set rank = (p2_intermediate_code[1] | int) - 1 %} {# 0-indexed #}
+                            {% set group_name = "Group " + group_letter %}
+                            {% if standings.get(group_name) and 0 <= rank < standings[group_name]|length %}
+                                {% set p2_display_name = standings[group_name][rank].name %}
+                                {% set p2_display_iso = team_iso_codes.get(p2_display_name) %}
+                            {% endif %}
+                        {% endif %}
+
+                        <tr id="game-{{ game.id }}">
+                            <td>{{ game.game_number }}</td>
+                            <td>{{ game.date.split('-') | reverse | join('.') if game.date else '-' }}</td>
+                            <td>{{ game.start_time.split(' ')[0] if game.start_time else '-' }}</td>
+                            {% if round_name == "Preliminary Round" %}<td>{{ game.group if game.group else 'N/A' }}</td>{% endif %}
+                            <td>
+                                {% if p1_display_iso %}<img src="https://flagcdn.com/w20/{{ p1_display_iso }}.png" alt="{{ p1_display_name }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                {% if game.team1_score is not none and game.team2_score is not none and game.team1_points > game.team2_points %}<strong>{% endif %}
+                                {{ p1_display_name }}
+                                {% if game.team1_score is not none and game.team2_score is not none and game.team1_points > game.team2_points %}</strong>{% endif %}
+                                {% if p1_original_code != p1_display_name %}
+                                    <small class="text-muted">({{ p1_original_code }})</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if p2_display_iso %}<img src="https://flagcdn.com/w20/{{ p2_display_iso }}.png" alt="{{ p2_display_name }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                {% if game.team1_score is not none and game.team2_score is not none and game.team2_points > game.team1_points %}<strong>{% endif %}
+                                {{ p2_display_name }}
+                                {% if game.team1_score is not none and game.team2_score is not none and game.team2_points > game.team1_points %}</strong>{% endif %}
+                                {% if p2_original_code != p2_display_name %}
+                                    <small class="text-muted">({{ p2_original_code }})</small>
+                                {% endif %}
+                            </td>
+                            <form method="POST" action="{{ url_for('year_view', year_id=year.id) }}#game-{{game.id}}">
+                                <input type="hidden" name="game_id" value="{{ game.id }}">
+                                <td style="width: 70px;">
+                                    <input type="number" name="team1_score" class="form-control form-control-sm" value="{{ game.team1_score if game.team1_score is not none else '' }}" min="0">
+                                </td>
+                                <td style="width: 70px;">
+                                    <input type="number" name="team2_score" class="form-control form-control-sm" value="{{ game.team2_score if game.team2_score is not none else '' }}" min="0">
+                                </td>
+                                <td style="width: 130px;">
+                                    <select name="result_type" class="form-control form-control-sm">
+                                        <option value="REG" {% if game.result_type == 'REG' %}selected{% endif %}>Regulär</option>
+                                        <option value="OT" {% if game.result_type == 'OT' %}selected{% endif %}>n.V.</option>
+                                        <option value="SO" {% if game.result_type == 'SO' %}selected{% endif %}>n.P.</option>
+                                    </select>
+                                </td>
+                                <td>{{ game.location }}</td>
+                                <td>
+                                    <button type="submit" class="btn btn-success btn-sm">Speichern</button>
+                                </td>
+                            </form>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p>Keine Spiele in dieser Runde vorhanden.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<div class="mt-4">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">&laquo; Zurück zur Jahresübersicht</a>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Activate the first tab if no specific tab is targeted (e.g. by URL hash)
+    $(document).ready(function(){
+        // Initialize tooltips
+        $('[data-toggle="tooltip"]').tooltip();
+
+        if(window.location.hash) {
+            $('a[href="' + window.location.hash + '"]').tab('show');
+        } else {
+            $('#yearTabs a:first').tab('show');
+        }
+
+        // Optional: Store the last active tab in localStorage to remember it on page reload
+        $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+            localStorage.setItem('activeTab{{year.id}}', $(e.target).attr('href'));
+        });
+        var activeTab = localStorage.getItem('activeTab{{year.id}}');
+        if(activeTab){
+            $('#yearTabs a[href="' + activeTab + '"]').tab('show');
+        } else {
+            // If standings exist and is first, it will be active by default in HTML.
+            // If not, and the first game round tab is first, it will be active by default.
+            // This ensures some tab is always active.
+            var firstTabLink = $('#yearTabs a.nav-link').first();
+            if (firstTabLink.length && !$('#yearTabs a.nav-link.active').length) {
+                 firstTabLink.tab('show');
+            }
+        }
+    });
+</script>
+{% endblock %} 
