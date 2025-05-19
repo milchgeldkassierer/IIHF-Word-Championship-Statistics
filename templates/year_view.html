@@ -2,6 +2,14 @@
 
 {% block title %}WM {{ year.year }} - IIHF Tabellenrechner{% endblock %}
 
+{% block head_scripts %}
+    {{ super() }} {# Falls es schon head_scripts in base.html gibt #}
+    <script>
+        var all_players_by_team_json = {{ all_players_by_team_json|tojson|safe }};
+        var current_year_id = {{ year.id }}; // Make year.id available to JS
+    </script>
+{% endblock %}
+
 {% block content %}
 <h1>WM {{ year.year }} - Spielplan und Tabellen</h1>
 
@@ -24,6 +32,12 @@
                 <a class="nav-link {% if not (standings.get('Group A') or standings.get('Group B')) and loop.first %}active{% endif %}" id="{{ round_name|replace(' ', '-')|lower }}-tab" data-toggle="tab" href="#{{ round_name|replace(' ', '-')|lower }}" role="tab" aria-controls="{{ round_name|replace(' ', '-')|lower }}" aria-selected="false">{{ round_name }} ({{ games_in_round|length }})</a>
             </li>
         {% endfor %}
+        {# Statistics Tab #}
+        {% if goal_scorers or assist_providers or top_scorers %}
+        <li class="nav-item" role="presentation">
+            <a class="nav-link" id="statistics-tab" data-toggle="tab" href="#statistics" role="tab" aria-controls="statistics" aria-selected="false">Statistiken</a>
+        </li>
+        {% endif %}
     </ul>
 
     <div class="tab-content" id="yearTabsContent">
@@ -189,10 +203,153 @@
                                     </select>
                                 </td>
                                 <td>{{ game.location }}</td>
-                                <td>
-                                    <button type="submit" class="btn btn-success btn-sm">Speichern</button>
+                                <td class="text-nowrap"> {# Aktion Zelle #}
+                                    <button type="submit" class="btn btn-success btn-sm mr-1">Speichern</button>
+                                    <button class="btn btn-info btn-sm mr-1" type="button" data-toggle="collapse" data-target="#goals-{{ game.id }}" aria-expanded="false" aria-controls="goals-{{ game.id }}"
+                                            title="Tordetails anzeigen/eingeben">
+                                        + <span class="badge badge-light" id="goalCountBadge-{{ game.id }}">{{ game.goals.count() }}</span>
+                                    </button>
+                                    {# Indikator für Torübereinstimmung #}
+                                    <span id="scoreMatchIndicatorContainer-{{ game.id }}">
+                                    {% if game.team1_score is not none or game.team2_score is not none %} {# Nur anzeigen, wenn mind. ein Score gesetzt ist #}
+                                        {% if game.scores_fully_match_goals %}
+                                            <span class="text-success" title="Spielstand und erfasste Tore stimmen überein">✓</span>
+                                        {% else %}
+                                            <span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein">✗</span>
+                                        {% endif %}
+                                    {% endif %}
+                                    </span>
                                 </td>
                             </form>
+                        </tr>
+                        {# Row for Goal Details - Collapsible #}
+                        <tr class="goal-details-row">
+                            <td colspan="100%">
+                                <div class="collapse" id="goals-{{ game.id }}">
+                                    <div class="card card-body">
+                                        <div id="goalMessageArea-{{ game.id }}" class="mt-2"></div> <!-- For AJAX messages for add goal -->
+                                        <h5>Tore für Spiel {{ game.game_number }}: {{ p1_display_name }} vs {{ p2_display_name }}</h5>
+                                        
+                                        <table class="table table-sm mt-2" id="goalsTable-{{ game.id }}">
+                                            <thead>
+                                                <tr>
+                                                    <th>Minute</th>
+                                                    <th>Team</th>
+                                                    <th>Typ</th>
+                                                    <th>Torschütze</th>
+                                                    <th>Assist 1</th>
+                                                    <th>Assist 2</th>
+                                                    <th>Aktion</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="goalsTableBody-{{ game.id }}">
+                                                {% for goal in game.goals %}
+                                                <tr>
+                                                    <td>{{ goal.minute }}</td>
+                                                    <td>
+                                                        {% set scoring_team_display_name = "" %}
+                                                        {% if goal.team_code == game.team1_code %}{% set scoring_team_display_name = p1_display_name %}{% endif %}
+                                                        {% if goal.team_code == game.team2_code %}{% set scoring_team_display_name = p2_display_name %}{% endif %}
+                                                        {% if not scoring_team_display_name %}{% set scoring_team_display_name = goal.team_code %}{% endif %}
+                                                        {{ scoring_team_display_name }}
+                                                    </td>
+                                                    <td>{{ goal.goal_type }}</td>
+                                                    <td>{{ goal.scorer.last_name.upper() }} {{ goal.scorer.first_name }}</td>
+                                                    <td>{% if goal.assist1 %}{{ goal.assist1.last_name.upper() }} {{ goal.assist1.first_name }}{% else %}-{% endif %}</td>
+                                                    <td>{% if goal.assist2 %}{{ goal.assist2.last_name.upper() }} {{ goal.assist2.first_name }}{% else %}-{% endif %}</td>
+                                                    <td>
+                                                        <form method="POST" action="{{ url_for('delete_goal', year_id=year.id, goal_id=goal.id) }}" style="display: inline;">
+                                                            <input type="hidden" name="game_id_anchor" value="{{game.id}}">
+                                                            <button type="submit" class="btn btn-danger btn-xs" onclick="this.form.action += '#goal-entry-{{game.id}}'; return confirm('Sicher, dass du dieses Tor löschen willst?');">&times;</button>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                        <p class="text-muted {% if game.goals and game.goals.count() > 0 %}d-none{% endif %}" id="noGoalsMessage-{{ game.id }}">
+                                            Noch keine Tore für dieses Spiel erfasst.
+                                        </p>
+
+                                        <hr>
+                                        <h6>Neues Tor hinzufügen</h6>
+                                        <form method="POST" action="{{ url_for('add_goal', year_id=year.id, game_id=game.id) }}" id="addGoalForm-{{ game.id }}">
+                                            <input type="hidden" name="game_id" value="{{ game.id }}">
+                                            <div class="form-row">
+                                                <div class="form-group col-md-2">
+                                                    <label for="goal_minute-{{game.id}}">Minute (mm:ss)</label>
+                                                    <input type="text" class="form-control form-control-sm" name="minute" id="goal_minute-{{game.id}}" pattern="\d{1,2}:[0-5]\d" placeholder="01:23" required>
+                                                </div>
+                                                <div class="form-group col-md-2">
+                                                    <label for="goal_team-{{game.id}}">Team</label>
+                                                    <select name="team_code_goal" id="goal_team-{{game.id}}" class="form-control form-control-sm goal-team-select" required>
+                                                        <option value="{{ game.team1_code }}">{{ p1_display_name }}</option>
+                                                        <option value="{{ game.team2_code }}">{{ p2_display_name }}</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group col-md-2">
+                                                    <label for="goal_type-{{game.id}}">Typ</label>
+                                                    <select name="goal_type" id="goal_type-{{game.id}}" class="form-control form-control-sm" required>
+                                                        <option value="REG">Regulär</option>
+                                                        <option value="PP">PP (Power Play)</option>
+                                                        <option value="SH">SH (Short Handed)</option>
+                                                        <option value="EN">EN (Empty Net)</option>
+                                                        <option value="PS">PS (Penalty Shot)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="form-row">
+                                                <div class="form-group col-md-3">
+                                                    <label for="scorer-{{game.id}}">Torschütze</label>
+                                                    <select name="scorer_id" id="scorer-{{game.id}}" class="form-control form-control-sm player-select" data-team-select="#goal_team-{{game.id}}" required>
+                                                        <option value="">Spieler wählen...</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group col-md-3">
+                                                    <label for="assist1-{{game.id}}">Assist 1 (optional)</label>
+                                                    <select name="assist1_id" id="assist1-{{game.id}}" class="form-control form-control-sm player-select" data-team-select="#goal_team-{{game.id}}">
+                                                        <option value="">Spieler wählen...</option>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group col-md-3">
+                                                    <label for="assist2-{{game.id}}">Assist 2 (optional)</label>
+                                                    <select name="assist2_id" id="assist2-{{game.id}}" class="form-control form-control-sm player-select" data-team-select="#goal_team-{{game.id}}">
+                                                        <option value="">Spieler wählen...</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary btn-sm">Tor speichern</button>
+                                        </form>
+                                        <hr>
+                                        {# Form to add a new player #}
+                                        <div id="messageArea-{{ game.id }}" class="mt-2"></div> <!-- For AJAX messages for add player -->
+                                        <h6>Neuen Spieler hinzufügen (zum Kader)</h6>
+                                        <form method="POST" action="{{ url_for('add_player') }}" class="mt-2" id="addPlayerForm-{{ game.id }}">
+                                            <input type="hidden" name="game_id_anchor" value="{{ game.id }}">
+                                            <div class="form-row">
+                                                <div class="form-group col-md-3">
+                                                    <label for="player_first_name-{{game.id}}">Vorname</label>
+                                                    <input type="text" class="form-control form-control-sm" name="first_name" id="player_first_name-{{game.id}}" required>
+                                                </div>
+                                                <div class="form-group col-md-3">
+                                                    <label for="player_last_name-{{game.id}}">Nachname</label>
+                                                    <input type="text" class="form-control form-control-sm" name="last_name" id="player_last_name-{{game.id}}" required>
+                                                </div>
+                                                <div class="form-group col-md-3">
+                                                    <label for="player_team_code-{{game.id}}">Team</label>
+                                                    <select name="team_code" id="player_team_code-{{game.id}}" class="form-control form-control-sm" required>
+                                                        <option value="">Team wählen...</option>
+                                                        {% for team_code, team_name in team_codes.items() %}
+                                                        <option value="{{ team_code }}">{{ team_name }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary btn-sm">Spieler hinzufügen</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -203,6 +360,147 @@
             {% endif %}
         </div>
         {% endfor %}
+
+        {# Statistics Tab Content #}
+        {% if goal_scorers or assist_providers or top_scorers %}
+        <div class="tab-pane fade" id="statistics" role="tabpanel" aria-labelledby="statistics-tab">
+            <h2>Spielerstatistiken</h2>
+
+            {# Form for team filter #}
+            <form method="GET" action="{{ url_for('year_view', year_id=year.id) }}#statistics" class="mb-3">
+                <div class="form-row align-items-end">
+                    <div class="col-md-4">
+                        <label for="stats_team_filter">Team filtern:</label>
+                        <select name="stats_team_filter" id="stats_team_filter" class="form-control form-control-sm" onchange="this.form.submit()">
+                            {% for team_code, team_display_name in stats_filter_teams.items() %}
+                                <option value="{{ team_code }}" {% if team_code == current_stats_team_filter %}selected{% endif %}>
+                                    {{ team_display_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </form>
+
+            <div class="row">
+                {# Top Scorers #}
+                <div class="col-md-12 mb-4 stats-section" id="top-scorers-section">
+                    <h3>Top Scorer</h3>
+                    {% if top_scorers %}
+                    <table class="table table-sm table-striped">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Spieler</th>
+                                <th>Team</th>
+                                <th title="Tore">T</th>
+                                <th title="Assists">A</th>
+                                <th title="Punkte">Pkt</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-scorers-body">
+                            {% for stat_entry in top_scorers %}
+                            <tr {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ stat_entry.last_name.upper() }} {{ stat_entry.first_name }}</td>
+                                <td>
+                                    {% set team_iso = team_iso_codes.get(stat_entry.team_code) %}
+                                    {% if team_iso %}<img src="https://flagcdn.com/w20/{{ team_iso }}.png" alt="{{ stat_entry.team_code }}" style="margin-right: 5px;">{% endif %}
+                                    {{ stat_entry.team_code }}
+                                </td>
+                                <td>{{ stat_entry.goals }}</td>
+                                <td>{{ stat_entry.assists }}</td>
+                                <td><strong>{{ stat_entry.points }}</strong></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if top_scorers|length > 20 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-scorers-body">Alle anzeigen</button>
+                    {% endif %}
+                    {% else %}
+                    <p>Keine Daten für Top Scorer vorhanden.</p>
+                    {% endif %}
+                </div>
+
+                {# Goal Scorers #}
+                <div class="col-md-6 mb-4 stats-section" id="goal-scorers-section">
+                    <h3>Torschützen</h3>
+                    {% if goal_scorers %}
+                    <table class="table table-sm table-striped">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Spieler</th>
+                                <th>Team</th>
+                                <th title="Tore">T</th>
+                                <th title="Assists">A</th>
+                            </tr>
+                        </thead>
+                        <tbody id="goal-scorers-body">
+                            {% for stat_entry in goal_scorers %}
+                            <tr {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ stat_entry.last_name.upper() }} {{ stat_entry.first_name }}</td>
+                                <td>
+                                    {% set team_iso = team_iso_codes.get(stat_entry.team_code) %}
+                                    {% if team_iso %}<img src="https://flagcdn.com/w20/{{ team_iso }}.png" alt="{{ stat_entry.team_code }}" style="margin-right: 5px;">{% endif %}
+                                    {{ stat_entry.team_code }}
+                                </td>
+                                <td><strong>{{ stat_entry.goals }}</strong></td>
+                                <td>{{ stat_entry.assists }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if goal_scorers|length > 20 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#goal-scorers-body">Alle anzeigen</button>
+                    {% endif %}
+                    {% else %}
+                    <p>Keine Daten für Torschützen vorhanden.</p>
+                    {% endif %}
+                </div>
+
+                {# Assist Providers #}
+                <div class="col-md-6 mb-4 stats-section" id="assist-providers-section">
+                    <h3>Assistgeber</h3>
+                    {% if assist_providers %}
+                    <table class="table table-sm table-striped">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Spieler</th>
+                                <th>Team</th>
+                                <th title="Tore">T</th>
+                                <th title="Assists">A</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assist-providers-body">
+                            {% for stat_entry in assist_providers %}
+                            <tr {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ stat_entry.last_name.upper() }} {{ stat_entry.first_name }}</td>
+                                <td>
+                                    {% set team_iso = team_iso_codes.get(stat_entry.team_code) %}
+                                    {% if team_iso %}<img src="https://flagcdn.com/w20/{{ team_iso }}.png" alt="{{ stat_entry.team_code }}" style="margin-right: 5px;">{% endif %}
+                                    {{ stat_entry.team_code }}
+                                </td>
+                                <td>{{ stat_entry.goals }}</td>
+                                <td><strong>{{ stat_entry.assists }}</strong></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if assist_providers|length > 20 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#assist-providers-body">Alle anzeigen</button>
+                    {% endif %}
+                    {% else %}
+                    <p>Keine Daten für Assistgeber vorhanden.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 {% endif %}
 
@@ -213,34 +511,297 @@
 {% endblock %}
 
 {% block scripts %}
+{{ super() }}
 <script>
-    // Activate the first tab if no specific tab is targeted (e.g. by URL hash)
-    $(document).ready(function(){
-        // Initialize tooltips
-        $('[data-toggle="tooltip"]').tooltip();
+$(document).ready(function(){
+    // Initialize tooltips
+    $('[data-toggle="tooltip"]').tooltip();
 
-        if(window.location.hash) {
-            $('a[href="' + window.location.hash + '"]').tab('show');
-        } else {
-            $('#yearTabs a:first').tab('show');
+    // Handle tab and collapse state based on URL hash
+    var hash = window.location.hash;
+    if (hash) {
+        if (hash.startsWith("#goal-entry-")) {
+            var gameIdForAnchor = hash.substring("#goal-entry-".length);
+            $('#goals-' + gameIdForAnchor).collapse('show');
+            var gameRow = $('#game-' + gameIdForAnchor);
+            if (gameRow.length > 0) {
+                var tabPane = gameRow.closest('.tab-pane');
+                if (tabPane.length > 0) {
+                    var tabId = tabPane.attr('id');
+                    $('.nav-tabs a[href="#' + tabId + '"]').tab('show');
+                    $('html, body').animate({
+                        scrollTop: gameRow.offset().top - 100 
+                    }, 500);
+                }
+            }
+        } else if (hash.startsWith("#game-")) {
+             var gameRowToScroll = $(hash);
+             if (gameRowToScroll.length > 0) {
+                var tabPane = gameRowToScroll.closest('.tab-pane');
+                if (tabPane.length > 0) {
+                    var tabId = tabPane.attr('id');
+                    $('.nav-tabs a[href="#' + tabId + '"]').tab('show');
+                }
+                 $('html, body').animate({
+                    scrollTop: gameRowToScroll.offset().top - 100
+                }, 500);
+            }
+        } else if ($('.nav-tabs a[href="' + hash + '"]').length) {
+            $('.nav-tabs a[href="' + hash + '"]').tab('show');
+        }
+    }
+
+    // Auto-colon for minute input
+    $(document).on('keyup', 'input[id^="goal_minute-"]', function(event) {
+        var input = $(this);
+        var value = input.val();
+
+        // Allow backspace, delete, arrow keys, tab, enter to function normally
+        if (event.keyCode === 8 || event.keyCode === 46 || (event.keyCode >= 37 && event.keyCode <= 40) || event.keyCode === 9 || event.keyCode === 13) {
+            return;
         }
 
-        // Optional: Store the last active tab in localStorage to remember it on page reload
-        $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-            localStorage.setItem('activeTab{{year.id}}', $(e.target).attr('href'));
-        });
-        var activeTab = localStorage.getItem('activeTab{{year.id}}');
-        if(activeTab){
-            $('#yearTabs a[href="' + activeTab + '"]').tab('show');
-        } else {
-            // If standings exist and is first, it will be active by default in HTML.
-            // If not, and the first game round tab is first, it will be active by default.
-            // This ensures some tab is always active.
-            var firstTabLink = $('#yearTabs a.nav-link').first();
-            if (firstTabLink.length && !$('#yearTabs a.nav-link.active').length) {
-                 firstTabLink.tab('show');
-            }
+        // If value is 2 digits long, and they are both numbers (e.g., "12")
+        if (value.length === 2 && /^\\d\\d$/.test(value)) {
+            input.val(value + ':');
+        } 
+        // If value is 3 digits long and no colon (e.g. user typed "123" fast), format to "12:3"
+        else if (value.length === 3 && /^\\d\\d\\d$/.test(value) && value.indexOf(':') === -1) {
+            input.val(value.substring(0, 2) + ':' + value.substring(2));
+        }
+
+        // Enforce max length of 5 (mm:ss) after potential modification
+        var finalValue = input.val();
+        if (finalValue.length > 5) {
+            input.val(finalValue.substring(0, 5));
         }
     });
+
+    // Statistics table toggle
+    $('.toggle-stats-visibility').on('click', function() {
+        var $button = $(this);
+        var targetBodySelector = $button.data('target-body');
+        var $tableBody = $(targetBodySelector);
+        
+        $tableBody.find('tr.extra-stats-row').toggleClass('d-none');
+
+        if ($button.text() === 'Alle anzeigen') {
+            $button.text('Weniger anzeigen');
+        } else {
+            $button.text('Alle anzeigen');
+        }
+    });
+
+    // Player selection population logic
+    function populatePlayers(teamSelectElement, scorerSelectId, assist1SelectId, assist2SelectId) {
+        var selectedTeamCode = $(teamSelectElement).val();
+        var players = window.all_players_by_team_json[selectedTeamCode] || [];
+        
+        players.sort((a, b) => {
+            let lastNameComp = a.last_name.localeCompare(b.last_name);
+            if (lastNameComp !== 0) return lastNameComp;
+            return a.first_name.localeCompare(b.first_name);
+        });
+
+        var scorerSelect = $('#' + scorerSelectId);
+        var assist1Select = $('#' + assist1SelectId);
+        var assist2Select = $('#' + assist2SelectId);
+
+        var currentScorerVal = scorerSelect.val();
+        var currentAssist1Val = assist1Select.val();
+        var currentAssist2Val = assist2Select.val();
+
+        scorerSelect.empty().append('<option value="">Spieler wählen...</option>');
+        assist1Select.empty().append('<option value="">Spieler wählen...</option>');
+        assist2Select.empty().append('<option value="">Spieler wählen...</option>');
+
+        players.forEach(function(player) {
+            scorerSelect.append($('<option>', { value: player.id, text: player.full_name }));
+            assist1Select.append($('<option>', { value: player.id, text: player.full_name }));
+            assist2Select.append($('<option>', { value: player.id, text: player.full_name }));
+        });
+        
+        if (players.find(p => p.id == parseInt(currentScorerVal))) scorerSelect.val(currentScorerVal); else scorerSelect.val("");
+        if (players.find(p => p.id == parseInt(currentAssist1Val))) assist1Select.val(currentAssist1Val); else assist1Select.val("");
+        if (players.find(p => p.id == parseInt(currentAssist2Val))) assist2Select.val(currentAssist2Val); else assist2Select.val("");
+    }
+
+    $(document).on('change', 'select.goal-team-select', function() {
+        var gameId = $(this).closest('form').find('input[name="game_id"]').val();
+        populatePlayers(this, 'scorer-' + gameId, 'assist1-' + gameId, 'assist2-' + gameId);
+    });
+
+    $('form[id^="addGoalForm-"]').each(function() {
+        var gameId = $(this).find('input[name="game_id"]').val();
+        var teamSelect = $(this).find('#goal_team-' + gameId);
+        if (teamSelect.length > 0) {
+             populatePlayers(teamSelect[0], 'scorer-' + gameId, 'assist1-' + gameId, 'assist2-' + gameId);
+        }
+    });
+
+    // AJAX for Add Player form
+    $(document).on('submit', 'form[id^="addPlayerForm-"]', function(event) {
+        event.preventDefault();
+        var form = $(this);
+        var gameId = form.find('input[name="game_id_anchor"]').val();
+        var messageArea = $('#messageArea-' + gameId); // Message area for Add Player
+        
+        fetch(form.attr('action'), {
+            method: 'POST',
+            body: new FormData(form[0]),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            var alertClass = data.success ? 'alert-success' : 'alert-danger';
+            messageArea.html('<div class="alert ' + alertClass + ' alert-dismissible fade show" role="alert">' +
+                             data.message +
+                             '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+                             '</div>');
+            if (data.success) {
+                form[0].reset();
+                var newPlayer = data.player;
+                if (!window.all_players_by_team_json[newPlayer.team_code]) {
+                    window.all_players_by_team_json[newPlayer.team_code] = [];
+                }
+                if (!window.all_players_by_team_json[newPlayer.team_code].find(p => p.id === newPlayer.id)) {
+                    window.all_players_by_team_json[newPlayer.team_code].push(newPlayer);
+                }
+                var addGoalForm = $('#addGoalForm-' + gameId);
+                if (addGoalForm.length > 0) {
+                    var teamSelectForGoal = addGoalForm.find('#goal_team-' + gameId);
+                    if (teamSelectForGoal.length > 0) {
+                        teamSelectForGoal.trigger('change');
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error adding player:', error);
+            messageArea.html('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                             'Kommunikationsfehler beim Hinzufügen des Spielers.' +
+                             '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+                             '</div>');
+        });
+    });
+
+    // AJAX for Add Goal form
+    $(document).on('submit', 'form[id^="addGoalForm-"]', function(event) {
+        event.preventDefault();
+        var form = $(this);
+        var gameId = form.find('input[name="game_id"]').val();
+        var messageArea = $('#goalMessageArea-' + gameId); // Specific message area for goals
+        var addGoalUrl = form.attr('action');
+
+        fetch(addGoalUrl, {
+            method: 'POST',
+            body: new FormData(form[0]),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(errData => {
+                    throw new Error(errData.message || `HTTP error! status: ${response.status}`);
+                }).catch(() => {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            var alertClass = data.success ? 'alert-success' : 'alert-danger';
+            messageArea.html('<div class="alert ' + alertClass + ' alert-dismissible fade show" role="alert">' +
+                             data.message +
+                             '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+                             '</div>');
+
+            if (data.success) {
+                form[0].reset(); 
+                $('#goal_team-' + gameId).trigger('change'); // Repopulate and reset player dropdowns
+
+                var goalsTableBody = $('#goalsTableBody-' + gameId);
+                var noGoalsMessage = $('#noGoalsMessage-' + gameId);
+                
+                var newGoal = data.goal;
+                var scorerName = newGoal.scorer ? newGoal.scorer.full_name : 'N/A';
+                var assist1Name = newGoal.assist1 ? newGoal.assist1.full_name : '-';
+                var assist2Name = newGoal.assist2 ? newGoal.assist2.full_name : '-';
+                
+                var scoringTeamDisplayName = newGoal.team_code; // Default
+                // Try to get p1_display_name or p2_display_name (these are specific to current template iteration)
+                // This requires access to how these were rendered. A robust way is to get from game row or add to response.
+                // Simpler: use team code, or pass p1_display_name and p2_display_name through data attributes on the form if needed.
+                // For now, we rely on the information available.
+                // The original p1_display_name and p2_display_name are available in the surrounding Jinja context of the form
+                // We can try to grab them from the "H5" title for the goal section
+                var goalCardTitle = form.closest('.card-body').find('h5').text(); // "Tore für Spiel X: TEAM_A vs TEAM_B"
+                if (goalCardTitle) {
+                    var teamsInTitle = goalCardTitle.substring(goalCardTitle.indexOf(':') + 1).split(' vs ');
+                    var gameTeam1CodeInForm = form.find('select[name="team_code_goal"] option:first-child').val();
+                    // var gameTeam2CodeInForm = form.find('select[name="team_code_goal"] option:nth-child(2)').val();
+
+                    if (newGoal.team_code === gameTeam1CodeInForm && teamsInTitle.length > 0) {
+                         scoringTeamDisplayName = teamsInTitle[0].trim();
+                    } else if (teamsInTitle.length > 1) { // Assuming it's team2
+                         scoringTeamDisplayName = teamsInTitle[1].trim();
+                    }
+                }
+
+
+                var deleteFormAction = "{{ url_for('delete_goal', year_id=0, goal_id=0) }}".replace('/0/goal/0/delete', '/' + current_year_id + '/goal/' + newGoal.id + '/delete');
+                
+                var newRowHtml = '<tr>' +
+                    '<td>' + newGoal.minute + '</td>' +
+                    '<td>' + scoringTeamDisplayName + '</td>' +
+                    '<td>' + newGoal.goal_type + '</td>' +
+                    '<td>' + scorerName + '</td>' +
+                    '<td>' + assist1Name + '</td>' +
+                    '<td>' + assist2Name + '</td>' +
+                    '<td>' +
+                        '<form method="POST" action="' + deleteFormAction + '" style="display: inline;" onsubmit="this.action += \'#goal-entry-' + gameId + '\'; return confirm(\\\'Sicher, dass du dieses Tor löschen willst?\\\');">' +
+                            '<input type="hidden" name="game_id_anchor" value="' + gameId + '">' +
+                            '<button type="submit" class="btn btn-danger btn-xs">&times;</button>' +
+                        '</form>' +
+                    '</td>' +
+                '</tr>';
+                goalsTableBody.append(newRowHtml);
+
+                if (goalsTableBody.find('tr').length > 0) {
+                    noGoalsMessage.addClass('d-none');
+                } else {
+                    noGoalsMessage.removeClass('d-none');
+                }
+
+                $('#goalCountBadge-' + gameId).text(data.new_goal_count);
+
+                var indicatorContainer = $('#scoreMatchIndicatorContainer-' + gameId);
+                indicatorContainer.empty(); 
+                
+                var scoreInput1 = form.closest('.goal-details-row').prev('tr').find('input[name="team1_score"]');
+                var scoreInput2 = form.closest('.goal-details-row').prev('tr').find('input[name="team2_score"]');
+                var team1ScoreIsSet = scoreInput1.val() !== '' && scoreInput1.val() !== null;
+                var team2ScoreIsSet = scoreInput2.val() !== '' && scoreInput2.val() !== null;
+
+                if (team1ScoreIsSet || team2ScoreIsSet) {
+                    if (data.scores_fully_match_goals) {
+                        indicatorContainer.html('<span class="text-success" title="Spielstand und erfasste Tore stimmen überein">✓</span>');
+                    } else {
+                        indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein">✗</span>');
+                    }
+                } else {
+                     indicatorContainer.empty(); 
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error adding goal:', error);
+            messageArea.html('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                             'Kommunikationsfehler: ' + error.message +
+                             '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+                             '</div>');
+        });
+    });
+
+});
 </script>
 {% endblock %} 

@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 import json
 import os
 from werkzeug.utils import secure_filename
 from dataclasses import dataclass, field # Added for TeamStats
+import re # Add this at the top of your app.py
 
 # --- Configuration ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -88,8 +89,40 @@ class Game(db.Model):
     team1_points = db.Column(db.Integer, default=0)
     team2_points = db.Column(db.Integer, default=0)
 
+    # Felder für Toranzahl und Übereinstimmung mit Spielstand werden NICHT als DB-Spalten hinzugefügt,
+    # sondern dynamisch in der Route berechnet.
+
     def __repr__(self):
         return f'<Game {self.game_number}: {self.team1_code} vs {self.team2_code}>'
+
+class Player(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    team_code = db.Column(db.String(3), nullable=False) # e.g., GER, CAN
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
+
+    def __repr__(self):
+        return f'<Player {self.first_name} {self.last_name} ({self.team_code})>'
+
+class Goal(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
+    team_code = db.Column(db.String(3), nullable=False) # Team that scored
+    minute = db.Column(db.String(5), nullable=False) # mm:ss
+    goal_type = db.Column(db.String(10), nullable=False) # REG, PP, SH, EN
+
+    scorer_id = db.Column(db.Integer, db.ForeignKey('player.id'), nullable=False)
+    assist1_id = db.Column(db.Integer, db.ForeignKey('player.id'), nullable=True)
+    assist2_id = db.Column(db.Integer, db.ForeignKey('player.id'), nullable=True)
+
+    # Relationships
+    game = db.relationship('Game', backref=db.backref('goals', lazy='dynamic', cascade="all, delete-orphan"))
+    scorer = db.relationship('Player', foreign_keys=[scorer_id], backref=db.backref('goals_scored', lazy=True))
+    assist1 = db.relationship('Player', foreign_keys=[assist1_id], backref=db.backref('assists1', lazy=True))
+    assist2 = db.relationship('Player', foreign_keys=[assist2_id], backref=db.backref('assists2', lazy=True))
+
+    def __repr__(self):
+        return f'<Goal by {self.scorer_id} in Game {self.game_id} at {self.minute}>'
 
 # --- Routes ---
 @app.route('/', methods=['GET', 'POST'])
@@ -251,6 +284,9 @@ def year_view(year_id):
     year_obj = ChampionshipYear.query.get_or_404(year_id)
     all_games_for_year_obj = Game.query.filter_by(year_id=year_obj.id).order_by(Game.game_number).all()
 
+    # Get the selected team filter for statistics
+    stats_team_filter = request.args.get('stats_team_filter', 'ALL') # 'ALL' is default
+
     if request.method == 'POST':
         game_id = request.form.get('game_id')
         team1_score_str = request.form.get('team1_score')
@@ -326,11 +362,58 @@ def year_view(year_id):
 
     # Prepare games by round (for display)
     games_by_round = {}
-    for game in all_games_for_year_obj: 
-        round_name = game.round if game.round else "Unbekannte Runde"
+    for game_obj in all_games_for_year_obj: # Renamed to avoid confusion with game model class
+        round_name = game_obj.round if game_obj.round else "Unbekannte Runde"
         if round_name not in games_by_round:
             games_by_round[round_name] = []
-        games_by_round[round_name].append(game)
+        
+        # Dynamically calculate goal count vs score for indicator
+        # These will be attributes of the game_obj instance, not DB columns
+        team1_goals_actual = 0
+        team2_goals_actual = 0
+
+        # Ensure scores are integers for comparison, or None
+        current_team1_score = game_obj.team1_score
+        current_team2_score = game_obj.team2_score
+
+        if current_team1_score is not None:
+            team1_goals_actual = sum(1 for goal in game_obj.goals if goal.team_code == game_obj.team1_code)
+        
+        if current_team2_score is not None:
+            team2_goals_actual = sum(1 for goal in game_obj.goals if goal.team_code == game_obj.team2_code)
+
+        # Adjust expected scores if it's a shootout result
+        team1_score_for_comparison = current_team1_score
+        team2_score_for_comparison = current_team2_score
+
+        if game_obj.result_type == 'SO':
+            if current_team1_score is not None and current_team2_score is not None:
+                if current_team1_score > current_team2_score: # Team 1 won SO
+                    team1_score_for_comparison = current_team1_score - 1
+                elif current_team2_score > current_team1_score: # Team 2 won SO
+                    team2_score_for_comparison = current_team2_score - 1
+                # If scores are equal in an SO game, it's an invalid state for this logic,
+                # but we'll proceed and it will likely result in a mismatch, which is acceptable.
+
+        # Set match status attributes
+        game_obj.team1_score_matches_goals = (team1_score_for_comparison == team1_goals_actual) if current_team1_score is not None else False
+        game_obj.team2_score_matches_goals = (team2_score_for_comparison == team2_goals_actual) if current_team2_score is not None else False
+        
+        # Overall indicator: True if all entered scores match their respective goal counts.
+        # If a score isn't entered, it doesn't count as a mismatch for that team.
+        # If both scores are entered, both must match.
+        # If only one is entered, only that one needs to match.
+        # If no scores are entered, it's not considered a match or mismatch for this purpose (False).
+        if current_team1_score is not None and current_team2_score is not None:
+            game_obj.scores_fully_match_goals = game_obj.team1_score_matches_goals and game_obj.team2_score_matches_goals
+        elif current_team1_score is not None:
+            game_obj.scores_fully_match_goals = game_obj.team1_score_matches_goals
+        elif current_team2_score is not None:
+            game_obj.scores_fully_match_goals = game_obj.team2_score_matches_goals
+        else: # No scores entered
+            game_obj.scores_fully_match_goals = False # Default to False, consider if True makes more sense when no scores
+
+        games_by_round[round_name].append(game_obj)
 
     # --- Calculate standings for Preliminary Round ---
     standings_data = {} # Using TeamStats objects
@@ -457,12 +540,342 @@ def year_view(year_id):
                     playoff_team_map[f'L({sf_id_placeholder})'] = sf_team1_actual
     # --- End of Playoff Team Resolution ---
 
+    # Fetch all players, grouped by team_code (players are now global)
+    all_players_query = Player.query.all()
+    all_players_by_team = {}
+    for player in all_players_query:
+        if player.team_code not in all_players_by_team:
+            all_players_by_team[player.team_code] = []
+        all_players_by_team[player.team_code].append({
+            "id": player.id,
+            "first_name": player.first_name,
+            "last_name": player.last_name,
+            "full_name": f"{player.last_name.upper()} {player.first_name}"
+        })
+    
+    for team_code_key in all_players_by_team: # Changed variable name to avoid conflict
+        all_players_by_team[team_code_key].sort(key=lambda p: (p['last_name'].lower(), p['first_name'].lower()))
+
+    # --- Create team_codes for "Add Player" form dropdown ---
+    unique_tournament_team_codes = set()
+    for game_obj_item in all_games_for_year_obj:
+        if game_obj_item.team1_code:
+            unique_tournament_team_codes.add(game_obj_item.team1_code)
+        if game_obj_item.team2_code:
+            unique_tournament_team_codes.add(game_obj_item.team2_code)
+    
+    # Filter for actual 3-letter uppercase team codes
+    actual_team_codes_for_dropdown = {
+        code for code in unique_tournament_team_codes 
+        if code and isinstance(code, str) and code.isupper() and len(code) == 3
+    }
+    # Create a sorted dictionary for the template
+    # The values are the same as keys, but you could map to fuller names if available/desired
+    team_codes_dropdown_dict = {code: code for code in sorted(list(actual_team_codes_for_dropdown))}
+    # For the statistics filter, we'll add an "ALL" option.
+    stats_filter_teams = {'ALL': 'Alle Teams'}
+    stats_filter_teams.update(team_codes_dropdown_dict)
+
+
+    # --- Player Statistics Calculation ---
+    player_stats = {}
+    all_players_dict = {p.id: p for p in all_players_query} # For quick lookup
+
+    # Get all games for the current year to link goals to the correct year
+    current_year_games_ids = [g.id for g in all_games_for_year_obj]
+    all_goals_for_year = Goal.query.filter(Goal.game_id.in_(current_year_games_ids)).all()
+
+    for player in all_players_query:
+        player_stats[player.id] = {
+            'player_id': player.id,
+            'first_name': player.first_name,
+            'last_name': player.last_name,
+            'team_code': player.team_code,
+            'goals': 0,
+            'assists': 0,
+            'points': 0
+        }
+
+    for goal in all_goals_for_year:
+        if goal.scorer_id in player_stats:
+            player_stats[goal.scorer_id]['goals'] += 1
+            player_stats[goal.scorer_id]['points'] += 1
+        if goal.assist1_id and goal.assist1_id in player_stats:
+            player_stats[goal.assist1_id]['assists'] += 1
+            player_stats[goal.assist1_id]['points'] += 1
+        if goal.assist2_id and goal.assist2_id in player_stats:
+            player_stats[goal.assist2_id]['assists'] += 1
+            player_stats[goal.assist2_id]['points'] += 1
+    
+    # Filter player_stats if a specific team is selected for stats viewing
+    filtered_player_stats_values = player_stats.values()
+    if stats_team_filter != 'ALL' and stats_team_filter in team_codes_dropdown_dict:
+        filtered_player_stats_values = [p for p in player_stats.values() if p['team_code'] == stats_team_filter]
+
+    # Filter out players with no points for the lists, then sort
+    # Torschützen (sorted by goals, then assists, then name)
+    goal_scorers_list = sorted(
+        [p for p in filtered_player_stats_values if p['goals'] > 0],
+        key=lambda x: (-x['goals'], -x['assists'], x['last_name'].lower(), x['first_name'].lower())
+    )
+    # Assistgeber (sorted by assists, then goals, then name)
+    assist_providers_list = sorted(
+        [p for p in filtered_player_stats_values if p['assists'] > 0],
+        key=lambda x: (-x['assists'], -x['goals'], x['last_name'].lower(), x['first_name'].lower())
+    )
+    # Top Scorer (sorted by points, then goals, then assists, then name)
+    top_scorers_list = sorted(
+        [p for p in filtered_player_stats_values if p['points'] > 0],
+        key=lambda x: (-x['points'], -x['goals'], -x['assists'], x['last_name'].lower(), x['first_name'].lower())
+    )
+    # --- End of Player Statistics Calculation ---
+
     return render_template('year_view.html', 
                            year=year_obj, 
                            games_by_round=games_by_round, 
                            standings=sorted_standings, 
                            team_iso_codes=TEAM_ISO_CODES,
-                           playoff_team_map=playoff_team_map) # Added playoff_team_map
+                           playoff_team_map=playoff_team_map,
+                           all_players_by_team_json=all_players_by_team, # For goal entry dropdowns
+                           team_codes=team_codes_dropdown_dict, # For Add Player form team dropdown
+                           goal_scorers=goal_scorers_list,
+                           assist_providers=assist_providers_list,
+                           top_scorers=top_scorers_list,
+                           stats_filter_teams=stats_filter_teams, # Teams for the filter dropdown
+                           current_stats_team_filter=stats_team_filter # Active filter
+                           )
+
+# Route to add a new player (year_id removed from URL and logic)
+@app.route('/add_player', methods=['POST'])
+def add_player():
+    if request.method == 'POST':
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        team_code = request.form.get('team_code')
+        year_id_for_context = request.form.get('year_id_for_redirect') # Still useful for context if needed
+
+        if not first_name or not last_name or not team_code:
+            return jsonify({'success': False, 'message': 'Vorname, Nachname und Team sind Pflichtfelder.'}), 400
+
+        existing_player = Player.query.filter_by(
+            team_code=team_code,
+            first_name=first_name, # Consider case-insensitivity if needed
+            last_name=last_name
+        ).first()
+
+        if existing_player:
+            return jsonify({
+                'success': False, 
+                'message': f'Spieler {first_name} {last_name} existiert bereits für Team {team_code}.'
+            }), 409 # 409 Conflict
+        
+        try:
+            new_player = Player(
+                first_name=first_name,
+                last_name=last_name,
+                team_code=team_code
+            )
+            db.session.add(new_player)
+            db.session.commit()
+            
+            # Prepare player data for JSON response, including the ID
+            player_data = {
+                'id': new_player.id,
+                'first_name': new_player.first_name,
+                'last_name': new_player.last_name,
+                'team_code': new_player.team_code,
+                'full_name': f"{new_player.last_name.upper()} {new_player.first_name}"
+            }
+            return jsonify({
+                'success': True, 
+                'message': f'Spieler {first_name} {last_name} erfolgreich zu Team {team_code} hinzugefügt.',
+                'player': player_data
+            }), 201 # 201 Created
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Fehler beim Hinzufügen des Spielers: {str(e)}") # Log error
+            return jsonify({'success': False, 'message': f'Serverfehler beim Hinzufügen des Spielers: {str(e)}'}), 500
+    
+    # GET requests or other methods not allowed for this AJAX endpoint now
+    return jsonify({'success': False, 'message': 'Invalid request method.'}), 405
+
+# Route to add a goal
+@app.route('/year/<int:year_id>/game/<int:game_id>/add_goal', methods=['POST'])
+def add_goal(year_id, game_id):
+    # year_obj = ChampionshipYear.query.get_or_404(year_id) # Already have year_id
+    game_obj = Game.query.get_or_404(game_id)
+
+    if game_obj.year_id != year_id:
+        return jsonify({'success': False, 'message': 'Ungültiges Spiel für dieses Jahr.'}), 400
+
+    if request.method == 'POST':
+        minute = request.form.get('minute')
+        team_code = request.form.get('team_code_goal') # Use a specific name from form to avoid conflict
+        goal_type = request.form.get('goal_type')
+        scorer_id_str = request.form.get('scorer_id')
+        assist1_id_str = request.form.get('assist1_id')
+        assist2_id_str = request.form.get('assist2_id')
+
+        if not minute or not team_code or not goal_type or not scorer_id_str:
+            return jsonify({'success': False, 'message': 'Minute, Team, Typ und Torschütze sind Pflichtfelder.'}), 400
+        
+        # Validate minute format (mm:ss)
+        if not re.match(r"^([0-5]?\d):([0-5]\d)$", minute) and not re.match(r"^\d{1,2}:([0-5]\d)$", minute): 
+             # Allows 0:00 to 59:59 or m:ss where m can be >59 if needed for full game times (e.g. 60:00 for end of 3rd)
+             # Stricter for typical goal times: ^([0-5]?\d):([0-5]\d)$ for up to 59:59
+             # Allowing more general \d{1,2} for minutes for simplicity, assuming typical hockey periods don't exceed 99 min.
+             # Let's use a more common pattern for game time up to 99:59
+            if not re.match(r"^(\d{1,2}):([0-5]\d)$", minute):
+                 return jsonify({'success': False, 'message': 'Minutenformat ungültig. Bitte mm:ss oder m:ss verwenden (z.B. 01:23, 60:00).', 'debug_minute': minute}), 400
+
+        try:
+            scorer_id = int(scorer_id_str)
+            scorer = Player.query.filter_by(id=scorer_id, team_code=team_code).first()
+            if not scorer:
+                return jsonify({'success': False, 'message': f'Ungültiger Torschütze oder Spieler (ID: {scorer_id_str}) gehört nicht zum Team {team_code}.'}), 400
+
+            assist1, assist2 = None, None
+            assist1_player_data, assist2_player_data = None, None
+
+            if assist1_id_str and assist1_id_str != "":
+                assist1_id = int(assist1_id_str)
+                if assist1_id == scorer_id:
+                    return jsonify({'success': False, 'message': 'Torschütze und Assist 1 dürfen nicht derselbe Spieler sein.'}), 400
+                assist1 = Player.query.filter_by(id=assist1_id, team_code=team_code).first()
+                if not assist1:
+                    return jsonify({'success': False, 'message': f'Ungültiger Assist 1 oder Spieler (ID: {assist1_id_str}) gehört nicht zum Team {team_code}.'}), 400
+                assist1_player_data = {'id': assist1.id, 'first_name': assist1.first_name, 'last_name': assist1.last_name}
+
+            if assist2_id_str and assist2_id_str != "":
+                assist2_id = int(assist2_id_str)
+                if assist2_id == scorer_id:
+                    return jsonify({'success': False, 'message': 'Torschütze und Assist 2 dürfen nicht derselbe Spieler sein.'}), 400
+                if assist1 and assist2_id == assist1.id:
+                    return jsonify({'success': False, 'message': 'Assist 1 und Assist 2 dürfen nicht derselbe Spieler sein.'}), 400
+                assist2 = Player.query.filter_by(id=assist2_id, team_code=team_code).first()
+                if not assist2:
+                    return jsonify({'success': False, 'message': f'Ungültiger Assist 2 oder Spieler (ID: {assist2_id_str}) gehört nicht zum Team {team_code}.'}), 400
+                assist2_player_data = {'id': assist2.id, 'first_name': assist2.first_name, 'last_name': assist2.last_name}
+            
+            new_goal = Goal(
+                game_id=game_id,
+                team_code=team_code,
+                minute=minute,
+                goal_type=goal_type,
+                scorer_id=scorer.id,
+                assist1_id=assist1.id if assist1 else None,
+                assist2_id=assist2.id if assist2 else None
+            )
+            db.session.add(new_goal)
+            db.session.commit()
+
+            # Refresh game_obj to get updated goals list and calculate match status
+            db.session.refresh(game_obj) # Ensures game_obj.goals is up-to-date
+            
+            team1_goals_actual = 0
+            team2_goals_actual = 0
+            current_team1_score = game_obj.team1_score
+            current_team2_score = game_obj.team2_score
+
+            # Use game_obj.goals.all() if lazy='dynamic', or game_obj.goals if lazy=True (default)
+            # Assuming game.goals is a dynamic relationship or needs to be queried
+            all_game_goals = Goal.query.filter_by(game_id=game_obj.id).all()
+
+
+            if current_team1_score is not None:
+                team1_goals_actual = sum(1 for goal_in_list in all_game_goals if goal_in_list.team_code == game_obj.team1_code)
+            
+            if current_team2_score is not None:
+                team2_goals_actual = sum(1 for goal_in_list in all_game_goals if goal_in_list.team_code == game_obj.team2_code)
+
+            # Adjust expected scores if it's a shootout result
+            team1_score_for_comparison = current_team1_score
+            team2_score_for_comparison = current_team2_score
+
+            if game_obj.result_type == 'SO':
+                if current_team1_score is not None and current_team2_score is not None:
+                    if current_team1_score > current_team2_score: # Team 1 won SO
+                        team1_score_for_comparison = current_team1_score - 1
+                    elif current_team2_score > current_team1_score: # Team 2 won SO
+                        team2_score_for_comparison = current_team2_score - 1
+
+            team1_score_matches_goals = (team1_score_for_comparison == team1_goals_actual) if current_team1_score is not None else False
+            team2_score_matches_goals = (team2_score_for_comparison == team2_goals_actual) if current_team2_score is not None else False
+            
+            # Determine overall scores_fully_match_goals for the AJAX response
+            # This should mirror the logic in year_view for consistency
+            ajax_scores_fully_match_goals = False
+            if current_team1_score is not None and current_team2_score is not None:
+                ajax_scores_fully_match_goals = team1_score_matches_goals and team2_score_matches_goals
+            elif current_team1_score is not None:
+                ajax_scores_fully_match_goals = team1_score_matches_goals
+            elif current_team2_score is not None:
+                ajax_scores_fully_match_goals = team2_score_matches_goals
+            # else: it remains False if no scores entered, which is fine for AJAX update
+
+            new_goal_count_for_game = len(all_game_goals)
+
+
+            # Get team display names for the game
+            p1_display_name = game_obj.team1_code # Fallback
+            p2_display_name = game_obj.team2_code # Fallback
+            # This logic to get p1_display_name and p2_display_name needs to be available here or passed
+            # For simplicity, just use team_code for now in JSON response
+
+            goal_data = {
+                'id': new_goal.id,
+                'minute': new_goal.minute,
+                'team_code': new_goal.team_code,
+                'goal_type': new_goal.goal_type,
+                'scorer': {'id': scorer.id, 'first_name': scorer.first_name, 'last_name': scorer.last_name, 'full_name': f"{scorer.last_name.upper()} {scorer.first_name}"},
+                'assist1': assist1_player_data if assist1 else None,
+                'assist2': assist2_player_data if assist2 else None,
+                'game_id': new_goal.game_id
+            }
+            if assist1_player_data:
+                 goal_data['assist1']['full_name'] = f"{assist1.last_name.upper()} {assist1.first_name}"
+            if assist2_player_data:
+                 goal_data['assist2']['full_name'] = f"{assist2.last_name.upper()} {assist2.first_name}"
+
+
+            return jsonify({
+                'success': True, 
+                'message': 'Tor erfolgreich hinzugefügt!', 
+                'goal': goal_data,
+                'new_goal_count': new_goal_count_for_game,
+                'scores_fully_match_goals': ajax_scores_fully_match_goals
+            }), 201
+
+        except ValueError: # For int conversion errors
+             return jsonify({'success': False, 'message': 'Ungültige Spieler-ID erhalten.'}), 400
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Fehler beim Hinzufügen des Tores: {str(e)}")
+            return jsonify({'success': False, 'message': f'Serverfehler beim Hinzufügen des Tores: {str(e)}'}), 500
+    
+    return jsonify({'success': False, 'message': 'Invalid request method.'}), 405
+
+# Route to delete a goal
+@app.route('/year/<int:year_id>/goal/<int:goal_id>/delete', methods=['POST'])
+def delete_goal(year_id, goal_id):
+    year_obj = ChampionshipYear.query.get_or_404(year_id)
+    goal_to_delete = Goal.query.get_or_404(goal_id)
+    game_id_anchor = request.form.get('game_id_anchor', goal_to_delete.game_id) # Fallback to goal's game_id
+
+    if goal_to_delete.game.year_id != year_obj.id:
+        flash("Ungültiges Tor zum Löschen für dieses Jahr.", "danger")
+        return redirect(url_for('year_view', year_id=year_id))
+
+    try:
+        db.session.delete(goal_to_delete)
+        db.session.commit()
+        flash('Tor erfolgreich gelöscht.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Fehler beim Löschen des Tores: {str(e)}', 'danger')
+
+    redirect_anchor = f'#goal-entry-{game_id_anchor}' if game_id_anchor else ''
+    return redirect(url_for('year_view', year_id=year_id, _anchor=redirect_anchor.lstrip('#')))
 
 
 # --- CLI commands for DB ---
