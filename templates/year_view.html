@@ -144,6 +144,7 @@
                         {% set p1_intermediate_code = playoff_team_map.get(p1_original_code, p1_original_code) %}
                         {% set p2_intermediate_code = playoff_team_map.get(p2_original_code, p2_original_code) %}
 
+
                         {# --- Logic to resolve standings placeholders like "1A" for Team 1 --- #}
                         {% set p1_display_name = p1_intermediate_code %}
                         {% set p1_display_iso = team_iso_codes.get(p1_display_name) %}
@@ -949,8 +950,7 @@
             </div>
             {% endif %} {# End of if team_stats_data for small tables #}
         </div>
-        {% endif %}
-        {# End of Team Stats Tab Content #}
+        {% endif %} {# End of Team Stats Tab Content #}
 
     </div>
 {% endif %}

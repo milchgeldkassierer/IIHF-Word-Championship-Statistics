@@ -75,6 +75,7 @@ class TeamStats:
     gp: int = 0; w: int = 0; otw: int = 0; sow: int = 0
     l: int = 0; otl: int = 0; sol: int = 0
     gf: int = 0; ga: int = 0; pts: int = 0
+    rank_in_group: int = 0 # Added for semifinal seeding
 
     @property
     def gd(self) -> int:
@@ -409,44 +410,75 @@ def year_view(year_id):
         for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
                                                    (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
             # team_stats should already have 'code' due to pre-population.
-            # If somehow not (e.g. inconsistent data where a played game's team isn't in initial prelim_games scan),
-            # it might default, but ideal case is it exists.
-            stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp)) # setdefault is safe
+            stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
             
-            # Only update if this game's group matches the team's primary group,
-            # this avoids issues if a team code appeared in multiple group contexts in schedule (unlikely for prelims)
-            if stats.group == grp:
+            if stats.group == grp: # Ensure we are updating stats for the team in its primary group
                  stats.gp+=1; stats.gf+=gf; stats.ga+=ga; stats.pts+=pts
-                 if res=='REG': stats.w+=1 if gf>ga else 0; stats.l+=1 if ga>gf else 0
+                 if res=='REG': stats.w+=1 if gf>ga else 0; stats.l+=1 if ga>gf else 0 # Assuming draw gives 0 W/L
                  elif res=='OT': stats.otw+=1 if gf>ga else 0; stats.otl+=1 if ga>gf else 0
                  elif res=='SO': stats.sow+=1 if gf>ga else 0; stats.sol+=1 if ga>gf else 0
     
-    # Dynamically create standings_by_group
     standings_by_group = {}
-    if teams_stats: # Ensure teams_stats is not empty
-        # Get unique group names that have actual stats or were scheduled
-        group_names = sorted(list(set(s.group for s in teams_stats.values() if s.group)))
-        for group_name in group_names:
-            group_teams = sorted(
-                [s for s in teams_stats.values() if s.group == group_name],
-                key=lambda x: (x.pts, x.gd, x.gf), # Sort order
+    if teams_stats:
+        group_full_names = sorted(list(set(s.group for s in teams_stats.values() if s.group))) # e.g. ['Group A', 'Group B']
+        for full_group_name_key in group_full_names: # full_group_name_key is 'Group A' or 'Group B'
+            current_group_teams = sorted(
+                [s for s in teams_stats.values() if s.group == full_group_name_key],
+                key=lambda x: (x.pts, x.gd, x.gf),
                 reverse=True
             )
-            # Add group to standings_by_group even if all teams have 0 points / 0 games played
-            # The template handles the "no data" message if group_teams list itself is empty,
-            # but here group_teams will contain TeamStats objects (possibly with all zeros).
-            standings_by_group[group_name] = group_teams # Key is 'A', 'B', etc.
+            for i, team_stat_obj in enumerate(current_group_teams):
+                team_stat_obj.rank_in_group = i + 1 # Assign 1-indexed rank
+            
+            standings_by_group[full_group_name_key] = current_group_teams # Key is "Group A", "Group B"
 
-    # Update playoff_team_map to use the new standings_by_group structure
     playoff_team_map = {}
-    for group_name_key, group_standings_list in standings_by_group.items():
-        # group_name_key is now 'A', 'B', etc.
-        group_letter = group_name_key 
-        if len(group_letter) == 1 and group_letter.isalpha(): # Ensure it's a single letter
-            for i, s_team in enumerate(group_standings_list):
-                playoff_team_map[f'{group_letter}{i+1}'] = s_team.name
+    # Populate from preliminary round standings (e.g., "A1", "B2")
+    for group_display_name, group_standings_list in standings_by_group.items():
+        # group_display_name is "Group A", "Group B"
+        group_letter_match = re.match(r"Group ([A-D])", group_display_name) # Assuming groups A-D
+        if group_letter_match:
+            group_letter = group_letter_match.group(1)
+            for i, s_team_obj in enumerate(group_standings_list): # s_team_obj is a TeamStats object
+                playoff_team_map[f'{group_letter}{i+1}'] = s_team_obj.name # s_team_obj.name should be "CAN", "USA" etc.
     
     games_dict_by_num = {g.game_number: g for g in games_raw}
+    
+    # --- Semifinal and Final Game Identification (Example for 2025 fixture) ---
+    # This might need to be made more dynamic if fixture structures vary widely
+    # For 2025.json: QFs 57-60, SFs 61-62, Finals 63-64
+    qf_game_numbers = []
+    sf_game_numbers = []
+    bronze_game_number = None
+    gold_game_number = None
+
+    # Attempt to load fixture to identify game numbers and hosts dynamically
+    tournament_hosts = []
+    if year_obj.fixture_path and os.path.exists(year_obj.fixture_path):
+        try:
+            with open(year_obj.fixture_path, 'r', encoding='utf-8') as f:
+                loaded_fixture_data = json.load(f)
+            tournament_hosts = loaded_fixture_data.get("hosts", [])
+            for game_data in loaded_fixture_data.get("schedule", []):
+                round_name = game_data.get("round", "").lower()
+                game_num = game_data.get("gameNumber")
+                if "quarterfinal" in round_name: qf_game_numbers.append(game_num)
+                elif "semifinal" in round_name: sf_game_numbers.append(game_num)
+                elif "bronze" in round_name: bronze_game_number = game_num
+                elif "gold" in round_name: gold_game_number = game_num
+            sf_game_numbers.sort() # Ensure SF1 is the lower game number
+        except Exception: # Fallback if fixture parsing fails
+            app.logger.error(f"Could not parse fixture {year_obj.fixture_path} for playoff game numbers.")
+            # Hardcoded fallback for 2025 example if dynamic loading fails
+            if year_obj.year == 2025:
+                qf_game_numbers = [57, 58, 59, 60]
+                sf_game_numbers = [61, 62] # SF1=61, SF2=62
+                tournament_hosts = ["SWE", "DEN"] # Example hosts
+
+    if sf_game_numbers and len(sf_game_numbers) >= 2:
+        playoff_team_map['SF1'] = str(sf_game_numbers[0])
+        playoff_team_map['SF2'] = str(sf_game_numbers[1])
+    # QF game numbers are used below directly.
 
     def get_resolved_code(placeholder_code, current_map):
         # Iteratively resolve: W(QF1) -> W(50) -> SUI
@@ -499,27 +531,112 @@ def year_view(year_id):
     for _pass_num in range(max(3, len(games_processed) // 2)): # Iterate for resolution
         changes_in_pass = 0
         for g_disp in games_processed:
-            # Resolve team codes
-            resolved_t1 = get_resolved_code(g_disp.team1_code, playoff_team_map)
-            if resolved_t1 != g_disp.team1_code: g_disp.team1_code = resolved_t1; changes_in_pass += 1
+            # Resolve team codes using the original placeholder from the fixture
+            resolved_t1 = get_resolved_code(g_disp.original_team1_code, playoff_team_map)
+            if g_disp.team1_code != resolved_t1: # Update if current resolved code differs from new one
+                g_disp.team1_code = resolved_t1
+                changes_in_pass += 1
             
-            resolved_t2 = get_resolved_code(g_disp.team2_code, playoff_team_map)
-            if resolved_t2 != g_disp.team2_code: g_disp.team2_code = resolved_t2; changes_in_pass += 1
+            resolved_t2 = get_resolved_code(g_disp.original_team2_code, playoff_team_map)
+            if g_disp.team2_code != resolved_t2: # Update if current resolved code differs from new one
+                g_disp.team2_code = resolved_t2
+                changes_in_pass += 1
 
             # Update playoff_team_map with W(game_number)/L(game_number) from resolved game outcomes
             if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:
                 # Ensure g_disp.team1/2_code are NOT placeholders like 'A1' before using them as W/L results
-                is_t1_final = not (g_disp.team1_code.startswith(('A','B','W','L','Q','S')) and len(g_disp.team1_code)>1 and g_disp.team1_code[1:].isdigit())
-                is_t2_final = not (g_disp.team2_code.startswith(('A','B','W','L','Q','S')) and len(g_disp.team2_code)>1 and g_disp.team2_code[1:].isdigit())
+                is_t1_final = not (g_disp.team1_code.startswith(('A','B','W','L','Q','S','SF')) and len(g_disp.team1_code)>1 and (g_disp.team1_code[1:].isdigit() or g_disp.team1_code[1:].isalnum()))
+                is_t2_final = not (g_disp.team2_code.startswith(('A','B','W','L','Q','S','SF')) and len(g_disp.team2_code)>1 and (g_disp.team2_code[1:].isdigit() or g_disp.team2_code[1:].isalnum()))
 
-                if is_t1_final and is_t2_final: # Both teams are resolved to national codes
+                if is_t1_final and is_t2_final:
                     actual_winner = g_disp.team1_code if g_disp.team1_score > g_disp.team2_score else g_disp.team2_code
                     actual_loser  = g_disp.team2_code if g_disp.team1_score > g_disp.team2_score else g_disp.team1_code
                     
                     win_key = f'W({g_disp.game_number})'; lose_key = f'L({g_disp.game_number})'
                     if playoff_team_map.get(win_key) != actual_winner: playoff_team_map[win_key] = actual_winner; changes_in_pass +=1
                     if playoff_team_map.get(lose_key) != actual_loser: playoff_team_map[lose_key] = actual_loser; changes_in_pass +=1
-        if changes_in_pass == 0 and _pass_num > 1: break # Stable after min 2 full passes
+        
+        # --- Semifinal Seeding Logic (after one pass of W/L resolution for QFs) ---
+        if _pass_num >= 0 and qf_game_numbers and sf_game_numbers and len(sf_game_numbers) == 2: # Ensure QF games ran, apply SF seeding
+            qf_winners_teams = []
+            all_qf_winners_resolved = True
+            for qf_game_num in qf_game_numbers:
+                winner_placeholder = f'W({qf_game_num})'
+                # Resolve the winner placeholder itself before using it
+                resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
+
+                if resolved_qf_winner and not (resolved_qf_winner.startswith(('W(','L(','A','B','Q','S','SF')) and (resolved_qf_winner[1:].isdigit() or resolved_qf_winner[1:].isalnum()) ):
+                    qf_winners_teams.append(resolved_qf_winner)
+                else:
+                    all_qf_winners_resolved = False
+                    break
+            
+            if all_qf_winners_resolved and len(qf_winners_teams) == 4:
+                # Get TeamStats for each winner (which includes rank_in_group, pts, gd, gf)
+                qf_winners_stats = []
+                for team_name in qf_winners_teams:
+                    if team_name in teams_stats: # teams_stats keys are original team codes
+                        qf_winners_stats.append(teams_stats[team_name])
+                    else: # Should not happen if team played prelims
+                        all_qf_winners_resolved = False; break 
+                
+                if all_qf_winners_resolved and len(qf_winners_stats) == 4:
+                    # Sort QF winners: 1. rank_in_group (asc), 2. pts (desc), 3. gd (desc), 4. gf (desc)
+                    qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
+                    
+                    R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats] # Ranked team names
+
+                    matchup1 = (R1, R4) # Best vs Lowest
+                    matchup2 = (R2, R3) # Second Best vs Third Best
+
+                    # Assign matchups to SF games based on host rules (example for 2025)
+                    # Game 61 (placeholders Q1,Q2), Game 62 (placeholders Q3,Q4)
+                    # Rule: If SWE is SF, plays Game 61. Else if DEN is SF, plays Game 61. Else R1's matchup is Game 61.
+                    
+                    sf_game1_teams = None
+                    sf_game2_teams = None
+
+                    # tournament_hosts might be ["SWE", "DEN"]
+                    # Check if primary host (e.g., SWE for 2025 as per note for SF1) is in R1,R2,R3,R4
+                    primary_host_plays_sf1 = False
+                    if tournament_hosts:
+                        # Based on 2025 notes: "If both SWE and DEN qualifies, SWE will play SF1 - Game 61 at 14:20. 
+                        # If only SWE or DEN qualifies, SWE or DEN will play SF1." This implies SWE has priority for SF1.
+                        if tournament_hosts[0] in [R1,R2,R3,R4]: # Check SWE
+                             primary_host_plays_sf1 = True
+                             if R1 == tournament_hosts[0] or R4 == tournament_hosts[0]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
+                             else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
+                        elif len(tournament_hosts) > 1 and tournament_hosts[1] in [R1,R2,R3,R4]: # Check DEN if SWE not in
+                             primary_host_plays_sf1 = True # DEN also aims for SF1 if SWE is not playing SF1
+                             if R1 == tournament_hosts[1] or R4 == tournament_hosts[1]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
+                             else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
+                    
+                    if not primary_host_plays_sf1: # Neither host qualified or rule not applicable
+                        # Default: R1's matchup (best ranked) plays SF1
+                        sf_game1_teams = matchup1
+                        sf_game2_teams = matchup2
+
+                    # Q-placeholders correspond to specific SF game slots defined in the fixture.
+                    # e.g. Game 61: team1="Q1", team2="Q2"
+                    #      Game 62: team1="Q3", team2="Q4"
+                    
+                    # Ensure sf_game_numbers is populated correctly earlier
+                    sf_game_obj_1 = games_dict_by_num.get(sf_game_numbers[0])
+                    sf_game_obj_2 = games_dict_by_num.get(sf_game_numbers[1])
+
+                    if sf_game_obj_1 and sf_game_obj_2 and sf_game1_teams and sf_game2_teams:
+                        # Check if playoff_team_map needs update
+                        if playoff_team_map.get(sf_game_obj_1.team1_code) != sf_game1_teams[0]:
+                            playoff_team_map[sf_game_obj_1.team1_code] = sf_game1_teams[0]; changes_in_pass +=1
+                        if playoff_team_map.get(sf_game_obj_1.team2_code) != sf_game1_teams[1]:
+                            playoff_team_map[sf_game_obj_1.team2_code] = sf_game1_teams[1]; changes_in_pass +=1
+                        
+                        if playoff_team_map.get(sf_game_obj_2.team1_code) != sf_game2_teams[0]:
+                            playoff_team_map[sf_game_obj_2.team1_code] = sf_game2_teams[0]; changes_in_pass +=1
+                        if playoff_team_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
+                            playoff_team_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]; changes_in_pass +=1
+                            
+        if changes_in_pass == 0 and _pass_num > 0: break # Stable after min 1 full pass (pass 0 is first calculation)
 
     all_players_list = Player.query.order_by(Player.team_code, Player.last_name).all()
     player_cache = {p.id: p for p in all_players_list}
