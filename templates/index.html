@@ -5,22 +5,25 @@
 {% block content %}
 <div class="row">
     <div class="col-md-6">
-        <h2>Turnier anlegen / Spielplan hochladen</h2>
+        <h2>Turnier anlegen / Jahr auswählen</h2>
         <form method="POST" enctype="multipart/form-data" class="mb-4">
             <div class="form-group">
                 <label for="tournament_name">Name des Turniers</label>
                 <input type="text" class="form-control" id="tournament_name" name="tournament_name" placeholder="z.B. WM 2025 oder Virtual Cup" required>
             </div>
             <div class="form-group">
-                <label for="year">Jahr</label>
-                <input type="number" class="form-control" id="year" name="year" placeholder="z.B. 2025" required>
+                <label for="year">Jahr (Spielplan wird automatisch geladen)</label>
+                <select class="form-control" id="year" name="year" required>
+                    <option value="" disabled selected>Bitte Jahr auswählen</option>
+                    {% for year_option in available_fixture_years %}
+                    <option value="{{ year_option }}">{{ year_option }}</option>
+                    {% endfor %}
+                    {% if not available_fixture_years %}
+                    <option value="" disabled>Keine Spielpläne gefunden. Bitte .json Datei in 'fixtures' ablegen.</option>
+                    {% endif %}
+                </select>
             </div>
-            <div class="form-group">
-                <label for="fixture_file">Spielplan (JSON-Datei)</label>
-                <input type="file" class="form-control-file" id="fixture_file" name="fixture_file" accept=".json">
-                <small class="form-text text-muted">Laden Sie hier die JSON-Datei mit dem Spielplan hoch. Wenn das Jahr bereits existiert und Sie eine neue Datei hochladen, wird der alte Spielplan überschrieben.</small>
-            </div>
-            <button type="submit" class="btn btn-primary">Jahr anlegen / Aktualisieren</button>
+            <button type="submit" class="btn btn-primary">Turnier anlegen / Aktualisieren</button>
         </form>
     </div>
 

@@ -190,17 +190,34 @@ def index():
             year_obj_del = db.session.get(ChampionshipYear, year_id_to_delete)
             if year_obj_del:
                 if year_obj_del.fixture_path and os.path.exists(year_obj_del.fixture_path):
-                    try: os.remove(year_obj_del.fixture_path)
-                    except OSError as e: flash(f"Error deleting fixture file: {e}", "danger")
+                    # Only delete the fixture file if it's within the UPLOAD_FOLDER (managed files)
+                    # and not one of the root template files in 'fixtures/'.
+                    try:
+                        abs_fixture_path = os.path.abspath(year_obj_del.fixture_path)
+                        abs_upload_folder = os.path.abspath(app.config['UPLOAD_FOLDER'])
+                        # Also consider the root 'fixtures' path to ensure templates there are not deleted.
+                        # However, the primary check should be if it's *in* the UPLOAD_FOLDER.
+                        # Files outside UPLOAD_FOLDER (like those directly in root 'fixtures') should be preserved.
+                        if abs_fixture_path.startswith(abs_upload_folder):
+                             # This implies the file is inside data/fixtures/ (e.g. data/fixtures/1_2024.json)
+                             os.remove(year_obj_del.fixture_path)
+                             flash(f'Associated fixture file "{os.path.basename(year_obj_del.fixture_path)}" from data directory deleted.', 'info')
+                        # else: Do not delete if it's not in the UPLOAD_FOLDER (e.g. it is a template from root 'fixtures/')
+                        # In this case, year_obj_del.fixture_path would be something like 'fixtures/2024.json'
+                        # and we want to keep that file.
+                    except OSError as e:
+                        flash(f"Error deleting managed fixture file: {e}", "danger")
+                
                 db.session.delete(year_obj_del)
                 db.session.commit()
                 flash(f'Tournament "{year_obj_del.name} ({year_obj_del.year})" deleted.', 'success')
-            else: flash('Tournament to delete not found.', 'warning')
+            else:
+                flash('Tournament to delete not found.', 'warning')
             return redirect(url_for('index'))
 
         name_str = request.form.get('tournament_name')
         year_str = request.form.get('year')
-        fixture_file = request.files.get('fixture_file')
+        # fixture_file = request.files.get('fixture_file') # Removed: No longer uploading file manually
 
         if not name_str or not year_str:
             flash('Name and Year are required.', 'danger'); return redirect(url_for('index'))
@@ -208,75 +225,119 @@ def index():
         except ValueError: flash('Year must be a number.', 'danger'); return redirect(url_for('index'))
 
         existing_tournament = ChampionshipYear.query.filter_by(name=name_str, year=year_int).first()
-        target_year = existing_tournament
-        if not existing_tournament:
+        target_year_obj = existing_tournament # Use a different variable name to avoid confusion
+
+        if not target_year_obj:
             new_tournament = ChampionshipYear(name=name_str, year=year_int)
             db.session.add(new_tournament)
             try:
-                db.session.commit(); target_year = new_tournament
-                flash(f'Tournament "{target_year.name} ({target_year.year})" created.', 'success')
+                db.session.commit()
+                target_year_obj = new_tournament
+                flash(f'Tournament "{target_year_obj.name} ({target_year_obj.year})" created.', 'success')
             except Exception as e:
-                db.session.rollback(); flash(f'Error creating tournament: {str(e)}', 'danger')
+                db.session.rollback()
+                flash(f'Error creating tournament: {str(e)}', 'danger')
                 return redirect(url_for('index'))
-        else: # Tournament exists
-             flash(f'Tournament "{name_str}" ({year_int}) already exists. Fixture can be updated below if new file provided.', 'info')
+        else:
+            flash(f'Tournament "{name_str} ({year_int})" already exists. Updating fixture based on selected year.', 'info')
 
+        # Automatic fixture loading logic
+        if target_year_obj: # Ensure tournament object exists (either new or existing)
+            potential_fixture_filename = f"{year_str}.json"
+            fixture_path_to_load = None
 
-        if fixture_file and fixture_file.filename != '':
-            if not target_year: flash('Target tournament not defined.', 'danger'); return redirect(url_for('index'))
-            if allowed_file(fixture_file.filename):
-                filename = secure_filename(f"{target_year.id}_{fixture_file.filename}")
-                fixture_save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-                
-                old_fixture_path = target_year.fixture_path
-                Game.query.filter_by(year_id=target_year.id).delete() # Delete old games
+            # Check in UPLOAD_FOLDER (data/fixtures/) first
+            path_in_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], potential_fixture_filename)
+            if os.path.exists(path_in_upload_folder):
+                fixture_path_to_load = path_in_upload_folder
+            else:
+                # Check in root 'fixtures' directory as a fallback
+                path_in_root_fixtures = os.path.join(BASE_DIR, 'fixtures', potential_fixture_filename)
+                if os.path.exists(path_in_root_fixtures):
+                    fixture_path_to_load = path_in_root_fixtures
+            
+            # Try <id>_<year>.json format in UPLOAD_FOLDER if year.json not found there
+            # This is primarily for files saved by the app itself if they used that naming.
+            # For auto-loading, YYYY.json is the primary target.
+            if not fixture_path_to_load and target_year_obj.id: # only if target_year_obj already has an id
+                 potential_id_fixture_filename = f"{target_year_obj.id}_{year_str}.json"
+                 path_id_in_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], potential_id_fixture_filename)
+                 if os.path.exists(path_id_in_upload_folder):
+                      fixture_path_to_load = path_id_in_upload_folder
 
+            if fixture_path_to_load:
+                # Delete old games for this tournament year before loading new ones
+                Game.query.filter_by(year_id=target_year_obj.id).delete()
                 try:
-                    fixture_file.save(fixture_save_path)
-                    if old_fixture_path and old_fixture_path != fixture_save_path and os.path.exists(old_fixture_path):
-                        os.remove(old_fixture_path)
-                    target_year.fixture_path = fixture_save_path
-                    
-                    with open(fixture_save_path, 'r', encoding='utf-8') as f:
+                    target_year_obj.fixture_path = fixture_path_to_load # Store the path of the loaded file
+                    with open(fixture_path_to_load, 'r', encoding='utf-8') as f:
                         fixture_data = json.load(f)
                     
-                    games_from_json = fixture_data.get("schedule", []) # MODIFIED: "games" -> "schedule"
-                    # flash(f"DEBUG: Found {len(games_from_json)} games in JSON file {fixture_save_path}", "warning") # DEBUG LINE REMOVED
-
+                    games_from_json = fixture_data.get("schedule", [])
                     for game_data_item in games_from_json:
-                        # Map keys from JSON to Game model attributes
                         mapped_game_data = {
                             'date': game_data_item.get('date'),
-                            'start_time': game_data_item.get('startTime'), # Corrected key from startTime
+                            'start_time': game_data_item.get('startTime'),
                             'round': game_data_item.get('round'),
                             'group': game_data_item.get('group'),
-                            'game_number': game_data_item.get('gameNumber'), # Corrected key from gameNumber
-                            'team1_code': game_data_item.get('team1'), # Map team1 to team1_code
-                            'team2_code': game_data_item.get('team2'), # Map team2 to team2_code
+                            'game_number': game_data_item.get('gameNumber'),
+                            'team1_code': game_data_item.get('team1'),
+                            'team2_code': game_data_item.get('team2'),
                             'location': game_data_item.get('location'),
                             'venue': game_data_item.get('venue')
-                            # 'fullGameDescription' is ignored as it's not in the Game model
                         }
-                        # Filter out None values to avoid passing them to the model if not nullable
-                        # and the model has defaults. Or ensure all required fields are present.
-                        # For now, assume all necessary fields are provided or nullable.
-                        
-                        new_game = Game(year_id=target_year.id, **mapped_game_data)
+                        new_game = Game(year_id=target_year_obj.id, **mapped_game_data)
                         db.session.add(new_game)
                     
                     db.session.commit()
-                    flash(f'Fixture updated and games loaded for "{target_year.name} ({target_year.year})".', 'success')
+                    flash(f'Fixture "{os.path.basename(fixture_path_to_load)}" loaded and games updated for "{target_year_obj.name} ({target_year_obj.year})".', 'success')
                 except Exception as e:
                     db.session.rollback()
-                    flash(f'Error processing fixture file: {str(e)}', 'danger')
-            else: flash('Invalid file type for fixture.', 'danger')
-        elif fixture_file and fixture_file.filename == '' and target_year and target_year.fixture_path:
-             flash('No new fixture file provided. Existing fixture remains.', 'info')
+                    flash(f'Error processing fixture file "{os.path.basename(fixture_path_to_load if fixture_path_to_load else potential_fixture_filename)}": {str(e)} - {traceback.format_exc()}', 'danger')
+            else:
+                # If no fixture file is found, still commit the ChampionshipYear if it's new
+                # but flash a warning that no schedule was loaded.
+                if not existing_tournament: # It was a new tournament creation attempt
+                    # db.session.commit() # Already committed if new_tournament was created
+                    flash(f'Tournament "{target_year_obj.name} ({target_year_obj.year})" created, but no fixture file like "{year_str}.json" found in ./data/fixtures/ or ./fixtures/. Please add it and try again, or ensure it is named correctly.', 'warning')
+                else: # It was an existing tournament, just inform that no fixture was found to update from
+                    flash(f'No fixture file like "{year_str}.json" found in ./data/fixtures/ or ./fixtures/ for "{target_year_obj.name} ({target_year_obj.year})". Existing games (if any) remain.', 'info')
+                # If the fixture_path was previously set and the new auto-detected file is not found, we should probably clear it or leave it.
+                # For now, if no new file is found, we don't change target_year_obj.fixture_path if it was an existing tournament.
+                # If it was a new tournament, target_year_obj.fixture_path will be None.
 
+    all_years_db = ChampionshipYear.query.order_by(ChampionshipYear.year.desc(), ChampionshipYear.name).all()
+    
+    # Dynamically get years from fixture directories
+    all_found_years = set()
 
-    all_years = ChampionshipYear.query.order_by(ChampionshipYear.year.desc(), ChampionshipYear.name).all()
-    return render_template('index.html', all_years=all_years)
+    # Location 1: app.config['UPLOAD_FOLDER'] (e.g., data/fixtures)
+    upload_folder_path = app.config['UPLOAD_FOLDER']
+    if os.path.exists(upload_folder_path):
+        for f_name in os.listdir(upload_folder_path):
+            if f_name.endswith('.json'):
+                year_part = f_name[:-5]  # Remove .json
+                if '_' in year_part:  # Check for <id>_<year>.json format
+                    potential_year = year_part.split('_')[-1]
+                    if potential_year.isdigit():
+                        all_found_years.add(potential_year)
+                elif year_part.isdigit():  # Check for <year>.json format
+                    all_found_years.add(year_part)
+
+    # Location 2: 'fixtures' directory at the project root
+    # (os.path.join(BASE_DIR, 'fixtures') would be more robust if app.py is not at root)
+    # Assuming app.py is at project root, 'fixtures' is fine.
+    root_fixtures_path = 'fixtures' 
+    if os.path.exists(root_fixtures_path):
+        for f_name in os.listdir(root_fixtures_path):
+            if f_name.endswith('.json'):
+                year_part = f_name[:-5] # Remove .json
+                if year_part.isdigit(): # Expects simple YYYY.json in root 'fixtures'
+                    all_found_years.add(year_part)
+    
+    sorted_fixture_years = sorted(list(all_found_years), reverse=True)
+
+    return render_template('index.html', all_years=all_years_db, available_fixture_years=sorted_fixture_years)
 
 
 @app.route('/year/<int:year_id>', methods=['GET', 'POST'])
