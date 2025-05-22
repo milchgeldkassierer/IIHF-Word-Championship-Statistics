@@ -9,6 +9,7 @@
     {% block head_scripts %}{% endblock %}
 </head>
 <body>
+    {% block navbar %}
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
         <a class="navbar-brand" href="{{ url_for('index') }}">IIHF Tabellenrechner</a>
         <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -22,6 +23,7 @@
             </ul>
         </div>
     </nav>
+    {% endblock navbar %}
 
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}

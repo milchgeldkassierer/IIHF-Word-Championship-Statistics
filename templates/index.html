@@ -5,10 +5,14 @@
 {% block content %}
 <div class="row">
     <div class="col-md-6">
-        <h2>Jahr anlegen / Spielplan hochladen</h2>
+        <h2>Turnier anlegen / Spielplan hochladen</h2>
         <form method="POST" enctype="multipart/form-data" class="mb-4">
             <div class="form-group">
-                <label for="year">Jahr der Weltmeisterschaft</label>
+                <label for="tournament_name">Name des Turniers</label>
+                <input type="text" class="form-control" id="tournament_name" name="tournament_name" placeholder="z.B. WM 2025 oder Virtual Cup" required>
+            </div>
+            <div class="form-group">
+                <label for="year">Jahr</label>
                 <input type="number" class="form-control" id="year" name="year" placeholder="z.B. 2025" required>
             </div>
             <div class="form-group">
@@ -21,12 +25,12 @@
     </div>
 
     <div class="col-md-6">
-        <h2>Vorhandene Jahre</h2>
-        {% if years %}
+        <h2>Vorhandene Turniere</h2>
+        {% if all_years %}
             <ul class="list-group">
-                {% for y in years %}
+                {% for y in all_years %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <a href="{{ url_for('year_view', year_id=y.id) }}">WM {{ y.year }}</a>
+                    <a href="{{ url_for('year_view', year_id=y.id) }}">{{ y.name }} ({{y.year}})</a>
                     <span>
                         {% if y.fixture_path %}
                             <small class="text-success">Spielplan vorhanden</small>
@@ -34,7 +38,7 @@
                             <small class="text-warning">Kein Spielplan</small>
                         {% endif %}
                     </span>
-                    <form method="POST" style="display: inline;" onsubmit="return confirm('Sind Sie sicher, dass Sie das Jahr {{ y.year }} und alle zugehörigen Daten löschen möchten?');">
+                    <form method="POST" style="display: inline;" onsubmit="return confirm('Sind Sie sicher, dass Sie das Turnier \'{{ y.name }} ({{ y.year }})\' und alle zugehörigen Daten löschen möchten?');">
                         <input type="hidden" name="year_id_to_delete" value="{{ y.id }}">
                         <button type="submit" name="delete_year" class="btn btn-danger btn-sm">Löschen</button>
                     </form>
@@ -42,7 +46,7 @@
                 {% endfor %}
             </ul>
         {% else %}
-            <p>Noch keine Jahre angelegt.</p>
+            <p>Noch keine Turniere angelegt.</p>
         {% endif %}
     </div>
 </div>
