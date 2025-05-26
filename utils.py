@@ -407,3 +407,109 @@ def resolve_game_participants(
     )
 
     return resolved_team1, resolved_team2
+
+def convert_time_to_seconds(time_str: str) -> int:
+    """
+    Converts a time string in format "MM:SS" to total seconds.
+    
+    Args:
+        time_str: Time string in format "MM:SS" (e.g., "12:34")
+        
+    Returns:
+        Total seconds as integer
+        
+    Example:
+        convert_time_to_seconds("12:34") returns 754
+    """
+    if not time_str or ':' not in time_str:
+        return 0
+    
+    try:
+        parts = time_str.split(':')
+        if len(parts) != 2:
+            return 0
+        
+        minutes = int(parts[0])
+        seconds = int(parts[1])
+        
+        return minutes * 60 + seconds
+    except (ValueError, IndexError):
+        return 0
+
+def check_game_data_consistency(game_display, sog_data=None):
+    """
+    Checks a game display object for data consistency issues.
+    
+    Args:
+        game_display: GameDisplay object to check
+        sog_data: Optional shots on goal data dictionary
+        
+    Returns:
+        Dictionary with consistency check results
+    """
+    warnings = []
+    scores_fully_match_data = True
+    
+    # Check if scores are set but result_type is missing
+    if game_display.team1_score is not None and game_display.team2_score is not None:
+        if not game_display.result_type:
+            warnings.append(f"Game {game_display.id}: Scores are set but result_type is missing")
+            scores_fully_match_data = False
+        
+        # Check if scores match result_type logic
+        if game_display.result_type == 'REG' and game_display.team1_score == game_display.team2_score:
+            warnings.append(f"Game {game_display.id}: Regular time result but scores are tied")
+            scores_fully_match_data = False
+        
+        if game_display.result_type in ['OT', 'SO'] and abs(game_display.team1_score - game_display.team2_score) != 1:
+            warnings.append(f"Game {game_display.id}: Overtime/Shootout result but score difference is not 1")
+            scores_fully_match_data = False
+    
+    # Check if result_type is set but scores are missing
+    if game_display.result_type and (game_display.team1_score is None or game_display.team2_score is None):
+        warnings.append(f"Game {game_display.id}: Result type is set but scores are missing")
+        scores_fully_match_data = False
+    
+    # Check team codes
+    if not game_display.team1_code or not game_display.team2_code:
+        warnings.append(f"Game {game_display.id}: Missing team code(s)")
+        scores_fully_match_data = False
+    
+    if game_display.team1_code == game_display.team2_code:
+        warnings.append(f"Game {game_display.id}: Team playing against itself")
+        scores_fully_match_data = False
+    
+    # Check points consistency
+    if game_display.team1_score is not None and game_display.team2_score is not None and game_display.result_type:
+        expected_points = calculate_expected_points(game_display.team1_score, game_display.team2_score, game_display.result_type)
+        if hasattr(game_display, 'team1_points') and hasattr(game_display, 'team2_points'):
+            if (game_display.team1_points, game_display.team2_points) != expected_points:
+                warnings.append(f"Game {game_display.id}: Points don't match expected values for result")
+                scores_fully_match_data = False
+    
+    return {
+        'warnings': warnings,
+        'scores_fully_match_data': scores_fully_match_data
+    }
+
+def calculate_expected_points(team1_score: int, team2_score: int, result_type: str) -> Tuple[int, int]:
+    """
+    Calculates expected points for both teams based on scores and result type.
+    
+    Returns:
+        Tuple of (team1_points, team2_points)
+    """
+    if result_type == 'REG':
+        if team1_score > team2_score:
+            return (3, 0)
+        elif team2_score > team1_score:
+            return (0, 3)
+        else:
+            return (1, 1)  # Tie in regulation (rare in hockey)
+    elif result_type in ['OT', 'SO']:
+        if team1_score > team2_score:
+            return (2, 1)
+        else:
+            return (1, 2)
+    else:
+        return (0, 0)  # Unknown result type

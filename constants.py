@@ -7,6 +7,26 @@ TEAM_ISO_CODES = {
     "QF": None, "SF": None, "L(SF)": None, "W(SF)": None
 }
 
+# Tournament round definitions
+PRELIM_ROUNDS = ["Preliminary Round", "Group Stage", "Round Robin"]
+PLAYOFF_ROUNDS = ["Quarterfinal", "Semifinal", "Final", "Bronze Medal Game", "Playoff"]
+
+# Game number mappings by year for quarterfinals and semifinals
+QF_GAME_NUMBERS_BY_YEAR = {
+    # Add specific game numbers for quarterfinals by year as needed
+    # Example: 2023: [45, 46, 47, 48]
+}
+
+SF_GAME_NUMBERS_BY_YEAR = {
+    # Add specific game numbers for semifinals by year as needed
+    # Example: 2023: [49, 50]
+}
+
+FINAL_BRONZE_GAME_NUMBERS_BY_YEAR = {
+    # Add specific game numbers for final and bronze medal games by year as needed
+    # Example: 2023: [51, 52]
+}
+
 # Define penalty choices
 PENALTY_TYPES_CHOICES = ["2 Min", "2+2 Min", "5 Min + Spieldauer", "10 Min Disziplinar", "Spieldauer Disziplinar"]
 PENALTY_REASONS_CHOICES = [

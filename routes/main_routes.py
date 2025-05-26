@@ -339,4 +339,4 @@ def all_time_standings_view():
     Displays the all-time standings page.
     """
     standings_data = calculate_all_time_standings()
-    return render_template('all_time_standings.html', standings_data=standings_data, TEAM_ISO_CODES=TEAM_ISO_CODES)
+    return render_template('all_time_standings.html', standings_data=standings_data, team_iso_codes=TEAM_ISO_CODES)
