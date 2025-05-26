@@ -1,8 +1,10 @@
 import os
 import json
+import re # Added for regex in playoff map building
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
-from models import db, ChampionshipYear, Game, AllTimeTeamStats # Add other models if needed by this blueprint
-from constants import TEAM_ISO_CODES # Import TEAM_ISO_CODES
+from models import db, ChampionshipYear, Game, AllTimeTeamStats, TeamStats # Added TeamStats
+from constants import TEAM_ISO_CODES, PRELIM_ROUNDS, PLAYOFF_ROUNDS, QF_GAME_NUMBERS_BY_YEAR, SF_GAME_NUMBERS_BY_YEAR # Added more constants
+from utils import get_resolved_team_code, is_code_final # Added utils imports
 import traceback
 
 main_bp = Blueprint('main_bp', __name__)
@@ -10,86 +12,193 @@ main_bp = Blueprint('main_bp', __name__)
 def calculate_all_time_standings():
     """
     Calculates all-time standings for all teams based on game results.
+    This version precomputes playoff maps for each year.
     """
-    all_time_stats_dict = {}
-    # Eagerly load championship_year to access game.championship_year.year efficiently
-    games = Game.query.options(db.joinedload(Game.championship_year)).all()
+    # --- Start of new precomputation logic ---
+    all_games = Game.query.options(db.joinedload(Game.championship_year)).all()
+    year_objects_map = {year.id: year for year in ChampionshipYear.query.all()}
 
-    for game in games:
-        if game.team1_score is None or game.team2_score is None:
-            continue # Skip games without scores
+    games_by_year_id = {}
+    for game_obj in all_games: # Renamed game to game_obj to avoid conflict later
+        games_by_year_id.setdefault(game_obj.year_id, []).append(game_obj)
 
-        # Ensure team_code is not None, though DB constraints should prevent this.
-        if not game.team1_code or not game.team2_code:
-            current_app.logger.warning(f"Game ID {game.id} has missing team codes. Skipping.")
+    resolved_playoff_maps_by_year_id = {}
+
+    for year_id, games_in_this_year in games_by_year_id.items():
+        year_obj = year_objects_map.get(year_id)
+        if not year_obj:
+            current_app.logger.warning(f"Year object not found for year_id {year_id}. Skipping playoff map generation for this year.")
             continue
 
-        # Get the year of the game
-        if not game.championship_year: # Should not happen with proper data and eager loading
-            current_app.logger.warning(f"Game ID {game.id} is missing championship_year link. Skipping year participation update for this game.")
-            year_of_game = None # Or handle as an error
-        else:
-            year_of_game = game.championship_year.year
+        # a. Calculate Prelim Standings for this year
+        prelim_stats_map_this_year: Dict[str, TeamStats] = {}
+        prelim_games_for_standings_calc = [
+            g for g in games_in_this_year
+            if g.round in PRELIM_ROUNDS and \
+               is_code_final(g.team1_code) and \
+               is_code_final(g.team2_code) and \
+               g.team1_score is not None and g.team2_score is not None
+        ]
 
-        # Initialize stats for team1 if not present
-        if game.team1_code not in all_time_stats_dict:
-            all_time_stats_dict[game.team1_code] = AllTimeTeamStats(team_code=game.team1_code)
+        for game_prelim in prelim_games_for_standings_calc:
+            current_game_group = game_prelim.group or "N/A"
+            # Ensure both teams are initialized in prelim_stats_map_this_year
+            # Using a loop for brevity, though direct access is also fine.
+            for team_code_val in [game_prelim.team1_code, game_prelim.team2_code]:
+                if team_code_val not in prelim_stats_map_this_year:
+                    prelim_stats_map_this_year[team_code_val] = TeamStats(name=team_code_val, group=current_game_group)
+                # If team was seen before with N/A group (unlikely if data is good), update with actual group.
+                elif prelim_stats_map_this_year[team_code_val].group == "N/A" and current_game_group != "N/A":
+                    prelim_stats_map_this_year[team_code_val].group = current_game_group
+            
+            t1_stats = prelim_stats_map_this_year[game_prelim.team1_code]
+            t2_stats = prelim_stats_map_this_year[game_prelim.team2_code]
+
+            t1_stats.gp += 1; t2_stats.gp += 1
+            t1_stats.gf += game_prelim.team1_score; t1_stats.ga += game_prelim.team2_score
+            t2_stats.gf += game_prelim.team2_score; t2_stats.ga += game_prelim.team1_score
+
+            if game_prelim.result_type == 'REG':
+                if game_prelim.team1_score > game_prelim.team2_score: (t1_stats.w, t1_stats.pts, t2_stats.l) = (t1_stats.w+1, t1_stats.pts+3, t2_stats.l+1)
+                else: (t2_stats.w, t2_stats.pts, t1_stats.l) = (t2_stats.w+1, t2_stats.pts+3, t1_stats.l+1)
+            elif game_prelim.result_type == 'OT':
+                if game_prelim.team1_score > game_prelim.team2_score: (t1_stats.otw, t1_stats.pts, t2_stats.otl, t2_stats.pts) = (t1_stats.otw+1, t1_stats.pts+2, t2_stats.otl+1, t2_stats.pts+1)
+                else: (t2_stats.otw, t2_stats.pts, t1_stats.otl, t1_stats.pts) = (t2_stats.otw+1, t2_stats.pts+2, t1_stats.otl+1, t1_stats.pts+1)
+            elif game_prelim.result_type == 'SO':
+                if game_prelim.team1_score > game_prelim.team2_score: (t1_stats.sow, t1_stats.pts, t2_stats.sol, t2_stats.pts) = (t1_stats.sow+1, t1_stats.pts+2, t2_stats.sol+1, t2_stats.pts+1)
+                else: (t2_stats.sow, t2_stats.pts, t1_stats.sol, t1_stats.pts) = (t2_stats.sow+1, t2_stats.pts+2, t1_stats.sol+1, t1_stats.pts+1)
+
+        prelim_standings_by_group_this_year: Dict[str, List[TeamStats]] = {}
+        for ts_obj in prelim_stats_map_this_year.values():
+            group_key = ts_obj.group if ts_obj.group else "UnknownGroup"
+            prelim_standings_by_group_this_year.setdefault(group_key, []).append(ts_obj)
         
-        # Initialize stats for team2 if not present
-        if game.team2_code not in all_time_stats_dict:
-            all_time_stats_dict[game.team2_code] = AllTimeTeamStats(team_code=game.team2_code)
+        for group_list in prelim_standings_by_group_this_year.values():
+            group_list.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
+            for i, ts_in_group in enumerate(group_list):
+                ts_in_group.rank_in_group = i + 1
+        
+        # b. Build Playoff Team Map for this year
+        current_year_playoff_map: Dict[str, str] = {}
+        all_games_this_year_map_by_number: Dict[int, Game] = {g.game_number: g for g in games_in_this_year if g.game_number is not None}
 
-        team1_stats = all_time_stats_dict[game.team1_code]
-        team2_stats = all_time_stats_dict[game.team2_code]
+        qf_gns, sf_gns, h_tcs = [], [], []
+        if year_obj.fixture_path and os.path.exists(year_obj.fixture_path):
+            try:
+                with open(year_obj.fixture_path, 'r', encoding='utf-8') as f: fixture_data = json.load(f)
+                qf_gns = fixture_data.get("qf_game_numbers") or QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+                sf_gns = fixture_data.get("sf_game_numbers") or SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+                h_tcs = fixture_data.get("host_teams", [])
+            except (json.JSONDecodeError, OSError): 
+                qf_gns = QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, []); sf_gns = SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+        else: 
+            qf_gns = QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, []); sf_gns = SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
 
-        # Add year of participation
-        if year_of_game is not None:
+        for grp_name_iter, grp_teams_stats_list in prelim_standings_by_group_this_year.items(): # Renamed grp_name
+            for team_s in grp_teams_stats_list:
+                current_year_playoff_map[f"{team_s.group}{team_s.rank_in_group}"] = team_s.name
+                if h_tcs and team_s.name in h_tcs: current_year_playoff_map[f"H{team_s.rank_in_group}"] = team_s.name # Placeholder for host rank
+        
+        max_iter_passes, current_pass, map_changed_this_iter = 10, 0, True
+        while map_changed_this_iter and current_pass < max_iter_passes:
+            map_changed_this_iter = False; current_pass += 1
+            for pk, mc in list(current_year_playoff_map.items()): # pk: placeholder_key, mc: mapped_code
+                if not is_code_final(mc):
+                    rc = get_resolved_team_code(mc, current_year_playoff_map, all_games_this_year_map_by_number) # rc: resolved_code
+                    if rc != mc and is_code_final(rc): current_year_playoff_map[pk] = rc; map_changed_this_iter = True
+            
+            for g_playoff in games_in_this_year:
+                if g_playoff.round in PLAYOFF_ROUNDS and g_playoff.game_number and \
+                   g_playoff.team1_score is not None and g_playoff.team2_score is not None:
+                    rt1 = get_resolved_team_code(g_playoff.team1_code, current_year_playoff_map, all_games_this_year_map_by_number)
+                    rt2 = get_resolved_team_code(g_playoff.team2_code, current_year_playoff_map, all_games_this_year_map_by_number)
+                    if not is_code_final(rt1) or not is_code_final(rt2): continue
+                    
+                    wac = rt1 if g_playoff.team1_score > g_playoff.team2_score else rt2 # winner_actual_code
+                    lac = rt2 if g_playoff.team1_score > g_playoff.team2_score else rt1 # loser_actual_code
+                    wp, lp = f"W({g_playoff.game_number})", f"L({g_playoff.game_number})" # winner_placeholder, loser_placeholder
+                    if current_year_playoff_map.get(wp) != wac: current_year_playoff_map[wp] = wac; map_changed_this_iter = True
+                    if current_year_playoff_map.get(lp) != lac: current_year_playoff_map[lp] = lac; map_changed_this_iter = True
+        
+        resolved_playoff_maps_by_year_id[year_id] = current_year_playoff_map
+    # --- End of new precomputation logic ---
+    
+    all_time_stats_dict = {}
+    # Iterate all_games, using precomputed maps to resolve team codes.
+    for game in all_games:
+        if game.team1_score is None or game.team2_score is None:
+            continue
+
+        year_id = game.year_id
+        current_year_playoff_map = resolved_playoff_maps_by_year_id.get(year_id)
+        if current_year_playoff_map is None:
+            current_app.logger.warning(
+                f"Playoff map not found for year_id {year_id} when processing game GID:{game.id}. "
+                f"Original team codes ('{game.team1_code}', '{game.team2_code}') will be used for resolution attempt."
+            )
+            current_year_playoff_map = {} # Use empty map; get_resolved_team_code will likely return original codes
+
+        current_year_games_list = games_by_year_id.get(year_id, [])
+        current_year_games_map_by_number = {g.game_number: g for g in current_year_games_list if g.game_number is not None}
+
+        resolved_team1_code = get_resolved_team_code(game.team1_code, current_year_playoff_map, current_year_games_map_by_number)
+        resolved_team2_code = get_resolved_team_code(game.team2_code, current_year_playoff_map, current_year_games_map_by_number)
+
+        if not (is_code_final(resolved_team1_code) and is_code_final(resolved_team2_code)):
+            current_app.logger.warning(
+                f"Game ID {game.id} (Original: '{game.team1_code}' vs '{game.team2_code}') resolved to "
+                f"('{resolved_team1_code}' vs '{resolved_team2_code}'). "
+                f"Skipping for all-time stats due to non-final team codes."
+            )
+            continue # Skip this game if participants can't be resolved to final codes
+            
+        year_of_game = game.championship_year.year if game.championship_year else None # Should always have year
+
+        # Initialize/get AllTimeTeamStats for resolved final team codes
+        if resolved_team1_code not in all_time_stats_dict:
+            all_time_stats_dict[resolved_team1_code] = AllTimeTeamStats(team_code=resolved_team1_code)
+        team1_stats = all_time_stats_dict[resolved_team1_code]
+        
+        if resolved_team2_code not in all_time_stats_dict:
+            all_time_stats_dict[resolved_team2_code] = AllTimeTeamStats(team_code=resolved_team2_code)
+        team2_stats = all_time_stats_dict[resolved_team2_code]
+
+        # Update participation years and game stats
+        if year_of_game: # Should always be true if game.championship_year is loaded
             team1_stats.years_participated.add(year_of_game)
             team2_stats.years_participated.add(year_of_game)
 
-        # Update GP, GF, GA for both teams
         team1_stats.gp += 1
         team2_stats.gp += 1
         team1_stats.gf += game.team1_score
         team1_stats.ga += game.team2_score
         team2_stats.gf += game.team2_score
         team2_stats.ga += game.team1_score
-
-        # Determine winner and loser
-        winner_stats = None
-        loser_stats = None
-        if game.team1_score > game.team2_score:
-            winner_stats = team1_stats
-            loser_stats = team2_stats
-        else: # team2_score > team1_score (draws are not expected in ice hockey with these result_types)
-            winner_stats = team2_stats
-            loser_stats = team1_stats
         
+        # Determine winner and loser stats objects
+        if game.team1_score > game.team2_score:
+            winner_stats, loser_stats = team1_stats, team2_stats
+        else: # team2_score > team1_score (draws not expected with these result types)
+            winner_stats, loser_stats = team2_stats, team1_stats
+        
+        # Assign points and W/L type based on game.result_type
         if game.result_type == 'REG':
-            winner_stats.w += 1
-            winner_stats.pts += 3
+            winner_stats.w += 1; winner_stats.pts += 3
             loser_stats.l += 1
         elif game.result_type == 'OT':
-            winner_stats.otw += 1
-            winner_stats.pts += 2
-            loser_stats.otl += 1
-            loser_stats.pts += 1
+            winner_stats.otw += 1; winner_stats.pts += 2
+            loser_stats.otl += 1; loser_stats.pts += 1
         elif game.result_type == 'SO': # Shootout
-            winner_stats.sow += 1
-            winner_stats.pts += 2
-            loser_stats.sol += 1
-            loser_stats.pts += 1
-        else: # Should not happen if data is clean
-            current_app.logger.warning(f"Game ID {game.id} has unknown result_type: {game.result_type}. Points not assigned.")
+            winner_stats.sow += 1; winner_stats.pts += 2
+            loser_stats.sol += 1; loser_stats.pts += 1
+        elif game.result_type: # Only log if result_type is present but not recognized
+             current_app.logger.warning(f"Game ID {game.id} has unhandled result_type: '{game.result_type}'. Points not assigned for this type.")
+        # If game.result_type is None or empty, points are not assigned, no specific warning here unless desired.
 
-
-    # Convert dictionary values to list
-    all_time_standings = list(all_time_stats_dict.values())
-
-    # Sort the list: 1. pts (desc), 2. gd (desc), 3. gf (desc)
-    all_time_standings.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
-
-    return all_time_standings
+    # Convert dictionary values to list (all_time_stats_dict now only contains final codes)
+    final_all_time_standings = list(all_time_stats_dict.values())
+    final_all_time_standings.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
+    return final_all_time_standings
 
 @main_bp.route('/', methods=['GET', 'POST'])
 def index():
