@@ -1,4 +1,4 @@
-# Ice Hockey Tournament Manager
+# IIHF Word Championship Statistics
 
 A Flask-based web application for managing ice hockey tournament data, including fixtures, scores, goals, penalties, and player statistics. The application supports multiple tournament years and provides features for tracking games, goals, and player performance with automated fixture loading.
 
@@ -24,7 +24,7 @@ A Flask-based web application for managing ice hockey tournament data, including
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/AKurthFT/IIHF-Word-Championship-Statistics.git
 cd table_calc
 ```
 
