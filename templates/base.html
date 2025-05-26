@@ -23,7 +23,14 @@
                 <li class="nav-item">
                     <a class="nav-link" href="{{ url_for('main_bp.all_time_standings_view') }}">All-Time Standings</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('main_bp.medal_tally_view') }}">Medaillenspiegel</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('main_bp.player_stats_view') }}">Spielerstatistiken</a>
+                </li>
             </ul>
+            <button id="theme-toggle" class="btn btn-outline-light btn-sm ml-auto">Light Mode</button>
         </div>
     </nav>
     {% endblock navbar %}
@@ -54,5 +61,50 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     {% block scripts %}{% endblock %}
+
+    <script>
+        const themeToggle = document.getElementById('theme-toggle');
+        const body = document.body;
+
+        // Function to apply theme based on preference
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                body.classList.add('dark-mode');
+                if (themeToggle) themeToggle.textContent = 'Light Mode';
+            } else {
+                body.classList.remove('dark-mode');
+                if (themeToggle) themeToggle.textContent = 'Dark Mode';
+            }
+        }
+
+        // Function to toggle theme and save preference
+        function toggleTheme() {
+            // let currentTheme = localStorage.getItem('theme'); // Not strictly needed here
+            if (body.classList.contains('dark-mode')) { // If currently dark, switch to light
+                localStorage.setItem('theme', 'light');
+                applyTheme('light');
+            } else { // If currently light, switch to dark
+                localStorage.setItem('theme', 'dark');
+                applyTheme('dark');
+            }
+        }
+
+        // Initial theme application on page load
+        // Prefer OS setting if available and no user preference yet
+        let savedTheme = localStorage.getItem('theme');
+        if (!savedTheme) {
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                savedTheme = 'dark';
+            } else {
+                savedTheme = 'light'; // Default to light if OS preference not dark or not detectable
+            }
+        }
+        applyTheme(savedTheme);
+
+        // Event listener for the toggle button
+        if (themeToggle) {
+            themeToggle.addEventListener('click', toggleTheme);
+        }
+    </script>
 </body>
 </html> 

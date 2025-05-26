@@ -1,6 +1,78 @@
+/* :root defines variables available globally */
+:root {
+    --body-bg: #ffffff;
+    --body-color: #212529;
+    --link-color: #007bff;
+    --link-hover-color: #0056b3;
+
+    --primary-color: #007bff; /* Bootstrap default primary */
+    --primary-color-text: #ffffff;
+    --secondary-color: #6c757d; /* Bootstrap default secondary */
+    --secondary-color-text: #ffffff;
+
+    --navbar-bg: var(--primary-color); /* Using primary color for navbar */
+    --navbar-color: var(--primary-color-text); /* Light text on primary bg */
+    --navbar-link-hover-bg: #0069d9; /* Slightly darker for hover */
+
+    --footer-bg: #f8f9fa;
+    --footer-color: #6c757d;
+
+    --table-bg: transparent;
+    --table-color: var(--body-color);
+    --table-border-color: #dee2e6;
+    --table-striped-bg: rgba(0, 0, 0, 0.05);
+    --table-hover-bg: rgba(0, 0, 0, 0.075);
+    --thead-dark-bg: #343a40;
+    --thead-dark-color: #ffffff;
+
+    --card-bg: #ffffff; /* For potential card elements */
+    --card-border-color: rgba(0,0,0,.125);
+
+    --form-input-bg: #ffffff;
+    --form-input-color: #495057;
+    --form-input-border: #ced4da;
+    --form-input-focus-border: #80bdff;
+    --form-input-focus-shadow: rgba(0, 123, 255, 0.25);
+
+    --btn-primary-bg: var(--primary-color);
+    --btn-primary-color: var(--primary-color-text);
+    --btn-primary-border: var(--primary-color);
+    --btn-secondary-bg: var(--secondary-color);
+    --btn-secondary-color: var(--secondary-color-text);
+    --btn-secondary-border: var(--secondary-color);
+
+    /* Flash Message Colors - Light Theme */
+    --flash-success-bg: #d4edda;
+    --flash-success-color: #155724;
+    --flash-success-border: #c3e6cb;
+
+    --flash-danger-bg: #f8d7da;
+    --flash-danger-color: #721c24;
+    --flash-danger-border: #f5c6cb;
+
+    --flash-warning-bg: #fff3cd;
+    --flash-warning-color: #856404;
+    --flash-warning-border: #ffeeba;
+
+    --flash-info-bg: #d1ecf1;
+    --flash-info-color: #0c5460;
+    --flash-info-border: #bee5eb;
+}
+
 body {
+    background-color: var(--body-bg);
+    color: var(--body-color);
     padding-top: 56px; /* Adjust if navbar height changes */
     padding-bottom: 60px; /* Adjust if footer height changes */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    line-height: 1.5;
+}
+
+a {
+    color: var(--link-color);
+}
+a:hover {
+    color: var(--link-hover-color);
 }
 
 .footer {
@@ -8,11 +80,76 @@ body {
     left: 0;
     bottom: 0;
     width: 100%;
-    background-color: #f8f9fa; /* Standard Bootstrap light gray */
-    z-index: 1030; /* Ensure footer is above other content but below modals if any */
+    background-color: var(--footer-bg);
+    color: var(--footer-color);
+    z-index: 1030;
+    border-top: 1px solid var(--table-border-color); /* Added for consistency */
 }
 
-/* Fixed table layout for standings to prevent team names from squishing columns too much */
+/* Navbar adjustments to use variables */
+/* Bootstrap's bg-primary and navbar-dark classes already handle this for light theme.
+   We will add specific dark mode overrides later.
+   If we wanted to decouple from Bootstrap's specific bg-primary, we'd do:
+.navbar {
+    background-color: var(--navbar-bg) !important;
+}
+.navbar .navbar-brand,
+.navbar .nav-link {
+    color: var(--navbar-color) !important;
+}
+.navbar .nav-link:hover {
+    background-color: var(--navbar-link-hover-bg);
+    border-radius: 0.25rem;
+}
+*/
+
+/* Table styling with variables */
+.table {
+    background-color: var(--table-bg);
+    color: var(--table-color);
+    /* border-color: var(--table-border-color); Bootstrap sets this per cell */
+}
+.table th, .table td {
+    border-color: var(--table-border-color);
+    color: var(--table-color); /* Ensure cell text color uses variable */
+}
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: var(--table-striped-bg);
+}
+.table-hover tbody tr:hover {
+    background-color: var(--table-hover-bg);
+}
+.table .thead-dark th { /* Bootstrap's .thead-dark */
+    background-color: var(--thead-dark-bg);
+    color: var(--thead-dark-color);
+    border-color: var(--thead-dark-bg); /* Match border to bg for seamless look */
+}
+
+
+/* Table styling with variables */
+.table {
+    background-color: var(--table-bg);
+    color: var(--table-color);
+    /* border-color: var(--table-border-color); Bootstrap sets this per cell */
+}
+.table th, .table td {
+    border-color: var(--table-border-color);
+    color: var(--table-color); /* Ensure cell text color uses variable */
+}
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: var(--table-striped-bg);
+}
+.table-hover tbody tr:hover {
+    background-color: var(--table-hover-bg);
+}
+.table .thead-dark th { /* Bootstrap's .thead-dark */
+    background-color: var(--thead-dark-bg);
+    color: var(--thead-dark-color);
+    border-color: var(--thead-dark-bg); /* Match border to bg for seamless look */
+}
+
+
+/* Fixed table layout for standings - no color changes needed here directly, relies on general table vars */
 .fixed-table-layout {
     table-layout: fixed;
     word-wrap: break-word;
@@ -66,25 +203,48 @@ body {
     text-align: center;
 }
 
-/* Style for game result input form to make it more compact */
+/* Form elements using variables */
+.form-control, .form-control-sm, .form-select {
+    background-color: var(--form-input-bg);
+    color: var(--form-input-color);
+    border: 1px solid var(--form-input-border);
+}
+.form-control:focus, .form-select:focus {
+    border-color: var(--form-input-focus-border);
+    box-shadow: 0 0 0 0.2rem var(--form-input-focus-shadow);
+}
+
 .table td .form-control-sm {
+    /* Already inherits from .form-control-sm, which now uses variables */
     padding: .25rem .5rem;
     font-size: .875rem;
     line-height: 1.5;
     border-radius: .2rem;
-    height: auto; /* Override fixed height if necessary */
+    height: auto; 
 }
+.table td input[type="number"].form-control-sm { width: 60px; }
+.table td select.form-control-sm { width: auto; min-width: 80px; }
 
-.table td input[type="number"].form-control-sm {
-    width: 60px; /* More specific width for score inputs */
+/* Buttons using variables */
+.btn-primary {
+    background-color: var(--btn-primary-bg);
+    color: var(--btn-primary-color);
+    border-color: var(--btn-primary-border);
 }
-
-.table td select.form-control-sm {
-    width: auto; /* Allow select to size based on content */
-    min-width: 80px;
+.btn-primary:hover {
+    background-color: color-mix(in srgb, var(--btn-primary-bg) 85%, black); /* Darken on hover */
+    border-color: color-mix(in srgb, var(--btn-primary-border) 80%, black);
 }
-
-.table .btn-sm {
+.btn-secondary {
+    background-color: var(--btn-secondary-bg);
+    color: var(--btn-secondary-color);
+    border-color: var(--btn-secondary-border);
+}
+.btn-secondary:hover {
+    background-color: color-mix(in srgb, var(--btn-secondary-bg) 85%, black);
+    border-color: color-mix(in srgb, var(--btn-secondary-border) 80%, black);
+}
+.table .btn-sm { /* This one was already present, now it benefits from variable-driven .btn parent styles */
     padding: .25rem .5rem;
     font-size: .875rem;
     line-height: 1.5;
@@ -92,27 +252,233 @@ body {
 }
 
 
-/* Ensure flash messages have enough contrast */
+/* Flash messages using variables */
+.alert { /* Base for alerts, if not already defined by Bootstrap */
+    border: 1px solid transparent; 
+}
 .alert-success {
-    color: #155724;
-    background-color: #d4edda;
-    border-color: #c3e6cb;
+    color: var(--flash-success-color);
+    background-color: var(--flash-success-bg);
+    border-color: var(--flash-success-border);
 }
-
 .alert-danger {
-    color: #721c24;
-    background-color: #f8d7da;
-    border-color: #f5c6cb;
+    color: var(--flash-danger-color);
+    background-color: var(--flash-danger-bg);
+    border-color: var(--flash-danger-border);
 }
-
 .alert-warning {
-    color: #856404;
-    background-color: #fff3cd;
-    border-color: #ffeeba;
+    color: var(--flash-warning-color);
+    background-color: var(--flash-warning-bg);
+    border-color: var(--flash-warning-border);
+}
+.alert-info {
+    color: var(--flash-info-color);
+    background-color: var(--flash-info-bg);
+    border-color: var(--flash-info-border);
 }
 
-.alert-info {
-    color: #0c5460;
-    background-color: #d1ecf1;
-    border-color: #bee5eb;
-} 
+/*------------------------------------*\
+    #DARK MODE
+\*------------------------------------*/
+body.dark-mode {
+    --body-bg: #22272e; /* Dark gray, slightly bluish */
+    --body-color: #adbac7; /* Light gray text */
+    --link-color: #58a6ff; /* Brighter blue for links */
+    --link-hover-color: #79c0ff;
+
+    --primary-color: #388bfd; /* A slightly adjusted Bootstrap blue for dark mode */
+    --primary-color-text: #ffffff; /* Text on primary should be light */
+    --secondary-color: #444c56; /* Darker gray for secondary elements */
+    --secondary-color-text: #adbac7; /* Light gray text on secondary bg for better contrast */
+
+    --navbar-bg: #1c2128; /* Very dark, almost black */
+    --navbar-color: #e0e0e0; /* Light text for navbar */
+    --navbar-link-hover-bg: #323840;
+
+    --footer-bg: #1c2128; /* Match navbar */
+    --footer-color: #adbac7;
+
+    --table-bg: #22272e; /* Match body bg */
+    --table-color: var(--body-color);
+    --table-border-color: #373e47; /* Slightly lighter than bg for visibility */
+    --table-striped-bg: #2d333b; /* Slightly lighter than table bg */
+    --table-hover-bg: #323840; /* Slightly lighter than striped for hover */
+    --thead-dark-bg: #373e47; /* Darker header for table */
+    --thead-dark-color: #e0e0e0;
+
+    --card-bg: #2d333b;
+    --card-border-color: #373e47;
+
+    --form-input-bg: #1c2128; /* Dark input fields */
+    --form-input-color: var(--body-color);
+    --form-input-border: #373e47;
+    --form-input-focus-border: var(--link-color);
+    --form-input-focus-shadow: rgba(88, 166, 255, 0.3);
+
+    --btn-primary-bg: var(--primary-color);
+    --btn-primary-color: var(--primary-color-text);
+    --btn-primary-border: var(--primary-color);
+    --btn-secondary-bg: var(--secondary-color);
+    --btn-secondary-color: var(--primary-color-text); /* Use light text for secondary buttons in dark mode */
+    --btn-secondary-border: var(--secondary-color);
+
+    /* Flash Message Colors - Dark Theme */
+    --flash-success-bg: #0d2818; 
+    --flash-success-color: #7ee787; 
+    --flash-success-border: #1f4c2a;
+
+    --flash-danger-bg: #2f0f16; 
+    --flash-danger-color: #ffa198; 
+    --flash-danger-border: #5c1f2d;
+
+    --flash-warning-bg: #33220a; 
+    --flash-warning-color: #ffc777; 
+    --flash-warning-border: #664413;
+
+    --flash-info-bg: #0f2330; 
+    --flash-info-color: #88c0d0; 
+    --flash-info-border: #20455c;
+}
+
+/* Specific overrides for Bootstrap components in dark mode if variables aren't enough */
+/* Navbar: bg-primary is already using var(--primary-color) which is redefined in dark mode.
+   navbar-dark implies light text, which matches our dark mode --navbar-color.
+   So, specific overrides for navbar colors might not be needed if Bootstrap classes adapt well.
+   However, explicit overrides ensure consistency.
+*/
+body.dark-mode .navbar {
+    background-color: var(--navbar-bg) !important; /* Ensure dark mode navbar bg is applied */
+}
+body.dark-mode .navbar .navbar-brand,
+body.dark-mode .navbar .nav-link {
+    color: var(--navbar-color) !important; /* Ensure text color matches theme */
+}
+body.dark-mode .navbar .nav-link:hover {
+    background-color: var(--navbar-link-hover-bg); /* Optional: hover effect for links */
+}
+body.dark-mode .navbar-toggler {
+    border-color: rgba(255,255,255,0.1); /* Default for navbar-dark, should be fine */
+}
+body.dark-mode .navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.5%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e"); /* Default icon for navbar-dark */
+}
+
+body.dark-mode .table {
+    color: var(--table-color);
+    background-color: var(--table-bg); /* Ensure table background is set for dark mode */
+}
+
+body.dark-mode .table th,
+body.dark-mode .table td,
+body.dark-mode .table thead th { /* Covers all table cells including header */
+    border-color: var(--table-border-color);
+    color: var(--table-color);
+}
+
+body.dark-mode .table-striped tbody tr:nth-of-type(odd) {
+    background-color: var(--table-striped-bg);
+}
+
+body.dark-mode .table-hover tbody tr:hover {
+    background-color: var(--table-hover-bg);
+}
+
+body.dark-mode .table .thead-dark th { /* Specific for .thead-dark variant */
+    background-color: var(--thead-dark-bg);
+    color: var(--thead-dark-color);
+    border-color: var(--thead-dark-bg); /* Match border to bg for seamless look */
+}
+
+/* Ensure form controls and buttons are styled correctly for dark mode */
+body.dark-mode .form-control,
+body.dark-mode .form-control-sm,
+body.dark-mode .form-select {
+    background-color: var(--form-input-bg);
+    color: var(--form-input-color);
+    border: 1px solid var(--form-input-border);
+}
+
+body.dark-mode .form-control:focus,
+body.dark-mode .form-select:focus {
+    border-color: var(--form-input-focus-border);
+    box-shadow: 0 0 0 .2rem var(--form-input-focus-shadow);
+}
+
+body.dark-mode .btn-primary {
+    background-color: var(--btn-primary-bg);
+    color: var(--btn-primary-color);
+    border-color: var(--btn-primary-border);
+}
+body.dark-mode .btn-primary:hover {
+    background-color: color-mix(in srgb, var(--btn-primary-bg) 85%, black);
+    border-color: color-mix(in srgb, var(--btn-primary-border) 80%, black);
+}
+
+body.dark-mode .btn-secondary {
+    background-color: var(--btn-secondary-bg);
+    color: var(--btn-secondary-color);
+    border-color: var(--btn-secondary-border);
+}
+body.dark-mode .btn-secondary:hover {
+    background-color: color-mix(in srgb, var(--btn-secondary-bg) 85%, white); /* Lighten secondary button on hover */
+    border-color: color-mix(in srgb, var(--btn-secondary-border) 80%, white);
+}
+
+/* Dark mode specific alert styles */
+body.dark-mode .alert-success {
+    background-color: var(--flash-success-bg);
+    color: var(--flash-success-color);
+    border-color: var(--flash-success-border);
+}
+body.dark-mode .alert-danger {
+    background-color: var(--flash-danger-bg);
+    color: var(--flash-danger-color);
+    border-color: var(--flash-danger-border);
+}
+body.dark-mode .alert-warning {
+    background-color: var(--flash-warning-bg);
+    color: var(--flash-warning-color);
+    border-color: var(--flash-warning-border);
+}
+body.dark-mode .alert-info {
+    background-color: var(--flash-info-bg);
+    color: var(--flash-info-color);
+    border-color: var(--flash-info-border);
+}
+
+/* Ensure select dropdown arrows are visible in dark mode */
+body.dark-mode .form-select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23adbac7' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+}
+/* Ensure image flags have a light background if they are transparent PNGs */
+img[src*="flagcdn.com"] {
+    background-color: #fff; /* Add a white background to flags in light mode for consistency */
+    padding: 1px; 
+    border-radius: 2px; 
+}
+
+body.dark-mode img[src*="flagcdn.com"] {
+    background-color: #ccc; /* A light grey background for flags in dark mode */
+}
+
+/* Theme toggle button specific styling */
+#theme-toggle {
+    /* Can be styled with variables too if preferred, or keep specific for its function */
+    /* Example: use secondary button variables */
+    background-color: var(--btn-secondary-bg); /* Will use light theme's secondary by default */
+    color: var(--btn-secondary-color);
+    border-color: var(--btn-secondary-border);
+    margin-left: 1rem; /* Add some spacing in the navbar */
+}
+
+body.dark-mode #theme-toggle {
+    /* This ensures it uses the dark-mode's secondary button variables */
+    background-color: var(--btn-secondary-bg); 
+    color: var(--btn-secondary-color);
+    border-color: var(--btn-secondary-border);
+}
+
+#theme-toggle:hover {
+    /* General hover, can be refined with color-mix if needed */
+    opacity: 0.85; 
+}

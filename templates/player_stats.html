@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Spielerstatistiken - IIHF WM Tracker{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Spielerstatistiken</h1>
+
+    <div class="table-responsive">
+        <table class="table table-striped table-hover table-sm">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Name</th>
+                    <th>Team</th>
+                    <th>Tore</th>
+                    <th>Assists</th>
+                    <th>Scorerpunkte</th>
+                    <th>PIMs</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for player in player_stats %}
+                <tr>
+                    <td>{{ player.last_name }}, {{ player.first_name }}</td>
+                    <td>
+                        {% if player.team_code and team_iso_codes.get(player.team_code) %}
+                            <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}"> 
+                        {% endif %}
+                        {{ player.team_code if player.team_code else 'N/A' }}
+                    </td>
+                    <td>{{ player.goals }}</td>
+                    <td>{{ player.assists }}</td>
+                    <td>{{ player.scorer_points }}</td>
+                    <td>{{ player.pims }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center">Keine Spielerstatistiken verfügbar.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

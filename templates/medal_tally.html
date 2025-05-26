@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Medaillenspiegel - IIHF WM Tracker{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Medaillenspiegel</h1>
+
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Jahr</th>
+                    <th>Gold</th>
+                    <th>Silber</th>
+                    <th>Bronze</th>
+                    <th>4. Platz</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for medal_entry in medal_data %}
+                <tr>
+                    <td>{{ medal_entry.year_obj.year }}</td>
+                    <td>
+                        {% if medal_entry.gold %}
+                            {% set team_code = medal_entry.gold %}
+                            {% if team_iso_codes.get(team_code) %}
+                                <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}"> 
+                            {% endif %}
+                            {{ team_code }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if medal_entry.silver %}
+                            {% set team_code = medal_entry.silver %}
+                            {% if team_iso_codes.get(team_code) %}
+                                <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}"> 
+                            {% endif %}
+                            {{ team_code }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if medal_entry.bronze %}
+                            {% set team_code = medal_entry.bronze %}
+                            {% if team_iso_codes.get(team_code) %}
+                                <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}"> 
+                            {% endif %}
+                            {{ team_code }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if medal_entry.fourth %}
+                            {% set team_code = medal_entry.fourth %}
+                            {% if team_iso_codes.get(team_code) %}
+                                <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}"> 
+                            {% endif %}
+                            {{ team_code }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center">Keine Medaillendaten verfügbar.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
