@@ -6,7 +6,7 @@
 <div class="row">
     <div class="col-md-6">
         <h2>Turnier anlegen / Jahr auswählen</h2>
-        <form method="POST" enctype="multipart/form-data" class="mb-4">
+        <form method="POST" enctype="multipart/form-data" class="mb-4" action="{{ url_for('main_bp.index') }}">
             <div class="form-group">
                 <label for="tournament_name">Name des Turniers</label>
                 <input type="text" class="form-control" id="tournament_name" name="tournament_name" placeholder="z.B. WM 2025 oder Virtual Cup" required>
@@ -33,7 +33,7 @@
             <ul class="list-group">
                 {% for y in all_years %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <a href="{{ url_for('year_view', year_id=y.id) }}">{{ y.name }} ({{y.year}})</a>
+                    <a href="{{ url_for('year_bp.year_view', year_id=y.id) }}">{{ y.name }} ({{y.year}})</a>
                     <span>
                         {% if y.fixture_path %}
                             <small class="text-success">Spielplan vorhanden</small>
@@ -41,7 +41,7 @@
                             <small class="text-warning">Kein Spielplan</small>
                         {% endif %}
                     </span>
-                    <form method="POST" style="display: inline;" onsubmit="return confirm('Sind Sie sicher, dass Sie das Turnier \'{{ y.name }} ({{ y.year }})\' und alle zugehörigen Daten löschen möchten?');">
+                    <form method="POST" style="display: inline;" onsubmit="return confirm('Sind Sie sicher, dass Sie das Turnier \'{{ y.name }} ({{ y.year }})\' und alle zugehörigen Daten löschen möchten?');" action="{{ url_for('main_bp.index') }}">
                         <input type="hidden" name="year_id_to_delete" value="{{ y.id }}">
                         <button type="submit" name="delete_year" class="btn btn-danger btn-sm">Löschen</button>
                     </form>

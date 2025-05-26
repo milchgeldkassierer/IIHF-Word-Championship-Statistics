@@ -18,7 +18,7 @@
 {% if not year.fixture_path or not games_by_round %}
     <div class="alert alert-warning" role="alert">
         Für dieses Jahr wurde noch kein Spielplan hochgeladen oder der Spielplan ist leer.
-        <a href="{{ url_for('index') }}" class="alert-link">Zurück zur Startseite, um einen Spielplan hochzuladen.</a>
+        <a href="{{ url_for('main_bp.index') }}" class="alert-link">Zurück zur Startseite, um einen Spielplan hochzuladen.</a>
     </div>
 {% else %}
 
@@ -183,7 +183,20 @@
                                 {% if game.team1_score is not none and game.team2_score is not none and game.team1_points > game.team2_points %}<strong>{% endif %}
                                 {{ p1_display_name }}
                                 {% if game.team1_score is not none and game.team2_score is not none and game.team1_points > game.team2_points %}</strong>{% endif %}
-                                {% if p1_original_code != p1_display_name %}
+                                {# Condition to show the original placeholder in (parentheses) #}
+                                {% set show_p1_original_placeholder = False %}
+                                {% if p1_original_code != p1_display_name %} {# If there was a change #}
+                                    {% if (p1_original_code in ['Q1', 'Q2', 'Q3', 'Q4'] or
+                                           (p1_original_code|string).startswith('W(') or
+                                           (p1_original_code|string).startswith('L(')) %}
+                                        {# For QF/WL placeholders, if it changed, we DON'T show the original #}
+                                        {% set show_p1_original_placeholder = False %}
+                                    {% else %}
+                                        {# For other placeholders like A1, B2, etc., if it changed, we DO show the original #}
+                                        {% set show_p1_original_placeholder = True %}
+                                    {% endif %}
+                                {% endif %}
+                                {% if show_p1_original_placeholder %}
                                     <small class="text-muted">({{ p1_original_code }})</small>
                                 {% endif %}
                             </td>
@@ -192,11 +205,24 @@
                                 {% if game.team1_score is not none and game.team2_score is not none and game.team2_points > game.team1_points %}<strong>{% endif %}
                                 {{ p2_display_name }}
                                 {% if game.team1_score is not none and game.team2_score is not none and game.team2_points > game.team1_points %}</strong>{% endif %}
-                                {% if p2_original_code != p2_display_name %}
+                                {# Condition to show the original placeholder in (parentheses) #}
+                                {% set show_p2_original_placeholder = False %}
+                                {% if p2_original_code != p2_display_name %} {# If there was a change #}
+                                    {% if (p2_original_code in ['Q1', 'Q2', 'Q3', 'Q4'] or
+                                           (p2_original_code|string).startswith('W(') or
+                                           (p2_original_code|string).startswith('L(')) %}
+                                        {# For QF/WL placeholders, if it changed, we DON'T show the original #}
+                                        {% set show_p2_original_placeholder = False %}
+                                    {% else %}
+                                        {# For other placeholders like A1, B2, etc., if it changed, we DO show the original #}
+                                        {% set show_p2_original_placeholder = True %}
+                                    {% endif %}
+                                {% endif %}
+                                {% if show_p2_original_placeholder %}
                                     <small class="text-muted">({{ p2_original_code }})</small>
                                 {% endif %}
                             </td>
-                            <form method="POST" action="{{ url_for('year_view', year_id=year.id) }}#game-{{game.id}}">
+                            <form method="POST" action="{{ url_for('year_bp.year_view', year_id=year.id) }}#game-{{game.id}}">
                                 <input type="hidden" name="game_id" value="{{ game.id }}">
                                 <td style="width: 70px;">
                                     <input type="number" name="team1_score" class="form-control form-control-sm" value="{{ game.team1_score if game.team1_score is not none else '' }}" min="0">
@@ -215,7 +241,7 @@
                                 <td class="text-nowrap"> {# Aktion Zelle #}
                                     <button type="submit" class="btn btn-success btn-sm mr-1">Speichern</button>
                                     {# Stats Button #}
-                                    <a href="{{ url_for('game_stats_view', year_id=year.id, game_id=game.id) }}" class="btn btn-warning btn-sm mr-1 game-stats-link" title="Spielstatistik anzeigen">
+                                    <a href="{{ url_for('year_bp.game_stats_view', year_id=year.id, game_id=game.id) }}" class="btn btn-warning btn-sm mr-1 game-stats-link" title="Spielstatistik anzeigen">
                                         <i class="fas fa-chart-bar"></i> Stats
                                     </a>
                                     {# Main Details Button - formerly Goals Button #}
@@ -261,16 +287,14 @@
                                                                 </h6>
                                                                 <small>
                                                                     {% if event.type == 'goal' %}
-                                                                        <form method="POST" action="{{ url_for('delete_goal', year_id=year.id, goal_id=event.data.id) }}" style="display: inline;" class="delete-event-form">
-                                                                            <input type="hidden" name="game_id_anchor" value="{{game.id}}">
-                                                                            <input type="hidden" name="event_type" value="goal">
-                                                                            <button type="submit" class="btn btn-danger btn-xs" title="Tor löschen">&times;</button>
+                                                                        <form method="POST" action="{{ url_for('year_bp.delete_goal', year_id=year.id, goal_id=event.data.id) }}" style="display: inline;" class="delete-event-form">
+                                                                            <input type="hidden" name="game_id_event_delete" value="{{ game.id }}">
+                                                                            <button type="submit" class="btn btn-danger btn-xs ml-2" title="Tor löschen">×</button>
                                                                         </form>
                                                                     {% elif event.type == 'penalty' %}
-                                                                        <form method="POST" action="{{ url_for('delete_penalty', year_id=year.id, penalty_id=event.data.id) }}" style="display: inline;" class="delete-event-form">
-                                                                            <input type="hidden" name="game_id_anchor" value="{{game.id}}">
-                                                                            <input type="hidden" name="event_type" value="penalty">
-                                                                            <button type="submit" class="btn btn-danger btn-xs" title="Strafe löschen">&times;</button>
+                                                                        <form method="POST" action="{{ url_for('year_bp.delete_penalty', year_id=year.id, penalty_id=event.data.id) }}" style="display: inline;" class="delete-event-form">
+                                                                            <input type="hidden" name="game_id_event_delete" value="{{ game.id }}">
+                                                                            <button type="submit" class="btn btn-danger btn-xs ml-2" title="Strafe löschen">×</button>
                                                                         </form>
                                                                     {% endif %}
                                                                 </small>
@@ -313,7 +337,7 @@
                                         <hr>
                                         <div id="goalMessageArea-{{ game.id }}" class="mt-2"></div>
                                         <h6>Neues Tor hinzufügen</h6>
-                                        <form method="POST" action="{{ url_for('add_goal', year_id=year.id, game_id=game.id) }}" id="addGoalForm-{{ game.id }}" class="mb-4">
+                                        <form method="POST" action="{{ url_for('year_bp.add_goal', year_id=year.id, game_id=game.id) }}" id="addGoalForm-{{ game.id }}" class="mb-4">
                                             {# ... Goal form fields ... (content is the same, just ensure IDs are unique if needed) ... #}
                                             <input type="hidden" name="game_id" value="{{ game.id }}">
                                             <div class="form-row">
@@ -324,8 +348,8 @@
                                                 <div class="form-group col-md-2">
                                                     <label for="goal_team-{{game.id}}">Team</label>
                                                     <select name="team_code_goal" id="goal_team-{{game.id}}" class="form-control form-control-sm goal-team-select" required>
-                                                        <option value="{{ game.team1_code }}">{{ p1_display_name }}</option>
-                                                        <option value="{{ game.team2_code }}">{{ p2_display_name }}</option>
+                                                        <option value="{{ p1_display_name }}">{{ p1_display_name }}</option>
+                                                        <option value="{{ p2_display_name }}">{{ p2_display_name }}</option>
                                                     </select>
                                                 </div>
                                                 <div class="form-group col-md-2">
@@ -370,7 +394,7 @@
                                         <hr>
                                         <div id="penaltyMessageArea-{{ game.id }}" class="mt-2"></div>
                                         <h6>Neue Strafe hinzufügen</h6>
-                                        <form method="POST" action="{{ url_for('add_penalty', year_id=year.id, game_id=game.id) }}" id="addPenaltyForm-{{ game.id }}" class="mb-4">
+                                        <form method="POST" action="{{ url_for('year_bp.add_penalty', year_id=year.id, game_id=game.id) }}" id="addPenaltyForm-{{ game.id }}" class="mb-4">
                                             {# ... Penalty form fields ... (content is the same) ... #}
                                             <input type="hidden" name="game_id" value="{{ game.id }}">
                                             <div class="form-row">
@@ -381,8 +405,8 @@
                                                 <div class="form-group col-md-3">
                                                     <label for="penalty_team-{{game.id}}">Team</label>
                                                     <select name="team_code_penalty" id="penalty_team-{{game.id}}" class="form-control form-control-sm penalty-team-select" required>
-                                                        <option value="{{ game.team1_code }}">{{ p1_display_name }}</option>
-                                                        <option value="{{ game.team2_code }}">{{ p2_display_name }}</option>
+                                                        <option value="{{ p1_display_name }}">{{ p1_display_name }}</option>
+                                                        <option value="{{ p2_display_name }}">{{ p2_display_name }}</option>
                                                     </select>
                                                 </div>
                                                 <div class="form-group col-md-4">
@@ -418,10 +442,10 @@
                                         <hr>
                                         <div id="messageArea-{{ game.id }}" class="mt-2"></div>
                                         <h6>Neuen Spieler hinzufügen (zum Kader)</h6>
-                                        <form method="POST" action="{{ url_for('add_player') }}" class="mt-2" id="addPlayerForm-{{ game.id }}">
+                                        <form method="POST" action="{{ url_for('year_bp.add_player') }}" class="mt-2" id="addPlayerForm-{{ game.id }}">
                                             {# ... Add Player form fields ... (content is the same) ... #}
                                             <input type="hidden" name="game_id_anchor" value="{{ game.id }}">
-                                            <input type="hidden" name="year_id_for_redirect" value="{{ year.id }}">
+                                            <input type="hidden" name="year_id_redirect" value="{{ year.id }}">
                                             <div class="form-row">
                                                 <div class="form-group col-md-3">
                                                     <label for="player_first_name-{{game.id}}">Vorname</label>
@@ -439,7 +463,7 @@
                                                     <label for="player_team_code-{{game.id}}">Team</label>
                                                     <select name="team_code" id="player_team_code-{{game.id}}" class="form-control form-control-sm" required>
                                                         <option value="">Team wählen...</option>
-                                                        {% for team_code_key, iso_val in team_codes.items() %}
+                                                        {% for team_code_key, iso_val in team_codes.items()|sort %}
                                                             {% if iso_val %} {# Only include teams with a valid ISO code (not placeholders like QF) #}
                                                                 <option value="{{ team_code_key }}">{{ team_code_key }}</option>
                                                             {% endif %}
@@ -456,10 +480,10 @@
                                         <div id="sogMessageArea-{{ game.id }}" class="mt-2"></div> {# ADDED SOG Message Area #}
                                         {# SOG Display Table / Becomes Edit Form #}
                                         {# Only show SOG form if team codes are actual teams (not placeholders) #}
-                                        {% if game.team1_code and not (game.team1_code.startswith(('A', 'B', 'W', 'L', 'Q', 'S')) and game.team1_code[1:].isdigit()) and game.team2_code and not (game.team2_code.startswith(('A', 'B', 'W', 'L', 'Q', 'S')) and game.team2_code[1:].isdigit()) %}
+                                        {% if team_iso_codes.get(p1_display_name) and team_iso_codes.get(p2_display_name) %}
                                         <form id="sogEditForm-{{ game.id }}" class="sog-edit-form"> {# New Form Wrapper #}
-                                            <input type="hidden" name="sog_team1_code_resolved" value="{{ game.team1_code }}">
-                                            <input type="hidden" name="sog_team2_code_resolved" value="{{ game.team2_code }}">
+                                            <input type="hidden" name="sog_team1_code_resolved" value="{{ p1_display_name }}">
+                                            <input type="hidden" name="sog_team2_code_resolved" value="{{ p2_display_name }}">
                                             <div id="sogDisplayTableContainer-{{ game.id }}" class="mb-3">
                                                 <table class="table table-sm table-bordered text-center" style="width: auto;">
                                                     <thead class="thead-light">
@@ -474,7 +498,7 @@
                                                     </thead>
                                                     <tbody>
                                                         {# Team 1 SOG Display #}
-                                                        {% set team1_sog = game.sog_data.get(game.team1_code, {}) %}
+                                                        {% set team1_sog = game.sog_data.get(p1_display_name, {}) %}
                                                         {% set team1_p1_sog = team1_sog.get(1, 0) %}
                                                         {% set team1_p2_sog = team1_sog.get(2, 0) %}
                                                         {% set team1_p3_sog = team1_sog.get(3, 0) %}
@@ -482,18 +506,18 @@
                                                         {% set team1_total_sog = team1_p1_sog + team1_p2_sog + team1_p3_sog + team1_p4_sog %}
                                                         <tr>
                                                             <td>
-                                                                {% set t1_iso = team_iso_codes.get(game.team1_code) %}
+                                                                {% set t1_iso = team_iso_codes.get(p1_display_name) %}
                                                                 {% if t1_iso %}<img src="https://flagcdn.com/w20/{{ t1_iso }}.png" alt="" style="margin-right: 3px;">{% endif %}
-                                                                {{ game.team1_code }}
+                                                                {{ p1_display_name }}
                                                             </td>
                                                             <td><input type="number" class="form-control form-control-sm sog-inline-edit" name="team1_p1_shots" value="{{ team1_p1_sog }}" min="0" style="width: 60px;"></td>
                                                             <td><input type="number" class="form-control form-control-sm sog-inline-edit" name="team1_p2_shots" value="{{ team1_p2_sog }}" min="0" style="width: 60px;"></td>
                                                             <td><input type="number" class="form-control form-control-sm sog-inline-edit" name="team1_p3_shots" value="{{ team1_p3_sog }}" min="0" style="width: 60px;"></td>
                                                             <td><input type="number" class="form-control form-control-sm sog-inline-edit" name="team1_p4_shots" value="{{ team1_p4_sog }}" min="0" style="width: 60px;"></td>
-                                                            <td id="sog-{{ game.id }}-{{ game.team1_code }}-total-display"><strong>{{ team1_total_sog }}</strong></td>
+                                                            <td id="sog-{{ game.id }}-{{ p1_display_name }}-total-display"><strong>{{ team1_total_sog }}</strong></td>
                                                         </tr>
                                                         {# Team 2 SOG Display #}
-                                                        {% set team2_sog = game.sog_data.get(game.team2_code, {}) %}
+                                                        {% set team2_sog = game.sog_data.get(p2_display_name, {}) %}
                                                         {% set team2_p1_sog = team2_sog.get(1, 0) %}
                                                         {% set team2_p2_sog = team2_sog.get(2, 0) %}
                                                         {% set team2_p3_sog = team2_sog.get(3, 0) %}
@@ -501,15 +525,15 @@
                                                         {% set team2_total_sog = team2_p1_sog + team2_p2_sog + team2_p3_sog + team2_p4_sog %}
                                                         <tr>
                                                             <td>
-                                                                {% set t2_iso = team_iso_codes.get(game.team2_code) %}
+                                                                {% set t2_iso = team_iso_codes.get(p2_display_name) %}
                                                                 {% if t2_iso %}<img src="https://flagcdn.com/w20/{{ t2_iso }}.png" alt="" style="margin-right: 3px;">{% endif %}
-                                                                {{ game.team2_code }}
+                                                                {{ p2_display_name }}
                                                             </td>
                                                             <td><input type="number" class="form-control form-control-sm sog-inline-edit" name="team2_p1_shots" value="{{ team2_p1_sog }}" min="0" style="width: 60px;"></td>
                                                             <td><input type="number" class="form-control form-control-sm sog-inline-edit" name="team2_p2_shots" value="{{ team2_p2_sog }}" min="0" style="width: 60px;"></td>
                                                             <td><input type="number" class="form-control form-control-sm sog-inline-edit" name="team2_p3_shots" value="{{ team2_p3_sog }}" min="0" style="width: 60px;"></td>
                                                             <td><input type="number" class="form-control form-control-sm sog-inline-edit" name="team2_p4_shots" value="{{ team2_p4_sog }}" min="0" style="width: 60px;"></td>
-                                                            <td id="sog-{{ game.id }}-{{ game.team2_code }}-total-display"><strong>{{ team2_total_sog }}</strong></td>
+                                                            <td id="sog-{{ game.id }}-{{ p2_display_name }}-total-display"><strong>{{ team2_total_sog }}</strong></td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -532,7 +556,7 @@
                                                 </thead>
                                                 <tbody>
                                                     {# Team 1 SOG Display #}
-                                                    {% set team1_sog = game.sog_data.get(game.team1_code, {}) %}
+                                                    {% set team1_sog = game.sog_data.get(p1_display_name, {}) %}
                                                     {% set team1_p1_sog = team1_sog.get(1, 0) %}
                                                     {% set team1_p2_sog = team1_sog.get(2, 0) %}
                                                     {% set team1_p3_sog = team1_sog.get(3, 0) %}
@@ -540,18 +564,18 @@
                                                     {% set team1_total_sog = team1_p1_sog + team1_p2_sog + team1_p3_sog + team1_p4_sog %}
                                                     <tr>
                                                         <td>
-                                                            {% set t1_iso = team_iso_codes.get(game.team1_code) %}
+                                                            {% set t1_iso = team_iso_codes.get(p1_display_name) %}
                                                             {% if t1_iso %}<img src="https://flagcdn.com/w20/{{ t1_iso }}.png" alt="" style="margin-right: 3px;">{% endif %}
-                                                            {{ game.team1_code }}
+                                                            {{ p1_display_name }}
                                                         </td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team1_code }}-p1-display">{{ team1_p1_sog }}</td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team1_code }}-p2-display">{{ team1_p2_sog }}</td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team1_code }}-p3-display">{{ team1_p3_sog }}</td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team1_code }}-p4-display">{{ team1_p4_sog }}</td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team1_code }}-total-display"><strong>{{ team1_total_sog }}</strong></td>
+                                                        <td id="sog-{{ game.id }}-{{ p1_display_name }}-p1-display">{{ team1_p1_sog }}</td>
+                                                        <td id="sog-{{ game.id }}-{{ p1_display_name }}-p2-display">{{ team1_p2_sog }}</td>
+                                                        <td id="sog-{{ game.id }}-{{ p1_display_name }}-p3-display">{{ team1_p3_sog }}</td>
+                                                        <td id="sog-{{ game.id }}-{{ p1_display_name }}-p4-display">{{ team1_p4_sog }}</td>
+                                                        <td id="sog-{{ game.id }}-{{ p1_display_name }}-total-display"><strong>{{ team1_total_sog }}</strong></td>
                                                     </tr>
                                                     {# Team 2 SOG Display #}
-                                                    {% set team2_sog = game.sog_data.get(game.team2_code, {}) %}
+                                                    {% set team2_sog = game.sog_data.get(p2_display_name, {}) %}
                                                     {% set team2_p1_sog = team2_sog.get(1, 0) %}
                                                     {% set team2_p2_sog = team2_sog.get(2, 0) %}
                                                     {% set team2_p3_sog = team2_sog.get(3, 0) %}
@@ -559,15 +583,15 @@
                                                     {% set team2_total_sog = team2_p1_sog + team2_p2_sog + team2_p3_sog + team2_p4_sog %}
                                                     <tr>
                                                         <td>
-                                                            {% set t2_iso = team_iso_codes.get(game.team2_code) %}
+                                                            {% set t2_iso = team_iso_codes.get(p2_display_name) %}
                                                             {% if t2_iso %}<img src="https://flagcdn.com/w20/{{ t2_iso }}.png" alt="" style="margin-right: 3px;">{% endif %}
-                                                            {{ game.team2_code }}
+                                                            {{ p2_display_name }}
                                                         </td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team2_code }}-p1-display">{{ team2_p1_sog }}</td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team2_code }}-p2-display">{{ team2_p2_sog }}</td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team2_code }}-p3-display">{{ team2_p3_sog }}</td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team2_code }}-p4-display">{{ team2_p4_sog }}</td>
-                                                        <td id="sog-{{ game.id }}-{{ game.team2_code }}-total-display"><strong>{{ team2_total_sog }}</strong></td>
+                                                        <td id="sog-{{ game.id }}-{{ p2_display_name }}-p1-display">{{ team2_p1_sog }}</td>
+                                                        <td id="sog-{{ game.id }}-{{ p2_display_name }}-p2-display">{{ team2_p2_sog }}</td>
+                                                        <td id="sog-{{ game.id }}-{{ p2_display_name }}-p3-display">{{ team2_p3_sog }}</td>
+                                                        <td id="sog-{{ game.id }}-{{ p2_display_name }}-p4-display">{{ team2_p4_sog }}</td>
+                                                        <td id="sog-{{ game.id }}-{{ p2_display_name }}-total-display"><strong>{{ team2_total_sog }}</strong></td>
                                                     </tr>
                                                 </tbody>
                                             </table>
@@ -597,7 +621,7 @@
 
             {# Form for team filter - ensure stats_filter_teams and current_stats_team_filter are passed from app.py if this is kept #}
             {# For now, assuming unique_teams_in_year and selected_team are used #}
-            <form method="GET" action="{{ url_for('year_view', year_id=year.id) }}#statistics" class="mb-3">
+            <form method="GET" action="{{ url_for('year_bp.year_view', year_id=year.id) }}#statistics" class="mb-3">
                 <div class="form-row align-items-end">
                     <div class="col-md-4">
                         <label for="stats_team_filter">Team filtern:</label>
@@ -612,7 +636,7 @@
                     </div>
                      <div class="col-md-2">
                         {% if selected_team %}
-                        <a href="{{ url_for('year_view', year_id=year.id, stats_team_filter='') }}#statistics" class="btn btn-sm btn-outline-secondary mt-auto">Filter löschen</a>
+                        <a href="{{ url_for('year_bp.year_view', year_id=year.id, stats_team_filter='') }}#statistics" class="btn btn-sm btn-outline-secondary mt-auto">Filter löschen</a>
                         {% endif %}
                     </div>
                 </div>
@@ -797,6 +821,7 @@
                     </thead>
                     <tbody id="team-stats-tbody">
                         {% for team_stat_entry in team_stats_data %}
+                        {% if team_stat_entry.gp > 0 %} {# <-- ADDED THIS CONDITION #}
                         <tr>
                             <td>
                                 {% if team_stat_entry.team_iso_code %}<img src="https://flagcdn.com/w20/{{ team_stat_entry.team_iso_code }}.png" alt="{{ team_stat_entry.team_name }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
@@ -815,6 +840,7 @@
                             <td class="text-center">{{ team_stat_entry.ppa }}</td>
                             <td class="text-center">{{ team_stat_entry.pim }}</td>
                         </tr>
+                        {% endif %} {# <-- ADDED THIS ENDIF #}
                         {% endfor %}
                     </tbody>
                 </table>
@@ -840,6 +866,7 @@
                         </thead>
                         <tbody id="scoring-eff-tbody">
                             {% for team in team_stats_data %}
+                            {% if team.gp > 0 %} {# <-- ADDED THIS CONDITION #}
                             <tr>
                                 <td>
                                     {% if team.team_iso_code %}<img src="https://flagcdn.com/w20/{{ team.team_iso_code }}.png" alt="{{ team.team_name }}" style="margin-right: 3px; vertical-align: middle;">{% endif %}
@@ -851,6 +878,7 @@
                                     {% if team.sog > 0 %}{{ "%.1f"|format(team.gf * 100 / team.sog) }}%{% else %}0.0%{% endif %}
                                 </td>
                             </tr>
+                            {% endif %} {# <-- ADDED THIS ENDIF #}
                             {% endfor %}
                         </tbody>
                     </table>
@@ -870,6 +898,7 @@
                         </thead>
                         <tbody id="goalkeeping-tbody">
                             {% for team in team_stats_data %}
+                            {% if team.gp > 0 %} {# <-- ADDED THIS CONDITION #}
                             <tr>
                                 <td>
                                     {% if team.team_iso_code %}<img src="https://flagcdn.com/w20/{{ team.team_iso_code }}.png" alt="{{ team.team_name }}" style="margin-right: 3px; vertical-align: middle;">{% endif %}
@@ -881,6 +910,7 @@
                                     {% if team.soga > 0 %}{{ "%.1f"|format((team.soga - team.ga) * 100 / team.soga) }}%{% else %}0.0%{% endif %}
                                 </td>
                             </tr>
+                            {% endif %} {# <-- ADDED THIS ENDIF #}
                             {% endfor %}
                         </tbody>
                     </table>
@@ -900,6 +930,7 @@
                         </thead>
                         <tbody id="powerplay-tbody">
                             {% for team in team_stats_data %}
+                            {% if team.gp > 0 %} {# <-- ADDED THIS CONDITION #}
                             <tr>
                                 <td>
                                     {% if team.team_iso_code %}<img src="https://flagcdn.com/w20/{{ team.team_iso_code }}.png" alt="{{ team.team_name }}" style="margin-right: 3px; vertical-align: middle;">{% endif %}
@@ -911,6 +942,7 @@
                                     {% if team.ppf > 0 %}{{ "%.1f"|format(team.ppgf * 100 / team.ppf) }}%{% else %}0.0%{% endif %}
                                 </td>
                             </tr>
+                            {% endif %} {# <-- ADDED THIS ENDIF #}
                             {% endfor %}
                         </tbody>
                     </table>
@@ -930,6 +962,7 @@
                         </thead>
                         <tbody id="penalty-kill-tbody">
                             {% for team in team_stats_data %}
+                            {% if team.gp > 0 %} {# <-- ADDED THIS CONDITION #}
                             <tr>
                                 <td>
                                     {% if team.team_iso_code %}<img src="https://flagcdn.com/w20/{{ team.team_iso_code }}.png" alt="{{ team.team_name }}" style="margin-right: 3px; vertical-align: middle;">{% endif %}
@@ -943,6 +976,7 @@
                                     {% endif %}
                                 </td>
                             </tr>
+                            {% endif %} {# <-- ADDED THIS ENDIF #}
                             {% endfor %}
                         </tbody>
                     </table>
@@ -956,7 +990,7 @@
 {% endif %}
 
 <div class="mt-4">
-    <a href="{{ url_for('index') }}" class="btn btn-secondary">&laquo; Zurück zur Jahresübersicht</a>
+    <a href="{{ url_for('main_bp.index') }}" class="btn btn-secondary">&laquo; Zurück zur Jahresübersicht</a>
 </div>
 
 {% endblock %}
@@ -1198,64 +1232,76 @@ $(document).ready(function(){
         var gameId = form.find('input[name="game_id_anchor"]').val();
         var messageArea = $('#messageArea-' + gameId); // Message area for Add Player
         
-        fetch(form.attr('action'), {
-            method: 'POST',
-            body: new FormData(form[0]),
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(response => response.json())
-        .then(data => {
-            var alertClass = data.success ? 'alert-success' : 'alert-danger';
-            messageArea.html('<div class="alert ' + alertClass + ' alert-dismissible fade show" role="alert">' +
-                             data.message +
-                             '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
-                             '</div>');
-            if (data.success) {
-                form[0].reset();
-                var newPlayer = data.player;
-                if (!window.all_players_by_team_json[newPlayer.team_code]) {
-                    window.all_players_by_team_json[newPlayer.team_code] = [];
-                }
-                // Update player in list or add if new - include jersey number
-                let playerEntry = window.all_players_by_team_json[newPlayer.team_code].find(p => p.id === newPlayer.id);
-                if (playerEntry) {
-                    playerEntry.first_name = newPlayer.first_name;
-                    playerEntry.last_name = newPlayer.last_name;
-                    playerEntry.jersey_number = newPlayer.jersey_number; // Ensure jersey is updated
-                    playerEntry.full_name = newPlayer.full_name;
-                } else {
-                    window.all_players_by_team_json[newPlayer.team_code].push({
-                        id: newPlayer.id, 
-                        first_name: newPlayer.first_name, 
-                        last_name: newPlayer.last_name, 
-                        team_code: newPlayer.team_code, 
-                        jersey_number: newPlayer.jersey_number, // Add jersey number here
-                        full_name: newPlayer.full_name
-                    });
-                }
-                // Trigger change on relevant team select dropdowns to repopulate player lists
-                var addGoalForm = $('#addGoalForm-' + gameId);
-                if (addGoalForm.length > 0) {
-                    var teamSelectForGoal = addGoalForm.find('#goal_team-' + gameId);
-                    if (teamSelectForGoal.length > 0 && teamSelectForGoal.val() == newPlayer.team_code) { // only update if relevant team
-                        teamSelectForGoal.trigger('change');
+        $.ajax({
+            url: "{{ url_for('year_bp.add_player') }}", // Use global add player
+            type: 'POST',
+            data: form.serialize(), // Changed to use form.serialize()
+            success: function(response) {
+                var alertClass = response.success ? 'alert-success' : 'alert-danger';
+                messageArea.html('<div class="alert ' + alertClass + ' alert-dismissible fade show" role="alert">' +
+                                 response.message +
+                                 '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+                                 '</div>');
+                if (response.success) {
+                    form[0].reset();
+                    var newPlayer = response.player;
+                    if (!window.all_players_by_team_json[newPlayer.team_code]) {
+                        window.all_players_by_team_json[newPlayer.team_code] = [];
+                    }
+                    // Update player in list or add if new - include jersey number
+                    let playerEntry = window.all_players_by_team_json[newPlayer.team_code].find(p => p.id === newPlayer.id);
+                    if (playerEntry) {
+                        playerEntry.first_name = newPlayer.first_name;
+                        playerEntry.last_name = newPlayer.last_name;
+                        playerEntry.jersey_number = newPlayer.jersey_number; // Ensure jersey is updated
+                        playerEntry.full_name = newPlayer.full_name;
+                    } else {
+                        window.all_players_by_team_json[newPlayer.team_code].push({
+                            id: newPlayer.id, 
+                            first_name: newPlayer.first_name, 
+                            last_name: newPlayer.last_name, 
+                            team_code: newPlayer.team_code, 
+                            jersey_number: newPlayer.jersey_number, // Add jersey number here
+                            full_name: newPlayer.full_name
+                        });
+                    }
+                    // Trigger change on relevant team select dropdowns to repopulate player lists
+                    var addGoalForm = $('#addGoalForm-' + gameId);
+                    if (addGoalForm.length > 0) {
+                        var teamSelectForGoal = addGoalForm.find('#goal_team-' + gameId);
+                        if (teamSelectForGoal.length > 0 && teamSelectForGoal.val() == newPlayer.team_code) { // only update if relevant team
+                            teamSelectForGoal.trigger('change');
+                        }
+                    }
+                    var addPenaltyForm = $('#addPenaltyForm-' + gameId);
+                    if (addPenaltyForm.length > 0) {
+                        var teamSelectForPenalty = addPenaltyForm.find('#penalty_team-' + gameId);
+                         if (teamSelectForPenalty.length > 0 && teamSelectForPenalty.val() == newPlayer.team_code) { // only update if relevant team
+                            teamSelectForPenalty.trigger('change');
+                        }
                     }
                 }
-                var addPenaltyForm = $('#addPenaltyForm-' + gameId);
-                if (addPenaltyForm.length > 0) {
-                    var teamSelectForPenalty = addPenaltyForm.find('#penalty_team-' + gameId);
-                     if (teamSelectForPenalty.length > 0 && teamSelectForPenalty.val() == newPlayer.team_code) { // only update if relevant team
-                        teamSelectForPenalty.trigger('change');
+            },
+            error: function(xhr, status, error) {
+                console.error('Error adding player:', error, xhr.responseText);
+                var serverMessage = 'Fehler beim Hinzufügen des Spielers.';
+                if (xhr.responseText) {
+                    try {
+                        var jsonResponse = JSON.parse(xhr.responseText);
+                        if (jsonResponse && jsonResponse.message) {
+                            serverMessage = jsonResponse.message;
+                        } else {
+                            serverMessage = 'Fehler: ' + (xhr.statusText || 'Unbekannter Fehler');
+                        }
+                    } catch (e) {
+                        serverMessage = 'Antwort vom Server konnte nicht verarbeitet werden: ' + (xhr.statusText || 'Unbekannter Fehler');
                     }
                 }
+                messageArea.html('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
+                                 serverMessage +
+                                 '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
+                                 '</div>');
             }
-        })
-        .catch(error => {
-            console.error('Error adding player:', error);
-            messageArea.html('<div class="alert alert-danger alert-dismissible fade show" role="alert">' +
-                             'Kommunikationsfehler beim Hinzufügen des Spielers.' +
-                             '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' +
-                             '</div>');
         });
     });
 
@@ -1314,7 +1360,7 @@ $(document).ready(function(){
                     }
                 }
 
-                var deleteGoalFormAction = "{{ url_for('delete_goal', year_id=0, goal_id=0) }}".replace('/0/goal/0/delete', '/' + current_year_id + '/goal/' + newGoal.id + '/delete');
+                var deleteGoalFormAction = "{{ url_for('year_bp.delete_goal', year_id=0, goal_id=0) }}".replace('/0/goal/0/delete', '/' + current_year_id + '/goal/' + newGoal.id + '/delete');
 
                 var newEventHtml = '<li class="list-group-item event-item">' +
                     '<div class="d-flex w-100 justify-content-between">' +
@@ -1425,7 +1471,7 @@ $(document).ready(function(){
                     }
                 }
 
-                var deletePenaltyFormAction = "{{ url_for('delete_penalty', year_id=0, penalty_id=0) }}".replace('/0/penalty/0/delete', '/' + current_year_id + '/penalty/' + newPenalty.id + '/delete');
+                var deletePenaltyFormAction = "{{ url_for('year_bp.delete_penalty', year_id=0, penalty_id=0) }}".replace('/0/penalty/0/delete', '/' + current_year_id + '/penalty/' + newPenalty.id + '/delete');
 
                 var newEventHtml = '<li class="list-group-item event-item">' +
                     '<div class="d-flex w-100 justify-content-between">' +
@@ -1491,7 +1537,7 @@ $(document).ready(function(){
 
         const formData = new FormData(form);
 
-        fetch(`{{ url_for('add_sog', game_id=0) }}`.replace('0', gameId), {
+        fetch(`{{ url_for('year_bp.add_sog', game_id=0) }}`.replace('0', gameId), {
             method: 'POST',
             body: formData
         })
