@@ -34,6 +34,29 @@ class TeamOverallStats:
     ppa: int = 0  # Powerplay Opportunities Against (times shorthanded - estimated)
     pim: int = 0  # Total Penalty Infraction Minutes for the team
 
+@dataclass
+class AllTimeTeamStats:
+    team_code: str
+    gp: int = 0
+    w: int = 0
+    otw: int = 0
+    sow: int = 0
+    l: int = 0
+    otl: int = 0
+    sol: int = 0
+    gf: int = 0
+    ga: int = 0
+    pts: int = 0
+    years_participated: set[int] = field(default_factory=set)
+
+    @property
+    def gd(self) -> int:
+        return self.gf - self.ga
+
+    @property
+    def num_years_participated(self) -> int:
+        return len(self.years_participated)
+
 # --- Models ---
 class ChampionshipYear(db.Model):
     id = db.Column(db.Integer, primary_key=True)
