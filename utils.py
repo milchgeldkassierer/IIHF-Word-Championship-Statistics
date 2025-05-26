@@ -139,7 +139,11 @@ def _build_playoff_team_map_for_year(
     for group_name, group_teams_stats_list in prelim_standings_by_group.items():
         for team_stat in group_teams_stats_list: # Assumes list is sorted by rank_in_group from _calculate_basic_prelim_standings
             # rank_in_group is 1-indexed
-            placeholder = f"{team_stat.group}{team_stat.rank_in_group}" 
+            # Extract just the letter part from group names like "Group A" -> "A"
+            group_letter = team_stat.group
+            if group_letter and group_letter.startswith("Group "):
+                group_letter = group_letter.replace("Group ", "")
+            placeholder = f"{group_letter}{team_stat.rank_in_group}" 
             playoff_team_map[placeholder] = team_stat.name
             
             if host_team_codes and team_stat.name in host_team_codes:
