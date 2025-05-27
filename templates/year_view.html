@@ -4,6 +4,325 @@
 
 {% block head_scripts %}
     {{ super() }} {# Falls es schon head_scripts in base.html gibt #}
+    <style>
+        .stats-section {
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: box-shadow 0.3s ease;
+        }
+        
+        .stats-section:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .stats-title {
+            color: #495057;
+            border-bottom: 2px solid #6c757d;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        
+        .filter-section {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }
+        
+        /* Dark mode improvements */
+        body.dark-mode .stats-section {
+            background-color: #2d3748;
+            border-color: #4a5568;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        
+        body.dark-mode .stats-section:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        
+        body.dark-mode .stats-title {
+            color: #e2e8f0;
+            border-bottom-color: #a0aec0;
+        }
+        
+        body.dark-mode .filter-section {
+            background-color: #2d3748;
+            border-color: #4a5568;
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode .table {
+            background-color: #2d3748;
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode .table th,
+        body.dark-mode .table td {
+            border-color: #4a5568;
+            color: #e2e8f0;
+            background-color: transparent;
+        }
+        
+        body.dark-mode .table .thead-dark th {
+            background-color: #1a202c;
+            border-color: #2d3748;
+            color: #e2e8f0;
+            font-weight: 600;
+        }
+        
+        body.dark-mode .table .thead-light th {
+            background-color: #4a5568;
+            border-color: #4a5568;
+            color: #e2e8f0;
+            font-weight: 600;
+        }
+        
+        body.dark-mode .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(255, 255, 255, 0.08) !important;
+        }
+        
+        body.dark-mode .table-striped tbody tr:nth-of-type(even) {
+            background-color: rgba(255, 255, 255, 0.03) !important;
+        }
+        
+        body.dark-mode .table-hover tbody tr:hover {
+            background-color: rgba(66, 153, 225, 0.15) !important;
+        }
+        
+        body.dark-mode .table-success {
+            background-color: rgba(72, 187, 120, 0.25) !important;
+            border-color: rgba(72, 187, 120, 0.4) !important;
+        }
+        
+        body.dark-mode .table-success td {
+            color: #9ae6b4 !important;
+            font-weight: 500;
+        }
+        
+        body.dark-mode .table-danger {
+            background-color: rgba(245, 101, 101, 0.25) !important;
+            border-color: rgba(245, 101, 101, 0.4) !important;
+        }
+        
+        body.dark-mode .table-danger td {
+            color: #feb2b2 !important;
+            font-weight: 500;
+        }
+        
+        body.dark-mode .table td strong {
+            color: #ffffff;
+            font-weight: 700;
+        }
+        
+        body.dark-mode .table-responsive {
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            background-color: #2d3748;
+        }
+        
+        body.dark-mode .fixed-table-layout {
+            background-color: #2d3748;
+        }
+        
+        body.dark-mode .card {
+            background-color: #2d3748;
+            border-color: #4a5568;
+        }
+        
+        body.dark-mode .card-body {
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode .nav-tabs .nav-link {
+            color: #a0aec0;
+            border-color: #4a5568;
+        }
+        
+        body.dark-mode .nav-tabs .nav-link.active {
+            color: #e2e8f0;
+            background-color: #2d3748;
+            border-color: #4a5568 #4a5568 #2d3748;
+        }
+        
+        body.dark-mode .nav-tabs .nav-link:hover {
+            border-color: #4a5568;
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode .alert-warning {
+            background-color: rgba(251, 176, 64, 0.2);
+            border-color: #fbb040;
+            color: #fbb040;
+        }
+        
+        body.dark-mode .alert-info {
+            background-color: rgba(66, 153, 225, 0.2);
+            border-color: #4299e1;
+            color: #4299e1;
+        }
+        
+        body.dark-mode .alert-success {
+            background-color: rgba(104, 211, 145, 0.2);
+            border-color: #68d391;
+            color: #68d391;
+        }
+        
+        body.dark-mode .alert-danger {
+            background-color: rgba(245, 101, 101, 0.2);
+            border-color: #f56565;
+            color: #f56565;
+        }
+        
+        body.dark-mode .badge-success {
+            background-color: #68d391 !important;
+            color: #1a202c !important;
+        }
+        
+        body.dark-mode .badge-danger {
+            background-color: #f56565 !important;
+            color: #1a202c !important;
+        }
+        
+        body.dark-mode .text-muted {
+            color: #a0aec0 !important;
+        }
+        
+        body.dark-mode .form-group label {
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode .form-control {
+            background-color: #4a5568;
+            border-color: #718096;
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode .form-control:focus {
+            background-color: #4a5568;
+            border-color: #4299e1;
+            color: #e2e8f0;
+            box-shadow: 0 0 0 0.2rem rgba(66, 153, 225, 0.25);
+        }
+        
+        body.dark-mode .form-control::placeholder {
+            color: #a0aec0;
+        }
+        
+        body.dark-mode .btn-primary {
+            background-color: #4299e1;
+            border-color: #4299e1;
+        }
+        
+        body.dark-mode .btn-primary:hover {
+            background-color: #3182ce;
+            border-color: #3182ce;
+        }
+        
+        body.dark-mode .btn-success {
+            background-color: #68d391;
+            border-color: #68d391;
+            color: #1a202c;
+        }
+        
+        body.dark-mode .btn-success:hover {
+            background-color: #48bb78;
+            border-color: #48bb78;
+            color: #1a202c;
+        }
+        
+        body.dark-mode .btn-warning {
+            background-color: #fbb040;
+            border-color: #fbb040;
+            color: #1a202c;
+        }
+        
+        body.dark-mode .btn-warning:hover {
+            background-color: #ed8936;
+            border-color: #ed8936;
+            color: #1a202c;
+        }
+        
+        body.dark-mode .btn-info {
+            background-color: #4299e1;
+            border-color: #4299e1;
+            color: #1a202c;
+        }
+        
+        body.dark-mode .btn-info:hover {
+            background-color: #3182ce;
+            border-color: #3182ce;
+            color: #1a202c;
+        }
+        
+        body.dark-mode .btn-danger {
+            background-color: #f56565;
+            border-color: #f56565;
+            color: #1a202c;
+        }
+        
+        body.dark-mode .btn-danger:hover {
+            background-color: #e53e3e;
+            border-color: #e53e3e;
+            color: #1a202c;
+        }
+        
+        body.dark-mode .btn-outline-secondary {
+            color: #a0aec0;
+            border-color: #a0aec0;
+        }
+        
+        body.dark-mode .btn-outline-secondary:hover {
+            background-color: #a0aec0;
+            border-color: #a0aec0;
+            color: #1a202c;
+        }
+        
+        body.dark-mode .collapse .card {
+            background-color: #1a202c;
+        }
+        
+        body.dark-mode .list-group-item {
+            background-color: #2d3748;
+            border-color: #4a5568;
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode .list-group-item:hover {
+            background-color: #4a5568;
+        }
+        
+        body.dark-mode .list-group-flush .list-group-item {
+            border-left: 0;
+            border-right: 0;
+            border-color: #4a5568;
+        }
+        
+        body.dark-mode .event-item {
+            border-left: 3px solid #4299e1;
+        }
+        
+        body.dark-mode .event-time {
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode .fas.fa-hockey-puck {
+            color: #f56565 !important;
+        }
+        
+        body.dark-mode .fas.fa-gavel {
+            color: #4299e1 !important;
+        }
+        
+        body.dark-mode small {
+            color: #a0aec0;
+        }
+    </style>
     <script>
         var all_players_by_team_json_str = '{{ all_players_by_team_json|tojson|safe }}';
         var all_players_by_team_json = JSON.parse(all_players_by_team_json_str);
@@ -279,7 +598,7 @@
                                                             <div class="d-flex w-100 justify-content-between">
                                                                 <h6 class="mb-1 event-time">
                                                                     {% if event.type == 'goal' %}
-                                                                        <i class="fas fa-futbol text-danger mr-2"></i>
+                                                                        <i class="fas fa-hockey-puck text-danger mr-2"></i>
                                                                     {% elif event.type == 'penalty' %}
                                                                         <i class="fas fa-gavel text-primary mr-2"></i>
                                                                     {% endif %}
@@ -617,30 +936,33 @@
         {# Statistics Tab Content #}
         {% if top_scorers_points or top_goal_scorers or top_assist_providers or top_penalty_players %}
         <div class="tab-pane fade" id="statistics" role="tabpanel" aria-labelledby="statistics-tab">
-            <h2>Player Stats</h2>
+            <div class="stats-section">
+                <h2 class="stats-title">Player Stats</h2>
 
-            {# Form for team filter - ensure stats_filter_teams and current_stats_team_filter are passed from app.py if this is kept #}
-            {# For now, assuming unique_teams_in_year and selected_team are used #}
-            <form method="GET" action="{{ url_for('year_bp.year_view', year_id=year.id) }}#statistics" class="mb-3">
-                <div class="form-row align-items-end">
-                    <div class="col-md-4">
-                        <label for="stats_team_filter">Team filtern:</label>
-                        <select name="stats_team_filter" id="stats_team_filter" class="form-control form-control-sm">
-                            <option value="">Alle Teams</option> {# Added option for all teams #}
-                            {% for team_code_filter in unique_teams_in_year %} {# Changed to unique_teams_in_year #}
-                                <option value="{{ team_code_filter }}" {% if team_code_filter == selected_team %}selected{% endif %}>
-                                    {{ team_code_filter }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                     <div class="col-md-2">
-                        {% if selected_team %}
-                        <a href="{{ url_for('year_bp.year_view', year_id=year.id, stats_team_filter='') }}#statistics" class="btn btn-sm btn-outline-secondary mt-auto">Filter löschen</a>
-                        {% endif %}
-                    </div>
+                {# Form for team filter - ensure stats_filter_teams and current_stats_team_filter are passed from app.py if this is kept #}
+                {# For now, assuming unique_teams_in_year and selected_team are used #}
+                <div class="filter-section">
+                    <form method="GET" action="{{ url_for('year_bp.year_view', year_id=year.id) }}#statistics" class="mb-3">
+                        <div class="form-row align-items-end">
+                            <div class="col-md-4">
+                                <label for="stats_team_filter">Team filtern:</label>
+                                <select name="stats_team_filter" id="stats_team_filter" class="form-control form-control-sm">
+                                    <option value="">Alle Teams</option> {# Added option for all teams #}
+                                    {% for team_code_filter in unique_teams_in_year %} {# Changed to unique_teams_in_year #}
+                                        <option value="{{ team_code_filter }}" {% if team_code_filter == selected_team %}selected{% endif %}>
+                                            {{ team_code_filter }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                             <div class="col-md-2">
+                                {% if selected_team %}
+                                <a href="{{ url_for('year_bp.year_view', year_id=year.id, stats_team_filter='') }}#statistics" class="btn btn-sm btn-outline-secondary mt-auto">Filter löschen</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </form>
                 </div>
-            </form>
 
             <div class="row">
                 {# Top Scorers (Points) #}
@@ -682,10 +1004,11 @@
                     <p>Keine Scorer-Daten (Punkte) vorhanden{% if selected_team %} für {{ selected_team }}{% endif %}.</p>
                     {% endif %}
                 </div>
+            </div>
 
-                {# Remove the row that was making them side-by-side #}
-                {# Top Goal Scorers (Tore) - ensure it's col-md-12 #}
-                <div class="col-md-12 mb-4 stats-section" id="top-goal-scorers-section">
+            <div class="row">
+                {# Top Goal Scorers (Tore) - side by side with Assists #}
+                <div class="col-lg-6 mb-4 stats-section" id="top-goal-scorers-section">
                     <h3>Top Torschützen (Tore) {% if selected_team %} ({{ selected_team }}) {% endif %}</h3>
                     {% if top_goal_scorers %}
                     <table class="table table-sm table-striped">
@@ -720,8 +1043,8 @@
                     {% endif %}
                 </div>
 
-                {# Top Assist Providers (Assists) - ensure it's col-md-12 #}
-                <div class="col-md-12 mb-4 stats-section" id="top-assist-providers-section">
+                {# Top Assist Providers (Assists) - side by side with Goals #}
+                <div class="col-lg-6 mb-4 stats-section" id="top-assist-providers-section">
                     <h3>Top Assistgeber (Assists) {% if selected_team %} ({{ selected_team }}) {% endif %}</h3>
                     {% if top_assist_providers %}
                     <table class="table table-sm table-striped">
@@ -755,7 +1078,9 @@
                     <p>Keine Assist-Daten vorhanden{% if selected_team %} für {{ selected_team }}{% endif %}.</p>
                     {% endif %}
                 </div>
-                {# The .row div was removed from here #}
+            </div>
+
+            <div class="row">
 
                 {# Most Penalty Minutes (PIM) #}
                 <div class="col-md-12 mb-4 stats-section" id="top-penalty-players-section">
@@ -793,13 +1118,15 @@
                     {% endif %}
                 </div>
             </div>
+            </div>
         </div>
         {% endif %}
 
         {# Team Stats Tab Content #}
         {% if team_stats_data %} {# Assumed variable from backend #}
         <div class="tab-pane fade" id="team-stats" role="tabpanel" aria-labelledby="team-stats-tab-link">
-            <h2>Team Statistiken</h2>
+            <div class="stats-section">
+                <h2 class="stats-title">Team Statistiken</h2>
             <div class="table-responsive">
                 <table class="table table-sm table-striped table-hover" id="team-stats-table">
                     <thead class="thead-light">
@@ -983,6 +1310,7 @@
                 </div>
             </div>
             {% endif %} {# End of if team_stats_data for small tables #}
+            </div>
         </div>
         {% endif %} {# End of Team Stats Tab Content #}
 
@@ -1365,7 +1693,7 @@ $(document).ready(function(){
                 var newEventHtml = '<li class="list-group-item event-item">' +
                     '<div class="d-flex w-100 justify-content-between">' +
                         '<h6 class="mb-1 event-time">' +
-                        '<i class="fas fa-futbol text-danger mr-2"></i>' +
+                        '<i class="fas fa-hockey-puck text-danger mr-2"></i>' +
                         newGoal.minute + '</h6>' +
                         '<small>' +
                             '<form method="POST" action="' + deleteGoalFormAction + '" style="display: inline;">' +
