@@ -177,10 +177,10 @@
                                 <th class="sortable" data-column="scorer_points">Punkte</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="top-scorers-points-body">
                             {% for player in player_stats %}
                                 {% if player.scorer_points > 0 %}
-                                <tr data-team="{{ player.team_code if player.team_code else '' }}">
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
@@ -197,6 +197,10 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                    {% set scorer_count = player_stats | selectattr('scorer_points', 'greaterthan', 0) | list | length %}
+                    {% if scorer_count > 20 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-scorers-points-body">Alle anzeigen</button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -218,10 +222,10 @@
                                 <th class="sortable" data-column="goals">Tore</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="top-goal-scorers-body">
                             {% for player in player_stats %}
                                 {% if player.goals > 0 %}
-                                <tr data-team="{{ player.team_code if player.team_code else '' }}">
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
@@ -236,6 +240,10 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                    {% set goal_count = player_stats | selectattr('goals', 'greaterthan', 0) | list | length %}
+                    {% if goal_count > 20 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-goal-scorers-body">Alle anzeigen</button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -254,10 +262,10 @@
                                 <th class="sortable" data-column="assists">Assists</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="top-assist-providers-body">
                             {% for player in player_stats %}
                                 {% if player.assists > 0 %}
-                                <tr data-team="{{ player.team_code if player.team_code else '' }}">
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
@@ -272,6 +280,10 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                    {% set assist_count = player_stats | selectattr('assists', 'greaterthan', 0) | list | length %}
+                    {% if assist_count > 20 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-assist-providers-body">Alle anzeigen</button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -292,10 +304,10 @@
                                 <th class="sortable" data-column="pims">PIMs</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="top-penalty-players-body">
                             {% for player in player_stats %}
                                 {% if player.pims > 0 %}
-                                <tr data-team="{{ player.team_code if player.team_code else '' }}">
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
@@ -310,6 +322,10 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                    {% set pim_count = player_stats | selectattr('pims', 'greaterthan', 0) | list | length %}
+                    {% if pim_count > 20 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-penalty-players-body">Alle anzeigen</button>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -371,7 +387,7 @@ $(document).ready(function() {
     
     // Function to update ranking numbers after sorting
     function updateRankingNumbers(tableId) {
-        $(`#${tableId} tbody tr:visible`).each(function(index) {
+        $(`#${tableId} tbody tr`).each(function(index) {
             $(this).find('td:first').text(index + 1);
         });
     }
@@ -415,6 +431,21 @@ $(document).ready(function() {
         filterRows(pimsRows, 'pimsStatsTable');
     });
     
+    // Statistics table toggle functionality
+    $('.toggle-stats-visibility').on('click', function() {
+        var $button = $(this);
+        var targetBodySelector = $button.data('target-body');
+        var $tableBody = $(targetBodySelector);
+        
+        $tableBody.find('tr.extra-stats-row').toggleClass('d-none');
+
+        if ($button.text() === 'Alle anzeigen') {
+            $button.text('Weniger anzeigen');
+        } else {
+            $button.text('Alle anzeigen');
+        }
+    });
+
     // Initial sort - all tables by their main stat (descending)
     $('#scoringStatsTable th[data-column="scorer_points"]').click(); // Points descending
     $('#goalScorersTable th[data-column="goals"]').click(); // Goals descending
