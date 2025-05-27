@@ -160,36 +160,77 @@
         </div>
     </div>
 
+    <!-- Top Scorers (Points) - Full Width -->
     <div class="row">
-        <!-- Scoring Statistics -->
-        <div class="col-lg-6">
+        <div class="col-md-12">
             <div class="stats-section">
-                <h3 class="stats-title">Scorer-Statistiken</h3>
+                <h3 class="stats-title">Top Scorer (Punkte)</h3>
                 <div class="table-responsive">
                     <table id="scoringStatsTable" class="table table-striped table-hover table-sm">
                         <thead class="thead-dark">
                             <tr>
+                                <th>#</th>
                                 <th>Name</th>
                                 <th>Team</th>
                                 <th class="sortable" data-column="goals">Tore</th>
                                 <th class="sortable" data-column="assists">Assists</th>
-                                <th class="sortable" data-column="scorer_points">Scorerpunkte</th>
+                                <th class="sortable" data-column="scorer_points">Punkte</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for player in player_stats %}
                                 {% if player.scorer_points > 0 %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}">
+                                    <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
-                                            <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}"> 
+                                            <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
                                         {% endif %}
                                         {{ player.team_code if player.team_code else 'N/A' }}
                                     </td>
                                     <td data-value="{{ player.goals }}">{{ player.goals }}</td>
                                     <td data-value="{{ player.assists }}">{{ player.assists }}</td>
-                                    <td data-value="{{ player.scorer_points }}">{{ player.scorer_points }}</td>
+                                    <td data-value="{{ player.scorer_points }}"><strong>{{ player.scorer_points }}</strong></td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Goals and Assists Side by Side -->
+    <div class="row">
+        <!-- Top Goal Scorers (Tore) -->
+        <div class="col-lg-6">
+            <div class="stats-section">
+                <h3 class="stats-title">Top Torschützen (Tore)</h3>
+                <div class="table-responsive">
+                    <table id="goalScorersTable" class="table table-striped table-hover table-sm">
+                        <thead class="thead-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Team</th>
+                                <th class="sortable" data-column="goals">Tore</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for player in player_stats %}
+                                {% if player.goals > 0 %}
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}">
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
+                                    <td>
+                                        {% if player.team_code and team_iso_codes.get(player.team_code) %}
+                                            <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
+                                        {% endif %}
+                                        {{ player.team_code if player.team_code else 'N/A' }}
+                                    </td>
+                                    <td data-value="{{ player.goals }}"><strong>{{ player.goals }}</strong></td>
                                 </tr>
                                 {% endif %}
                             {% endfor %}
@@ -199,14 +240,53 @@
             </div>
         </div>
 
-        <!-- PIM Statistics -->
+        <!-- Top Assist Providers (Assists) -->
         <div class="col-lg-6">
+            <div class="stats-section">
+                <h3 class="stats-title">Top Assistgeber (Assists)</h3>
+                <div class="table-responsive">
+                    <table id="assistProvidersTable" class="table table-striped table-hover table-sm">
+                        <thead class="thead-dark">
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Team</th>
+                                <th class="sortable" data-column="assists">Assists</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for player in player_stats %}
+                                {% if player.assists > 0 %}
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}">
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
+                                    <td>
+                                        {% if player.team_code and team_iso_codes.get(player.team_code) %}
+                                            <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
+                                        {% endif %}
+                                        {{ player.team_code if player.team_code else 'N/A' }}
+                                    </td>
+                                    <td data-value="{{ player.assists }}"><strong>{{ player.assists }}</strong></td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PIM Statistics - Full Width -->
+    <div class="row">
+        <div class="col-md-12">
             <div class="stats-section">
                 <h3 class="stats-title">Strafminuten (PIMs)</h3>
                 <div class="table-responsive">
                     <table id="pimsStatsTable" class="table table-striped table-hover table-sm">
                         <thead class="thead-dark">
                             <tr>
+                                <th>#</th>
                                 <th>Name</th>
                                 <th>Team</th>
                                 <th class="sortable" data-column="pims">PIMs</th>
@@ -216,14 +296,15 @@
                             {% for player in player_stats %}
                                 {% if player.pims > 0 %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}">
+                                    <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
-                                            <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}"> 
+                                            <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
                                         {% endif %}
                                         {{ player.team_code if player.team_code else 'N/A' }}
                                     </td>
-                                    <td data-value="{{ player.pims }}">{{ player.pims }}</td>
+                                    <td data-value="{{ player.pims }}"><strong>{{ player.pims }}</strong></td>
                                 </tr>
                                 {% endif %}
                             {% endfor %}
@@ -241,10 +322,12 @@
 $(document).ready(function() {
     let currentSort = { 
         scoring: { column: null, direction: 'asc' },
+        goals: { column: null, direction: 'asc' },
+        assists: { column: null, direction: 'asc' },
         pims: { column: null, direction: 'asc' }
     };
     
-    // Sorting functionality for both tables
+    // Sorting functionality for all tables
     function setupSorting(tableId, sortKey) {
         $(`#${tableId} .sortable`).click(function() {
             const column = $(this).data('column');
@@ -255,7 +338,7 @@ $(document).ready(function() {
             if (currentSort[sortKey].column === column) {
                 currentSort[sortKey].direction = currentSort[sortKey].direction === 'asc' ? 'desc' : 'asc';
             } else {
-                currentSort[sortKey].direction = 'asc';
+                currentSort[sortKey].direction = 'desc'; // Default to descending for stats
             }
             currentSort[sortKey].column = column;
             
@@ -280,22 +363,34 @@ $(document).ready(function() {
                 }
             });
             
-            // Re-append sorted rows
+            // Re-append sorted rows and update ranking numbers
             table.empty().append(rows);
+            updateRankingNumbers(tableId);
         });
     }
     
-    // Setup sorting for both tables
+    // Function to update ranking numbers after sorting
+    function updateRankingNumbers(tableId) {
+        $(`#${tableId} tbody tr:visible`).each(function(index) {
+            $(this).find('td:first').text(index + 1);
+        });
+    }
+    
+    // Setup sorting for all tables
     setupSorting('scoringStatsTable', 'scoring');
+    setupSorting('goalScorersTable', 'goals');
+    setupSorting('assistProvidersTable', 'assists');
     setupSorting('pimsStatsTable', 'pims');
     
-    // Team filtering functionality for both tables
+    // Team filtering functionality for all tables
     $('#teamFilter').change(function() {
         const selectedTeam = $(this).val();
         const scoringRows = $('#scoringStatsTable tbody tr');
+        const goalRows = $('#goalScorersTable tbody tr');
+        const assistRows = $('#assistProvidersTable tbody tr');
         const pimsRows = $('#pimsStatsTable tbody tr');
         
-        function filterRows(rows) {
+        function filterRows(rows, tableId) {
             if (selectedTeam === '') {
                 // Show all rows
                 rows.show();
@@ -310,18 +405,21 @@ $(document).ready(function() {
                     }
                 });
             }
+            // Update ranking numbers after filtering
+            updateRankingNumbers(tableId);
         }
         
-        filterRows(scoringRows);
-        filterRows(pimsRows);
+        filterRows(scoringRows, 'scoringStatsTable');
+        filterRows(goalRows, 'goalScorersTable');
+        filterRows(assistRows, 'assistProvidersTable');
+        filterRows(pimsRows, 'pimsStatsTable');
     });
     
-    // Initial sort - scoring by scorer points (descending), PIMs by PIMs (descending)
-    $('#scoringStatsTable th[data-column="scorer_points"]').click();
-    $('#scoringStatsTable th[data-column="scorer_points"]').click(); // Click twice for descending
-    
-    $('#pimsStatsTable th[data-column="pims"]').click();
-    $('#pimsStatsTable th[data-column="pims"]').click(); // Click twice for descending
+    // Initial sort - all tables by their main stat (descending)
+    $('#scoringStatsTable th[data-column="scorer_points"]').click(); // Points descending
+    $('#goalScorersTable th[data-column="goals"]').click(); // Goals descending
+    $('#assistProvidersTable th[data-column="assists"]').click(); // Assists descending
+    $('#pimsStatsTable th[data-column="pims"]').click(); // PIMs descending
 });
 </script>
 {% endblock %}
