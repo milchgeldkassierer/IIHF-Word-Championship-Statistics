@@ -1,128 +1,435 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Startseite - IIHF Tabellenrechner{% endblock %}
+{% block title %}IIHF Tabellenrechner - Home{% endblock %}
 
 {% block head_scripts %}
+{{ super() }}
 <style>
-    .stats-section {
-        background-color: #fff;
-        border: 1px solid #dee2e6;
+    .hero-section {
+        background: linear-gradient(135deg, var(--dark-surface) 0%, var(--dark-bg) 100%);
+        color: white;
+        padding: 4rem 0;
+        margin-bottom: 3rem;
+        border-radius: 16px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .hero-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+        opacity: 0.3;
+    }
+    
+    .hero-content {
+        position: relative;
+        z-index: 1;
+        text-align: center;
+    }
+    
+    .hero-title {
+        font-size: 3.5rem;
+        font-weight: 900;
+        margin-bottom: 1rem;
+        background: linear-gradient(45deg, var(--accent-gold), #ffed4e);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .hero-subtitle {
+        font-size: 1.25rem;
+        opacity: 0.9;
+        margin-bottom: 2rem;
+    }
+    
+    .action-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-top: 3rem;
+    }
+    
+    .action-card {
+        background: var(--light-surface);
+        border-radius: 16px;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.1);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    body.dark-mode .action-card {
+        background: var(--dark-surface);
+        border: 1px solid var(--dark-border);
+    }
+    
+    .action-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--primary-blue), var(--primary-red));
+    }
+    
+    .action-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+    }
+    
+    body.dark-mode .action-card:hover {
+        box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    }
+    
+    .action-icon {
+        font-size: 3rem;
+        margin-bottom: 1.5rem;
+        background: linear-gradient(135deg, var(--primary-blue), var(--primary-red));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .action-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: var(--dark-surface);
+    }
+    
+    body.dark-mode .action-title {
+        color: var(--text-light);
+    }
+    
+    .action-description {
+        color: #6c757d;
+        margin-bottom: 1.5rem;
+        line-height: 1.6;
+    }
+    
+    body.dark-mode .action-description {
+        color: var(--text-muted);
+    }
+    
+    .tournament-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 2rem;
+        margin-top: 2rem;
+    }
+    
+    .tournament-card {
+        background: var(--light-surface);
+        border-radius: 16px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.1);
+        position: relative;
+    }
+    
+    body.dark-mode .tournament-card {
+        background: var(--dark-surface);
+        border: 1px solid var(--dark-border);
+    }
+    
+    .tournament-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 10px 35px rgba(0,0,0,0.15);
+    }
+    
+    body.dark-mode .tournament-card:hover {
+        box-shadow: 0 10px 35px rgba(0,0,0,0.4);
+    }
+    
+    .tournament-header {
+        background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-red) 100%);
+        color: white;
+        padding: 1.5rem;
+        position: relative;
+    }
+    
+    .tournament-year {
+        font-size: 2rem;
+        font-weight: 900;
+        margin-bottom: 0.5rem;
+    }
+    
+    .tournament-name {
+        font-size: 1.1rem;
+        opacity: 0.9;
+    }
+    
+    .tournament-body {
+        padding: 1.5rem;
+    }
+    
+    .tournament-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .stat-item {
+        text-align: center;
+        padding: 1rem;
+        background: var(--light-bg);
         border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        transition: box-shadow 0.3s ease;
     }
     
-    .stats-section:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    body.dark-mode .stat-item {
+        background: var(--dark-border);
     }
     
-    .stats-title {
-        color: #495057;
-        border-bottom: 2px solid #6c757d;
-        padding-bottom: 10px;
-        margin-bottom: 20px;
+    .stat-number {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary-blue);
+        margin-bottom: 0.25rem;
+    }
+    
+    .stat-label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    body.dark-mode .stat-label {
+        color: var(--text-muted);
+    }
+    
+    .tournament-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+    
+    .btn-tournament {
+        flex: 1;
+        padding: 0.75rem;
+        border-radius: 8px;
         font-weight: 600;
+        text-decoration: none;
+        text-align: center;
+        transition: all 0.3s ease;
     }
     
-    /* Dark mode improvements */
-    body.dark-mode .stats-section {
-        background-color: #2d3748;
-        border-color: #4a5568;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    .btn-view {
+        background: linear-gradient(135deg, var(--primary-blue) 0%, #3182ce 100%);
+        color: white;
     }
     
-    body.dark-mode .stats-section:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    .btn-view:hover {
+        background: linear-gradient(135deg, #3182ce 0%, #2c5aa0 100%);
+        color: white;
+        text-decoration: none;
+        transform: translateY(-1px);
     }
     
-    body.dark-mode .stats-title {
-        color: #e2e8f0;
-        border-bottom-color: #a0aec0;
+    .btn-delete {
+        background: linear-gradient(135deg, var(--primary-red) 0%, #c53030 100%);
+        color: white;
+    }
+    
+    .btn-delete:hover {
+        background: linear-gradient(135deg, #c53030 0%, #9c2626 100%);
+        color: white;
+        text-decoration: none;
+        transform: translateY(-1px);
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #6c757d;
+    }
+    
+    body.dark-mode .empty-state {
+        color: var(--text-muted);
+    }
+    
+    .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 1.5rem;
+        opacity: 0.5;
+    }
+    
+    .form-modern {
+        background: var(--light-surface);
+        border-radius: 16px;
+        padding: 2rem;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    body.dark-mode .form-modern {
+        background: var(--dark-surface);
+        border: 1px solid var(--dark-border);
+    }
+    
+    .form-group label {
+        font-weight: 600;
+        color: var(--dark-surface);
+        margin-bottom: 0.5rem;
     }
     
     body.dark-mode .form-group label {
-        color: #e2e8f0;
-    }
-    
-    body.dark-mode .list-group-item {
-        background-color: #2d3748;
-        border-color: #4a5568;
-        color: #e2e8f0;
-    }
-    
-    body.dark-mode .list-group-item a {
-        color: #4299e1;
-    }
-    
-    body.dark-mode .list-group-item a:hover {
-        color: #63b3ed;
-    }
-    
-    body.dark-mode .text-success {
-        color: #68d391 !important;
-    }
-    
-    body.dark-mode .text-warning {
-        color: #fbb040 !important;
+        color: var(--text-light);
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-6">
-        <div class="stats-section">
-            <h2 class="stats-title">Turnier anlegen / Jahr auswählen</h2>
-            <form method="POST" enctype="multipart/form-data" class="mb-4" action="{{ url_for('main_bp.index') }}">
-                <div class="form-group">
-                    <label for="tournament_name">Name des Turniers</label>
-                    <input type="text" class="form-control" id="tournament_name" name="tournament_name" placeholder="z.B. WM 2025 oder Virtual Cup" required>
-                </div>
-                <div class="form-group">
-                    <label for="year">Jahr (Spielplan wird automatisch geladen)</label>
-                    <select class="form-control" id="year" name="year" required>
-                        <option value="" disabled selected>Bitte Jahr auswählen</option>
-                        {% for year_option in available_fixture_years %}
-                        <option value="{{ year_option }}">{{ year_option }}</option>
-                        {% endfor %}
-                        {% if not available_fixture_years %}
-                        <option value="" disabled>Keine Spielpläne gefunden. Bitte .json Datei in 'fixtures' ablegen.</option>
-                        {% endif %}
-                    </select>
-                </div>
-                <button type="submit" class="btn btn-primary">Turnier anlegen / Aktualisieren</button>
-            </form>
-        </div>
+<!-- Hero Section -->
+<div class="hero-section slide-up">
+    <div class="hero-content">
+        <h1 class="hero-title">
+            <i class="fas fa-hockey-puck mr-3"></i>
+            IIHF Tabellenrechner
+        </h1>
+        <p class="hero-subtitle">
+            Professionelle Eishockey-Statistiken und Turnierverwaltung
+        </p>
     </div>
+</div>
 
-    <div class="col-md-6">
-        <div class="stats-section">
-            <h2 class="stats-title">Vorhandene Turniere</h2>
-            {% if all_years %}
-                <ul class="list-group">
-                    {% for y in all_years %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <a href="{{ url_for('year_bp.year_view', year_id=y.id) }}">{{ y.name }} ({{y.year}})</a>
-                        <span>
-                            {% if y.fixture_path %}
-                                <small class="text-success">Spielplan vorhanden</small>
-                            {% else %}
-                                <small class="text-warning">Kein Spielplan</small>
-                            {% endif %}
-                        </span>
-                        <form method="POST" style="display: inline;" onsubmit="return confirm('Sind Sie sicher, dass Sie das Turnier \'{{ y.name }} ({{ y.year }})\' und alle zugehörigen Daten löschen möchten?');" action="{{ url_for('main_bp.index') }}">
-                            <input type="hidden" name="year_id_to_delete" value="{{ y.id }}">
-                            <button type="submit" name="delete_year" class="btn btn-danger btn-sm">Löschen</button>
-                        </form>
-                    </li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>Noch keine Turniere angelegt.</p>
-            {% endif %}
+<div class="row">
+    <!-- Tournament Creation -->
+    <div class="col-lg-6 mb-4">
+        <div class="stats-container fade-in">
+            <h2 class="section-title">Neues Turnier erstellen</h2>
+            
+            <div class="form-modern">
+                <form method="POST">
+                    <div class="form-group">
+                        <label for="year_name">
+                            <i class="fas fa-calendar-alt mr-2"></i>
+                            Turniername
+                        </label>
+                        <input type="text" 
+                               class="form-control" 
+                               id="year_name" 
+                               name="year_name" 
+                               placeholder="z.B. WM 2024, Olympia 2026" 
+                               required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-lg btn-block">
+                        <i class="fas fa-plus mr-2"></i>
+                        Turnier erstellen
+                    </button>
+                </form>
+            </div>
         </div>
     </div>
+    
+    <!-- Quick Actions -->
+    <div class="col-lg-6 mb-4">
+        <div class="stats-container fade-in">
+            <h2 class="section-title">Schnellzugriff</h2>
+            
+            <div class="action-cards">
+                <div class="action-card">
+                    <div class="action-icon">
+                        <i class="fas fa-medal"></i>
+                    </div>
+                    <h3 class="action-title">Medaillenspiegel</h3>
+                    <p class="action-description">
+                        Übersicht aller Medaillen und Erfolge
+                    </p>
+                    <a href="{{ url_for('main.medal_tally') }}" class="btn btn-primary">
+                        Ansehen
+                    </a>
+                </div>
+                
+                <div class="action-card">
+                    <div class="action-icon">
+                        <i class="fas fa-trophy"></i>
+                    </div>
+                    <h3 class="action-title">Ewige Tabelle</h3>
+                    <p class="action-description">
+                        Historische Leistungen aller Teams
+                    </p>
+                    <a href="{{ url_for('main.all_time_standings') }}" class="btn btn-primary">
+                        Ansehen
+                    </a>
+                </div>
+                
+                <div class="action-card">
+                    <div class="action-icon">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <h3 class="action-title">Spielerstatistiken</h3>
+                    <p class="action-description">
+                        Detaillierte Spielerleistungen
+                    </p>
+                    <a href="{{ url_for('main.player_stats') }}" class="btn btn-primary">
+                        Ansehen
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Existing Tournaments -->
+<div class="stats-container fade-in">
+    <h2 class="section-title">Bestehende Turniere</h2>
+    
+    {% if years %}
+        <div class="tournament-grid">
+            {% for year in years %}
+            <div class="tournament-card">
+                <div class="tournament-header">
+                    <div class="tournament-year">{{ year.year }}</div>
+                    <div class="tournament-name">{{ year.name }}</div>
+                </div>
+                
+                <div class="tournament-body">
+                    <div class="tournament-stats">
+                        <div class="stat-item">
+                            <div class="stat-number">{{ year.games|length }}</div>
+                            <div class="stat-label">Spiele</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">{{ year.teams|length }}</div>
+                            <div class="stat-label">Teams</div>
+                        </div>
+                    </div>
+                    
+                    <div class="tournament-actions">
+                        <a href="{{ url_for('year_bp.year_view', year_id=year.id) }}" 
+                           class="btn-tournament btn-view">
+                            <i class="fas fa-eye mr-2"></i>
+                            Ansehen
+                        </a>
+                        <a href="{{ url_for('main.delete_year', year_id=year.id) }}" 
+                           class="btn-tournament btn-delete"
+                           onclick="return confirm('Sind Sie sicher, dass Sie dieses Turnier löschen möchten?')">
+                            <i class="fas fa-trash mr-2"></i>
+                            Löschen
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">
+                <i class="fas fa-hockey-puck"></i>
+            </div>
+            <h3>Noch keine Turniere vorhanden</h3>
+            <p>Erstellen Sie Ihr erstes Turnier, um zu beginnen.</p>
+        </div>
+    {% endif %}
 </div>
 {% endblock %} 

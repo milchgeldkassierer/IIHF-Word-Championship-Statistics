@@ -1,144 +1,457 @@
 {% extends "base.html" %}
 
-{% block title %}All-Time Standings - IIHF Stats{% endblock %}
+{% block title %}Ewige Tabelle - IIHF Tabellenrechner{% endblock %}
 
 {% block head_scripts %}
+{{ super() }}
 <style>
-    .stats-section {
-        background-color: #fff;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        transition: box-shadow 0.3s ease;
+    .standings-hero {
+        background: linear-gradient(135deg, var(--dark-surface) 0%, var(--dark-bg) 100%);
+        color: white;
+        padding: 3rem 0;
+        margin-bottom: 3rem;
+        border-radius: 16px;
+        position: relative;
+        overflow: hidden;
     }
     
-    .stats-section:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    .standings-hero::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+        opacity: 0.3;
     }
     
-    .stats-title {
-        color: #495057;
-        border-bottom: 2px solid #6c757d;
-        padding-bottom: 10px;
-        margin-bottom: 20px;
+    .standings-hero-content {
+        position: relative;
+        z-index: 1;
+        text-align: center;
+    }
+    
+    .standings-title {
+        font-size: 3rem;
+        font-weight: 900;
+        margin-bottom: 1rem;
+        background: linear-gradient(45deg, var(--accent-gold), #ffed4e);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .standings-subtitle {
+        font-size: 1.2rem;
+        opacity: 0.9;
+    }
+    
+    .standings-table-container {
+        background: var(--light-surface);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    body.dark-mode .standings-table-container {
+        background: var(--dark-surface);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    
+    .standings-table {
+        margin-bottom: 0;
+    }
+    
+    .standings-table th {
+        background: linear-gradient(135deg, var(--dark-surface) 0%, var(--dark-bg) 100%);
+        color: white;
+        border: none;
+        padding: 1.25rem 1rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.9rem;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .standings-table td {
+        padding: 1.25rem 1rem;
+        border-color: #e2e8f0;
+        font-weight: 600;
+        vertical-align: middle;
+    }
+    
+    body.dark-mode .standings-table td {
+        border-color: var(--dark-border);
+        color: var(--text-light);
+    }
+    
+    .standings-table tbody tr:hover {
+        background: linear-gradient(90deg, rgba(66, 153, 225, 0.1), rgba(229, 62, 62, 0.1));
+        transform: scale(1.01);
+        transition: all 0.3s ease;
+    }
+    
+    body.dark-mode .standings-table tbody tr:hover {
+        background: linear-gradient(90deg, rgba(66, 153, 225, 0.2), rgba(229, 62, 62, 0.2));
+    }
+    
+    .position-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        font-weight: 900;
+        font-size: 1.2rem;
+        color: white;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    .position-1 {
+        background: linear-gradient(135deg, #ffd700 0%, #ffb347 100%);
+        border: 2px solid #ffa500;
+    }
+    
+    .position-2 {
+        background: linear-gradient(135deg, #c0c0c0 0%, #a8a8a8 100%);
+        border: 2px solid #999999;
+        color: #333 !important;
+    }
+    
+    .position-3 {
+        background: linear-gradient(135deg, #cd7f32 0%, #b8860b 100%);
+        border: 2px solid #8b4513;
+    }
+    
+    .position-other {
+        background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-red) 100%);
+        border: 2px solid var(--dark-border);
+    }
+    
+    .team-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .team-flag {
+        width: 40px;
+        height: 27px;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .team-name {
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: var(--dark-surface);
+    }
+    
+    body.dark-mode .team-name {
+        color: var(--text-light);
+    }
+    
+    .stat-number {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--primary-blue);
+    }
+    
+    .points-highlight {
+        background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-red) 100%);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 25px;
+        font-weight: 900;
+        font-size: 1.2rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        text-align: center;
+        min-width: 60px;
+    }
+    
+    .stats-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+    }
+    
+    .summary-card {
+        background: var(--light-surface);
+        border-radius: 16px;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.1);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    body.dark-mode .summary-card {
+        background: var(--dark-surface);
+        border: 1px solid var(--dark-border);
+    }
+    
+    .summary-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--primary-blue), var(--primary-red));
+    }
+    
+    .summary-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 12px 35px rgba(0,0,0,0.15);
+    }
+    
+    body.dark-mode .summary-card:hover {
+        box-shadow: 0 12px 35px rgba(0,0,0,0.4);
+    }
+    
+    .summary-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        background: linear-gradient(135deg, var(--primary-blue), var(--primary-red));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .summary-number {
+        font-size: 2rem;
+        font-weight: 900;
+        margin-bottom: 0.5rem;
+        color: var(--dark-surface);
+    }
+    
+    body.dark-mode .summary-number {
+        color: var(--text-light);
+    }
+    
+    .summary-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
         font-weight: 600;
     }
     
-    /* Dark mode improvements */
-    body.dark-mode .stats-section {
-        background-color: #2d3748;
-        border-color: #4a5568;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    body.dark-mode .summary-label {
+        color: var(--text-muted);
     }
     
-    body.dark-mode .stats-section:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    .no-data-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #6c757d;
     }
     
-    body.dark-mode .stats-title {
-        color: #e2e8f0;
-        border-bottom-color: #a0aec0;
+    body.dark-mode .no-data-state {
+        color: var(--text-muted);
     }
     
-    body.dark-mode .table {
-        background-color: transparent;
+    .no-data-icon {
+        font-size: 4rem;
+        margin-bottom: 1.5rem;
+        opacity: 0.5;
     }
     
-    body.dark-mode .table th,
-    body.dark-mode .table td {
-        border-color: #4a5568;
-        color: #e2e8f0;
+    .table-responsive {
+        border-radius: 16px;
+        overflow: hidden;
     }
     
-    body.dark-mode .table .thead-dark th {
-        background-color: #1a202c;
-        border-color: #1a202c;
-        color: #e2e8f0;
+    .percentage-bar {
+        width: 100%;
+        height: 6px;
+        background: #e2e8f0;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 0.5rem;
     }
     
-    body.dark-mode .table-striped tbody tr:nth-of-type(odd) {
-        background-color: rgba(255, 255, 255, 0.05);
+    body.dark-mode .percentage-bar {
+        background: var(--dark-border);
     }
     
-    body.dark-mode .table-hover tbody tr:hover {
-        background-color: rgba(255, 255, 255, 0.1);
+    .percentage-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary-blue), var(--primary-red));
+        border-radius: 3px;
+        transition: width 0.3s ease;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="stats-section">
-        <h1 class="stats-title text-center">IIHF World Championships - All-Time Standings</h1>
-
-        {% if standings_data %}
-        <div class="table-responsive">
-            <table class="table table-striped table-hover table-sm">
-                <thead class="thead-dark">
-                    <tr>
-                        <th scope="col">#</th>
-                        <th scope="col" colspan="2">Team</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Years Participated">Yrs</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Games Played">GP</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Wins (Regulation)">W</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Overtime Wins">OTW</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Shootout Wins">SOW</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Losses (Regulation)">L</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Overtime Losses">OTL</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Shootout Losses">SOL</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Goals For">GF</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Goals Against">GA</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Goal Difference">GD</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Points">PTS</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for stat_entry in standings_data %}
-                    <tr>
-                        <td>{{ loop.index }}</td>
-                        <td>
-                            {% set team_iso = team_iso_codes.get(stat_entry.team_code.upper()) %}
-                            {% if team_iso %}
-                                <img src="https://flagcdn.com/w20/{{ team_iso.lower() }}.png"
-                                     srcset="https://flagcdn.com/w40/{{ team_iso.lower() }}.png 2x"
-                                     width="20"
-                                     alt="{{ stat_entry.team_code }}">
-                            {% endif %}
-                        </td>
-                        <td>{{ stat_entry.team_code }}</td>
-                        <td>{{ stat_entry.num_years_participated }}</td>
-                        <td>{{ stat_entry.gp }}</td>
-                        <td>{{ stat_entry.w }}</td>
-                        <td>{{ stat_entry.otw }}</td>
-                        <td>{{ stat_entry.sow }}</td>
-                        <td>{{ stat_entry.l }}</td>
-                        <td>{{ stat_entry.otl }}</td>
-                        <td>{{ stat_entry.sol }}</td>
-                        <td>{{ stat_entry.gf }}</td>
-                        <td>{{ stat_entry.ga }}</td>
-                        <td>{{ stat_entry.gd }}</td>
-                        <td><strong>{{ stat_entry.pts }}</strong></td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        {% else %}
-        <p class="text-center">No historical data available to display standings.</p>
-        {% endif %}
+<!-- Standings Hero Section -->
+<div class="standings-hero slide-up">
+    <div class="standings-hero-content">
+        <h1 class="standings-title">
+            <i class="fas fa-trophy mr-3"></i>
+            Ewige Tabelle
+        </h1>
+        <p class="standings-subtitle">
+            Historische Leistungen aller Teams über alle Turniere
+        </p>
     </div>
 </div>
 
-<script>
-// Optional: Initialize Bootstrap tooltips
-document.addEventListener('DOMContentLoaded', function () {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
-    })
-});
-</script>
+{% if standings %}
+    <!-- Summary Statistics -->
+    <div class="stats-summary fade-in">
+        <div class="summary-card">
+            <div class="summary-icon">
+                <i class="fas fa-users"></i>
+            </div>
+            <div class="summary-number">{{ standings|length }}</div>
+            <div class="summary-label">Teams Gesamt</div>
+        </div>
+        
+        <div class="summary-card">
+            <div class="summary-icon">
+                <i class="fas fa-gamepad"></i>
+            </div>
+            <div class="summary-number">{{ total_games }}</div>
+            <div class="summary-label">Spiele Gesamt</div>
+        </div>
+        
+        <div class="summary-card">
+            <div class="summary-icon">
+                <i class="fas fa-hockey-puck"></i>
+            </div>
+            <div class="summary-number">{{ total_goals }}</div>
+            <div class="summary-label">Tore Gesamt</div>
+        </div>
+        
+        <div class="summary-card">
+            <div class="summary-icon">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="summary-number">{{ "%.1f"|format(average_goals_per_game) }}</div>
+            <div class="summary-label">⌀ Tore/Spiel</div>
+        </div>
+    </div>
 
+    <!-- Standings Table -->
+    <div class="stats-container fade-in">
+        <h2 class="section-title">Ewige Tabelle</h2>
+        
+        <div class="standings-table-container">
+            <div class="table-responsive">
+                <table class="table standings-table table-hover">
+                    <thead>
+                        <tr>
+                            <th style="width: 8%;" class="text-center">Pos</th>
+                            <th style="width: 30%;">Team</th>
+                            <th style="width: 8%;" class="text-center">Sp</th>
+                            <th style="width: 8%;" class="text-center">S</th>
+                            <th style="width: 8%;" class="text-center">U</th>
+                            <th style="width: 8%;" class="text-center">N</th>
+                            <th style="width: 8%;" class="text-center">T+</th>
+                            <th style="width: 8%;" class="text-center">T-</th>
+                            <th style="width: 8%;" class="text-center">Diff</th>
+                            <th style="width: 6%;" class="text-center">Pkt</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for team in standings %}
+                        <tr>
+                            <td class="text-center">
+                                {% set position = loop.index %}
+                                {% if position == 1 %}
+                                    <span class="position-badge position-1">{{ position }}</span>
+                                {% elif position == 2 %}
+                                    <span class="position-badge position-2">{{ position }}</span>
+                                {% elif position == 3 %}
+                                    <span class="position-badge position-3">{{ position }}</span>
+                                {% else %}
+                                    <span class="position-badge position-other">{{ position }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="team-info">
+                                    {% set team_iso = team_iso_codes.get(team.team_name) %}
+                                    {% if team_iso %}
+                                        <img src="https://flagcdn.com/w40/{{ team_iso }}.png" 
+                                             alt="{{ team.team_name }}" 
+                                             class="team-flag">
+                                    {% endif %}
+                                    <div>
+                                        <div class="team-name">{{ team.team_name }}</div>
+                                        {% if team.games_played > 0 %}
+                                            <div class="percentage-bar">
+                                                <div class="percentage-fill" 
+                                                     style="width: {{ (team.wins / team.games_played * 100)|round(1) }}%;"></div>
+                                            </div>
+                                            <small class="text-muted">{{ (team.wins / team.games_played * 100)|round(1) }}% Siege</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span class="stat-number">{{ team.games_played }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="stat-number" style="color: #48bb78;">{{ team.wins }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="stat-number" style="color: #ed8936;">{{ team.draws }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="stat-number" style="color: #e53e3e;">{{ team.losses }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="stat-number">{{ team.goals_for }}</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="stat-number">{{ team.goals_against }}</span>
+                            </td>
+                            <td class="text-center">
+                                {% set diff = team.goals_for - team.goals_against %}
+                                {% if diff > 0 %}
+                                    <span class="stat-number" style="color: #48bb78;">+{{ diff }}</span>
+                                {% elif diff < 0 %}
+                                    <span class="stat-number" style="color: #e53e3e;">{{ diff }}</span>
+                                {% else %}
+                                    <span class="stat-number">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <span class="points-highlight">{{ team.points }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+{% else %}
+    <!-- No Data State -->
+    <div class="stats-container fade-in">
+        <div class="no-data-state">
+            <div class="no-data-icon">
+                <i class="fas fa-trophy"></i>
+            </div>
+            <h3>Keine Daten verfügbar</h3>
+            <p>Es wurden noch keine Spiele gespielt oder Turniere erstellt.</p>
+            <a href="{{ url_for('main.index') }}" class="btn btn-primary mt-3">
+                <i class="fas fa-plus mr-2"></i>
+                Turnier erstellen
+            </a>
+        </div>
+    </div>
+{% endif %}
 {% endblock %}
