@@ -178,8 +178,8 @@
                             </tr>
                         </thead>
                         <tbody id="top-scorers-points-body">
-                            {% for player in player_stats %}
-                                {% if player.scorer_points > 0 %}
+                            {% set scoring_players = player_stats | selectattr('scorer_points', 'greaterthan', 0) | sort(attribute='scorer_points', reverse=true) | list %}
+                            {% for player in scoring_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
@@ -193,12 +193,10 @@
                                     <td data-value="{{ player.assists }}">{{ player.assists }}</td>
                                     <td data-value="{{ player.scorer_points }}"><strong>{{ player.scorer_points }}</strong></td>
                                 </tr>
-                                {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% set scorer_count = player_stats | selectattr('scorer_points', 'greaterthan', 0) | list | length %}
-                    {% if scorer_count > 20 %}
+                    {% if scoring_players | length > 20 %}
                     <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-scorers-points-body">Alle anzeigen</button>
                     {% endif %}
                 </div>
@@ -223,8 +221,8 @@
                             </tr>
                         </thead>
                         <tbody id="top-goal-scorers-body">
-                            {% for player in player_stats %}
-                                {% if player.goals > 0 %}
+                            {% set goal_players = player_stats | selectattr('goals', 'greaterthan', 0) | sort(attribute='goals', reverse=true) | list %}
+                            {% for player in goal_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
@@ -236,12 +234,10 @@
                                     </td>
                                     <td data-value="{{ player.goals }}"><strong>{{ player.goals }}</strong></td>
                                 </tr>
-                                {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% set goal_count = player_stats | selectattr('goals', 'greaterthan', 0) | list | length %}
-                    {% if goal_count > 20 %}
+                    {% if goal_players | length > 20 %}
                     <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-goal-scorers-body">Alle anzeigen</button>
                     {% endif %}
                 </div>
@@ -263,8 +259,8 @@
                             </tr>
                         </thead>
                         <tbody id="top-assist-providers-body">
-                            {% for player in player_stats %}
-                                {% if player.assists > 0 %}
+                            {% set assist_players = player_stats | selectattr('assists', 'greaterthan', 0) | sort(attribute='assists', reverse=true) | list %}
+                            {% for player in assist_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
@@ -276,12 +272,10 @@
                                     </td>
                                     <td data-value="{{ player.assists }}"><strong>{{ player.assists }}</strong></td>
                                 </tr>
-                                {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% set assist_count = player_stats | selectattr('assists', 'greaterthan', 0) | list | length %}
-                    {% if assist_count > 20 %}
+                    {% if assist_players | length > 20 %}
                     <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-assist-providers-body">Alle anzeigen</button>
                     {% endif %}
                 </div>
@@ -305,8 +299,8 @@
                             </tr>
                         </thead>
                         <tbody id="top-penalty-players-body">
-                            {% for player in player_stats %}
-                                {% if player.pims > 0 %}
+                            {% set pim_players = player_stats | selectattr('pims', 'greaterthan', 0) | sort(attribute='pims', reverse=true) | list %}
+                            {% for player in pim_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
@@ -318,12 +312,10 @@
                                     </td>
                                     <td data-value="{{ player.pims }}"><strong>{{ player.pims }}</strong></td>
                                 </tr>
-                                {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% set pim_count = player_stats | selectattr('pims', 'greaterthan', 0) | list | length %}
-                    {% if pim_count > 20 %}
+                    {% if pim_players | length > 20 %}
                     <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-penalty-players-body">Alle anzeigen</button>
                     {% endif %}
                 </div>

@@ -924,3 +924,117 @@ def player_stats_view():
     player_stats_data = get_all_player_stats() # This function is defined in the same file
     # TEAM_ISO_CODES is already imported in this file
     return render_template('player_stats.html', player_stats=player_stats_data, team_iso_codes=TEAM_ISO_CODES)
+
+@main_bp.route('/edit-players', methods=['GET', 'POST'])
+def edit_players():
+    """
+    Route to edit player information (first name, last name, jersey number).
+    Shows countries on the left and players for selected country on the right.
+    """
+    if request.method == 'POST':
+        # Handle player updates
+        player_id = request.form.get('player_id')
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        jersey_number_str = request.form.get('jersey_number')
+        
+        if not player_id or not first_name or not last_name:
+            flash('Spieler-ID, Vorname und Nachname sind erforderlich.', 'danger')
+        else:
+            try:
+                player = db.session.get(Player, int(player_id))
+                if not player:
+                    flash('Spieler nicht gefunden.', 'danger')
+                else:
+                    # Update player information
+                    player.first_name = first_name.strip()
+                    player.last_name = last_name.strip()
+                    
+                    # Handle jersey number
+                    if jersey_number_str and jersey_number_str.strip():
+                        try:
+                            player.jersey_number = int(jersey_number_str.strip())
+                        except ValueError:
+                            flash('Ungültige Trikotnummer.', 'warning')
+                            return redirect(url_for('main_bp.edit_players'))
+                    else:
+                        player.jersey_number = None
+                    
+                    db.session.commit()
+                    flash(f'Spieler {first_name} {last_name} erfolgreich aktualisiert!', 'success')
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"Error updating player: {str(e)}")
+                flash(f'Fehler beim Aktualisieren des Spielers: {str(e)}', 'danger')
+        
+        return redirect(url_for('main_bp.edit_players'))
+    
+    # GET request - show the edit page
+    # Get all countries/teams that have players
+    countries_with_players = db.session.query(Player.team_code).distinct().order_by(Player.team_code).all()
+    countries = [country[0] for country in countries_with_players if country[0] in TEAM_ISO_CODES and TEAM_ISO_CODES[country[0]] is not None]
+    
+    # Get selected country from query parameter
+    selected_country = request.args.get('country', countries[0] if countries else None)
+    
+    # Get players for selected country
+    players = []
+    if selected_country:
+        players = Player.query.filter_by(team_code=selected_country).order_by(Player.last_name, Player.first_name).all()
+    
+    return render_template('edit_players.html', 
+                         countries=countries, 
+                         selected_country=selected_country, 
+                         players=players,
+                         team_iso_codes=TEAM_ISO_CODES)
+
+@main_bp.route('/add-player-global', methods=['POST'])
+def add_player_global():
+    """
+    Route to add a new player globally (not tied to a specific game/year).
+    """
+    team_code = request.form.get('team_code')
+    first_name = request.form.get('first_name')
+    last_name = request.form.get('last_name')
+    jersey_number_str = request.form.get('jersey_number')
+    
+    if not team_code or not first_name or not last_name:
+        flash('Team, Vorname und Nachname sind erforderlich.', 'danger')
+        return redirect(url_for('main_bp.edit_players'))
+    
+    try:
+        # Handle jersey number
+        jersey_number = None
+        if jersey_number_str and jersey_number_str.strip():
+            try:
+                jersey_number = int(jersey_number_str.strip())
+            except ValueError:
+                flash('Ungültige Trikotnummer.', 'warning')
+                return redirect(url_for('main_bp.edit_players'))
+        
+        # Check if player already exists
+        existing_player = Player.query.filter_by(
+            team_code=team_code, 
+            first_name=first_name.strip(), 
+            last_name=last_name.strip()
+        ).first()
+        
+        if existing_player:
+            flash(f'Spieler {first_name} {last_name} ({team_code}) existiert bereits.', 'warning')
+        else:
+            new_player = Player(
+                team_code=team_code,
+                first_name=first_name.strip(),
+                last_name=last_name.strip(),
+                jersey_number=jersey_number
+            )
+            db.session.add(new_player)
+            db.session.commit()
+            flash(f'Spieler {first_name} {last_name} erfolgreich hinzugefügt!', 'success')
+            
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error adding player: {str(e)}")
+        flash(f'Fehler beim Hinzufügen des Spielers: {str(e)}', 'danger')
+    
+    return redirect(url_for('main_bp.edit_players', country=team_code))

@@ -5,7 +5,7 @@ import traceback
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoal, TeamStats, TeamOverallStats, GameDisplay
 from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, OPP_COUNT_MAP, GOAL_TYPE_DISPLAY_MAP
-from utils import convert_time_to_seconds, check_game_data_consistency
+from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final
 
 year_bp = Blueprint('year_bp', __name__, url_prefix='/year')
 
@@ -179,7 +179,9 @@ def year_view(year_id):
                 else: return current_code 
             else: 
                 return current_code
-        return current_code 
+        return current_code
+
+
 
     games_processed = [GameDisplay(id=g.id, year_id=g.year_id, date=g.date, start_time=g.start_time, round=g.round, group=g.group, game_number=g.game_number, location=g.location, venue=g.venue, team1_code=g.team1_code, team2_code=g.team2_code, original_team1_code=g.team1_code, original_team2_code=g.team2_code, team1_score=g.team1_score, team2_score=g.team2_score, result_type=g.result_type, team1_points=g.team1_points, team2_points=g.team2_points) for g in games_raw]
 
@@ -198,19 +200,6 @@ def year_view(year_id):
 
             if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:
                 # Revised is_tX_final logic
-                def is_code_final(code_to_check):
-                    if not code_to_check or len(code_to_check) < 2: # Single characters or empty are not typically final team codes in this context, but also not typical placeholders we're catching
-                        return False # Or True, depending on how you define it. Let's assume short codes are not "resolved" for safety.
-                    
-                    # Check for specific placeholder patterns
-                    if re.match(r"^[AB][1-8]$", code_to_check): return False # e.g., A1, B4
-                    if re.match(r"^[WL]\(\d+\)$", code_to_check): return False # e.g., W(57), L(57)
-                    if re.match(r"^Q[1-4]$", code_to_check): return False # e.g., Q1, Q2 (used as placeholders for SF participants)
-                    if re.match(r"^SF[1-2]$", code_to_check): return False # e.g., SF1 (used as placeholders for Final participants)
-                    
-                    # If it doesn't match any known placeholder pattern, assume it's a final team code
-                    return True
-
                 is_t1_final = is_code_final(g_disp.team1_code)
                 is_t2_final = is_code_final(g_disp.team2_code)
 
@@ -790,7 +779,11 @@ def add_sog(game_id): # year_id is not strictly needed if game_id is globally un
                  current_sog_response.setdefault(tc_resp, {}) 
                  for p_resp in range(1,5): current_sog_response[tc_resp].setdefault(p_resp, 0)
         
-        return jsonify({'success': True, 'message': message, 'game_id': game_id, 'sog_data': current_sog_response})
+        # Check game data consistency after SOG update
+        consistency_result = check_game_data_consistency(game, current_sog_response)
+        scores_match = consistency_result['scores_fully_match_data']
+        
+        return jsonify({'success': True, 'message': message, 'game_id': game_id, 'sog_data': current_sog_response, 'scores_fully_match_goals': scores_match})
     except Exception as e:
         db.session.rollback(); current_app.logger.error(f"Error in add_sog: {str(e)}\n{traceback.format_exc()}")
         return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500

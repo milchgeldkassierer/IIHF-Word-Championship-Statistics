@@ -496,7 +496,7 @@
                             <td>{{ game.game_number }}</td>
                             <td>{{ game.date.split('-') | reverse | join('.') if game.date else '-' }}</td>
                             <td>{{ game.start_time.split(' ')[0] if game.start_time else '-' }}</td>
-                            {% if round_name == "Preliminary Round" %}<td>{{ game.group if game.group else 'N/A' }}</td>{% endif %}
+                            {% if round_name == "Preliminary Round" %}<td>{{ game.group.replace('Group ', '') if game.group else 'N/A' }}</td>{% endif %}
                             <td>
                                 {% if p1_display_iso %}<img src="https://flagcdn.com/w20/{{ p1_display_iso }}.png" alt="{{ p1_display_name }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
                                 {% if game.team1_score is not none and game.team2_score is not none and game.team1_points > game.team2_points %}<strong>{% endif %}
@@ -572,9 +572,9 @@
                                     <span id="scoreMatchIndicatorContainer-{{ game.id }}">
                                     {% if game.team1_score is not none or game.team2_score is not none %} {# Nur anzeigen, wenn mind. ein Score gesetzt ist #}
                                         {% if game.scores_fully_match_goals %}
-                                            <span class="text-success" title="Spielstand und erfasste Tore stimmen überein">✓</span>
+                                            <span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt">✓</span>
                                         {% else %}
-                                            <span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein">✗</span>
+                                            <span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein oder SOG-Daten fehlen für P1-P3">✗</span>
                                         {% endif %}
                                     {% endif %}
                                     </span>
@@ -1734,8 +1734,8 @@ $(document).ready(function(){
                 var team1ScoreIsSet = scoreInput1.val() !== '' && scoreInput1.val() !== null;
                 var team2ScoreIsSet = scoreInput2.val() !== '' && scoreInput2.val() !== null;
                 if (team1ScoreIsSet || team2ScoreIsSet) {
-                    if (data.scores_fully_match_goals) indicatorContainer.html('<span class="text-success" title="Spielstand und erfasste Tore stimmen überein">✓</span>');
-                    else indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein">✗</span>');
+                    if (data.scores_fully_match_goals) indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt">✓</span>');
+                    else indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein oder SOG-Daten fehlen für P1-P3">✗</span>');
                 } else { indicatorContainer.empty(); }
             }
         })
@@ -1907,6 +1907,26 @@ $(document).ready(function(){
                     }
                     updateTotalSogDisplay(gameId, team2Code, gameSogData[team2Code]); // Pass current team's SOG for total calculation
                 }
+                
+                // Update score match indicator after SOG update
+                if (data.hasOwnProperty('scores_fully_match_goals')) {
+                    var indicatorContainer = $('#scoreMatchIndicatorContainer-' + gameId);
+                    var gameRow = $('#game-' + gameId);
+                    var scoreInput1 = gameRow.find('input[name="team1_score"]');
+                    var scoreInput2 = gameRow.find('input[name="team2_score"]');
+                    var team1ScoreIsSet = scoreInput1.val() !== '' && scoreInput1.val() !== null;
+                    var team2ScoreIsSet = scoreInput2.val() !== '' && scoreInput2.val() !== null;
+
+                    if (team1ScoreIsSet || team2ScoreIsSet) {
+                        if (data.scores_fully_match_goals) {
+                            indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt">✓</span>');
+                        } else {
+                            indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein oder SOG-Daten fehlen für P1-P3">✗</span>');
+                        }
+                    } else {
+                        indicatorContainer.empty();
+                    }
+                }
             } else {
                 // Error message is already displayed by the generic logic above
             }
@@ -1979,9 +1999,9 @@ $(document).ready(function(){
 
                     if (team1ScoreIsSet || team2ScoreIsSet) {
                          if (data.scores_fully_match_goals) {
-                            indicatorContainer.html('<span class="text-success" title="Spielstand und erfasste Tore stimmen überein">✓</span>');
+                            indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt">✓</span>');
                         } else {
-                            indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein">✗</span>');
+                            indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein oder SOG-Daten fehlen für P1-P3">✗</span>');
                         }
                     } else {
                         indicatorContainer.empty();

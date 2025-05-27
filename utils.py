@@ -491,6 +491,64 @@ def check_game_data_consistency(game_display, sog_data=None):
                 warnings.append(f"Game {game_display.id}: Points don't match expected values for result")
                 scores_fully_match_data = False
     
+    # NEW: Check if goals match scores (with special rule for SO/penalty shootout)
+    if (game_display.team1_score is not None and game_display.team2_score is not None and 
+        hasattr(game_display, 'sorted_events') and game_display.sorted_events):
+        
+        # Count goals for each team from sorted_events
+        team1_goals = 0
+        team2_goals = 0
+        
+        for event in game_display.sorted_events:
+            if event.get('type') == 'goal':
+                goal_team = event.get('data', {}).get('team_code')
+                if goal_team == game_display.team1_code:
+                    team1_goals += 1
+                elif goal_team == game_display.team2_code:
+                    team2_goals += 1
+        
+        # Check if goals match scores
+        goals_match_scores = False
+        if game_display.result_type == 'SO':
+            # For penalty shootout: the winning team should have 1 LESS recorded goal than their final score
+            # (because the penalty shootout winning goal is not recorded as a regular goal event)
+            if game_display.team1_score > game_display.team2_score:
+                # Team 1 won in SO, so team1_goals should be 1 less than team1_score
+                goals_match_scores = (team1_goals == game_display.team1_score - 1) and \
+                                   (team2_goals == game_display.team2_score)
+            else:
+                # Team 2 won in SO, so team2_goals should be 1 less than team2_score
+                goals_match_scores = (team2_goals == game_display.team2_score - 1) and \
+                                   (team1_goals == game_display.team1_score)
+        else:
+            # For all other result types: goals must match scores exactly
+            goals_match_scores = (team1_goals == game_display.team1_score and 
+                                team2_goals == game_display.team2_score)
+        
+        if not goals_match_scores:
+            warnings.append(f"Game {game_display.id}: Recorded goals ({team1_goals}-{team2_goals}) don't match scores ({game_display.team1_score}-{game_display.team2_score})")
+            scores_fully_match_data = False
+    
+    # NEW: Check if SOG data is complete for all periods (P1, P2, P3)
+    if sog_data and game_display.team1_code and game_display.team2_code:
+        team1_sog = sog_data.get(game_display.team1_code, {})
+        team2_sog = sog_data.get(game_display.team2_code, {})
+        
+        # Check if all three periods (1, 2, 3) have SOG data for both teams
+        required_periods = [1, 2, 3]
+        missing_sog_periods = []
+        
+        for period in required_periods:
+            team1_has_sog = period in team1_sog and team1_sog[period] > 0
+            team2_has_sog = period in team2_sog and team2_sog[period] > 0
+            
+            if not (team1_has_sog and team2_has_sog):
+                missing_sog_periods.append(period)
+        
+        if missing_sog_periods:
+            warnings.append(f"Game {game_display.id}: Missing SOG data for period(s): {missing_sog_periods}")
+            scores_fully_match_data = False
+    
     return {
         'warnings': warnings,
         'scores_fully_match_data': scores_fully_match_data
