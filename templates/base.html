@@ -4,14 +4,57 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <title>{% block title %}IIHF Tabellenrechner{% endblock %}</title>
+    <style>
+        /* Custom navbar styling */
+        .navbar-dark.bg-dark {
+            background-color: #2d3748 !important;
+            border-bottom: 1px solid #4a5568;
+        }
+        
+        body.dark-mode .navbar-dark.bg-dark {
+            background-color: #1a202c !important;
+            border-bottom: 1px solid #2d3748;
+        }
+        
+        body.dark-mode .footer.bg-light {
+            background-color: #2d3748 !important;
+            border-top: 1px solid #4a5568;
+        }
+        
+        body.dark-mode .footer .text-muted {
+            color: #a0aec0 !important;
+        }
+        
+        /* Theme toggle button styling */
+        #theme-toggle {
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            transition: all 0.3s ease;
+        }
+        
+        #theme-toggle:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: scale(1.1);
+        }
+        
+        body.dark-mode #theme-toggle:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+    </style>
     {% block head_scripts %}{% endblock %}
 </head>
 <body>
     {% block navbar %}
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
-        <a class="navbar-brand" href="{{ url_for('main_bp.index') }}">IIHF Tabellenrechner</a>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <a class="navbar-brand" href="{{ url_for('main_bp.index') }}">IIHF Statistics</a>
         <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -30,7 +73,9 @@
                     <a class="nav-link" href="{{ url_for('main_bp.player_stats_view') }}">Spielerstatistiken</a>
                 </li>
             </ul>
-            <button id="theme-toggle" class="btn btn-outline-light btn-sm ml-auto">Light Mode</button>
+            <button id="theme-toggle" class="btn btn-outline-light btn-sm ml-auto" title="Toggle Dark/Light Mode">
+                <i class="fas fa-moon" id="theme-icon"></i>
+            </button>
         </div>
     </nav>
     {% endblock navbar %}
@@ -68,12 +113,14 @@
 
         // Function to apply theme based on preference
         function applyTheme(theme) {
+            const themeIcon = document.getElementById('theme-icon');
+            
             if (theme === 'dark') {
                 body.classList.add('dark-mode');
-                if (themeToggle) themeToggle.textContent = 'Light Mode';
+                if (themeIcon) themeIcon.className = 'fas fa-sun';
             } else {
                 body.classList.remove('dark-mode');
-                if (themeToggle) themeToggle.textContent = 'Dark Mode';
+                if (themeIcon) themeIcon.className = 'fas fa-moon';
             }
         }
 

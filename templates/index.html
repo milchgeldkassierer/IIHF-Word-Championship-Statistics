@@ -2,55 +2,127 @@
 
 {% block title %}Startseite - IIHF Tabellenrechner{% endblock %}
 
+{% block head_scripts %}
+<style>
+    .stats-section {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: box-shadow 0.3s ease;
+    }
+    
+    .stats-section:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .stats-title {
+        color: #495057;
+        border-bottom: 2px solid #6c757d;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+        font-weight: 600;
+    }
+    
+    /* Dark mode improvements */
+    body.dark-mode .stats-section {
+        background-color: #2d3748;
+        border-color: #4a5568;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    
+    body.dark-mode .stats-section:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    
+    body.dark-mode .stats-title {
+        color: #e2e8f0;
+        border-bottom-color: #a0aec0;
+    }
+    
+    body.dark-mode .form-group label {
+        color: #e2e8f0;
+    }
+    
+    body.dark-mode .list-group-item {
+        background-color: #2d3748;
+        border-color: #4a5568;
+        color: #e2e8f0;
+    }
+    
+    body.dark-mode .list-group-item a {
+        color: #4299e1;
+    }
+    
+    body.dark-mode .list-group-item a:hover {
+        color: #63b3ed;
+    }
+    
+    body.dark-mode .text-success {
+        color: #68d391 !important;
+    }
+    
+    body.dark-mode .text-warning {
+        color: #fbb040 !important;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-md-6">
-        <h2>Turnier anlegen / Jahr auswählen</h2>
-        <form method="POST" enctype="multipart/form-data" class="mb-4" action="{{ url_for('main_bp.index') }}">
-            <div class="form-group">
-                <label for="tournament_name">Name des Turniers</label>
-                <input type="text" class="form-control" id="tournament_name" name="tournament_name" placeholder="z.B. WM 2025 oder Virtual Cup" required>
-            </div>
-            <div class="form-group">
-                <label for="year">Jahr (Spielplan wird automatisch geladen)</label>
-                <select class="form-control" id="year" name="year" required>
-                    <option value="" disabled selected>Bitte Jahr auswählen</option>
-                    {% for year_option in available_fixture_years %}
-                    <option value="{{ year_option }}">{{ year_option }}</option>
-                    {% endfor %}
-                    {% if not available_fixture_years %}
-                    <option value="" disabled>Keine Spielpläne gefunden. Bitte .json Datei in 'fixtures' ablegen.</option>
-                    {% endif %}
-                </select>
-            </div>
-            <button type="submit" class="btn btn-primary">Turnier anlegen / Aktualisieren</button>
-        </form>
+        <div class="stats-section">
+            <h2 class="stats-title">Turnier anlegen / Jahr auswählen</h2>
+            <form method="POST" enctype="multipart/form-data" class="mb-4" action="{{ url_for('main_bp.index') }}">
+                <div class="form-group">
+                    <label for="tournament_name">Name des Turniers</label>
+                    <input type="text" class="form-control" id="tournament_name" name="tournament_name" placeholder="z.B. WM 2025 oder Virtual Cup" required>
+                </div>
+                <div class="form-group">
+                    <label for="year">Jahr (Spielplan wird automatisch geladen)</label>
+                    <select class="form-control" id="year" name="year" required>
+                        <option value="" disabled selected>Bitte Jahr auswählen</option>
+                        {% for year_option in available_fixture_years %}
+                        <option value="{{ year_option }}">{{ year_option }}</option>
+                        {% endfor %}
+                        {% if not available_fixture_years %}
+                        <option value="" disabled>Keine Spielpläne gefunden. Bitte .json Datei in 'fixtures' ablegen.</option>
+                        {% endif %}
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Turnier anlegen / Aktualisieren</button>
+            </form>
+        </div>
     </div>
 
     <div class="col-md-6">
-        <h2>Vorhandene Turniere</h2>
-        {% if all_years %}
-            <ul class="list-group">
-                {% for y in all_years %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <a href="{{ url_for('year_bp.year_view', year_id=y.id) }}">{{ y.name }} ({{y.year}})</a>
-                    <span>
-                        {% if y.fixture_path %}
-                            <small class="text-success">Spielplan vorhanden</small>
-                        {% else %}
-                            <small class="text-warning">Kein Spielplan</small>
-                        {% endif %}
-                    </span>
-                    <form method="POST" style="display: inline;" onsubmit="return confirm('Sind Sie sicher, dass Sie das Turnier \'{{ y.name }} ({{ y.year }})\' und alle zugehörigen Daten löschen möchten?');" action="{{ url_for('main_bp.index') }}">
-                        <input type="hidden" name="year_id_to_delete" value="{{ y.id }}">
-                        <button type="submit" name="delete_year" class="btn btn-danger btn-sm">Löschen</button>
-                    </form>
-                </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>Noch keine Turniere angelegt.</p>
-        {% endif %}
+        <div class="stats-section">
+            <h2 class="stats-title">Vorhandene Turniere</h2>
+            {% if all_years %}
+                <ul class="list-group">
+                    {% for y in all_years %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <a href="{{ url_for('year_bp.year_view', year_id=y.id) }}">{{ y.name }} ({{y.year}})</a>
+                        <span>
+                            {% if y.fixture_path %}
+                                <small class="text-success">Spielplan vorhanden</small>
+                            {% else %}
+                                <small class="text-warning">Kein Spielplan</small>
+                            {% endif %}
+                        </span>
+                        <form method="POST" style="display: inline;" onsubmit="return confirm('Sind Sie sicher, dass Sie das Turnier \'{{ y.name }} ({{ y.year }})\' und alle zugehörigen Daten löschen möchten?');" action="{{ url_for('main_bp.index') }}">
+                            <input type="hidden" name="year_id_to_delete" value="{{ y.id }}">
+                            <button type="submit" name="delete_year" class="btn btn-danger btn-sm">Löschen</button>
+                        </form>
+                    </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Noch keine Turniere angelegt.</p>
+            {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %} 
