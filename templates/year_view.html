@@ -96,23 +96,33 @@
         }
         
         body.dark-mode .table-success {
-            background-color: rgba(72, 187, 120, 0.25) !important;
-            border-color: rgba(72, 187, 120, 0.4) !important;
+            background-color: rgba(34, 139, 34, 0.3) !important;
+            border-color: rgba(34, 139, 34, 0.5) !important;
         }
         
         body.dark-mode .table-success td {
-            color: #9ae6b4 !important;
+            color: #ffffff !important;
             font-weight: 500;
         }
         
         body.dark-mode .table-danger {
-            background-color: rgba(245, 101, 101, 0.25) !important;
-            border-color: rgba(245, 101, 101, 0.4) !important;
+            background-color: rgba(178, 34, 34, 0.3) !important;
+            border-color: rgba(178, 34, 34, 0.5) !important;
         }
         
         body.dark-mode .table-danger td {
-            color: #feb2b2 !important;
+            color: #ffffff !important;
             font-weight: 500;
+        }
+        
+        body.dark-mode .table-success:hover td {
+            color: #ffffff !important;
+            background-color: rgba(34, 139, 34, 0.4) !important;
+        }
+        
+        body.dark-mode .table-danger:hover td {
+            color: #ffffff !important;
+            background-color: rgba(178, 34, 34, 0.4) !important;
         }
         
         body.dark-mode .table td strong {
@@ -1327,8 +1337,17 @@
 {{ super() }}
 <script>
 $(document).ready(function(){
-    // Initialize tooltips
-    $('[data-toggle="tooltip"]').tooltip();
+    // Initialize tooltips - Disable Bootstrap tooltips and use native browser tooltips
+    // Convert data-toggle="tooltip" to native title attributes
+    $('[data-toggle="tooltip"]').each(function() {
+        var $this = $(this);
+        var tooltipText = $this.attr('title') || $this.attr('data-original-title');
+        if (tooltipText) {
+            $this.attr('title', tooltipText);
+            $this.removeAttr('data-toggle');
+            $this.removeAttr('data-original-title');
+        }
+    });
 
     // SOG Form Submission Handler using jQuery event delegation
     $(document).on('submit', 'form[id^="sogEditForm-"]', function(event) { // Changed ID to sogEditForm-

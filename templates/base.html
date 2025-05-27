@@ -50,6 +50,31 @@
         }
     </style>
     {% block head_scripts %}{% endblock %}
+    
+    <!-- Immediate theme application to prevent flashing -->
+    <script>
+        (function() {
+            let savedTheme = localStorage.getItem('theme');
+            if (!savedTheme) {
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    savedTheme = 'dark';
+                } else {
+                    savedTheme = 'light';
+                }
+            }
+            if (savedTheme === 'dark') {
+                document.documentElement.classList.add('dark-mode-loading');
+            }
+        })();
+    </script>
+    
+    <style>
+        /* Immediate dark mode styles to prevent flashing */
+        html.dark-mode-loading body {
+            background-color: #1a202c !important;
+            color: #e2e8f0 !important;
+        }
+    </style>
 </head>
 <body>
     {% block navbar %}
@@ -118,6 +143,9 @@
         function applyTheme(theme) {
             const themeIcon = document.getElementById('theme-icon');
             
+            // Remove the loading class
+            document.documentElement.classList.remove('dark-mode-loading');
+            
             if (theme === 'dark') {
                 body.classList.add('dark-mode');
                 if (themeIcon) themeIcon.className = 'fas fa-sun';
@@ -129,7 +157,6 @@
 
         // Function to toggle theme and save preference
         function toggleTheme() {
-            // let currentTheme = localStorage.getItem('theme'); // Not strictly needed here
             if (body.classList.contains('dark-mode')) { // If currently dark, switch to light
                 localStorage.setItem('theme', 'light');
                 applyTheme('light');
@@ -140,13 +167,12 @@
         }
 
         // Initial theme application on page load
-        // Prefer OS setting if available and no user preference yet
         let savedTheme = localStorage.getItem('theme');
         if (!savedTheme) {
             if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
                 savedTheme = 'dark';
             } else {
-                savedTheme = 'light'; // Default to light if OS preference not dark or not detectable
+                savedTheme = 'light';
             }
         }
         applyTheme(savedTheme);

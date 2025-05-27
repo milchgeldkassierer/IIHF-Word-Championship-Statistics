@@ -4,6 +4,32 @@
 
 {% block head_scripts %}
 <style>
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+    }
+    
+    .sortable:hover {
+        background-color: rgba(0, 0, 0, 0.1);
+    }
+    
+    .sortable::after {
+        content: ' ↕';
+        font-size: 0.8em;
+        color: #999;
+    }
+    
+    .sortable.asc::after {
+        content: ' ↑';
+        color: #007bff;
+    }
+    
+    .sortable.desc::after {
+        content: ' ↓';
+        color: #007bff;
+    }
+
     .stats-section {
         background-color: #fff;
         border: 1px solid #dee2e6;
@@ -65,6 +91,19 @@
     body.dark-mode .table-hover tbody tr:hover {
         background-color: rgba(255, 255, 255, 0.1);
     }
+    
+    body.dark-mode .sortable:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    body.dark-mode .sortable::after {
+        color: #a0aec0;
+    }
+    
+    body.dark-mode .sortable.asc::after,
+    body.dark-mode .sortable.desc::after {
+        color: #4299e1;
+    }
 </style>
 {% endblock %}
 
@@ -75,23 +114,23 @@
 
         {% if standings_data %}
         <div class="table-responsive">
-            <table class="table table-striped table-hover table-sm">
+            <table id="allTimeStandingsTable" class="table table-striped table-hover table-sm">
                 <thead class="thead-dark">
                     <tr>
                         <th scope="col">#</th>
                         <th scope="col" colspan="2">Team</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Years Participated">Yrs</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Games Played">GP</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Wins (Regulation)">W</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Overtime Wins">OTW</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Shootout Wins">SOW</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Losses (Regulation)">L</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Overtime Losses">OTL</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Shootout Losses">SOL</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Goals For">GF</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Goals Against">GA</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Goal Difference">GD</th>
-                        <th scope="col" data-bs-toggle="tooltip" title="Points">PTS</th>
+                        <th scope="col" class="sortable" data-column="years" title="Years Participated">Yrs</th>
+                        <th scope="col" class="sortable" data-column="gp" title="Games Played">GP</th>
+                        <th scope="col" class="sortable" data-column="w" title="Wins (Regulation)">W</th>
+                        <th scope="col" class="sortable" data-column="otw" title="Overtime Wins">OTW</th>
+                        <th scope="col" class="sortable" data-column="sow" title="Shootout Wins">SOW</th>
+                        <th scope="col" class="sortable" data-column="l" title="Losses (Regulation)">L</th>
+                        <th scope="col" class="sortable" data-column="otl" title="Overtime Losses">OTL</th>
+                        <th scope="col" class="sortable" data-column="sol" title="Shootout Losses">SOL</th>
+                        <th scope="col" class="sortable" data-column="gf" title="Goals For">GF</th>
+                        <th scope="col" class="sortable" data-column="ga" title="Goals Against">GA</th>
+                        <th scope="col" class="sortable" data-column="gd" title="Goal Difference">GD</th>
+                        <th scope="col" class="sortable" data-column="pts" title="Points">PTS</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -108,18 +147,18 @@
                             {% endif %}
                         </td>
                         <td>{{ stat_entry.team_code }}</td>
-                        <td>{{ stat_entry.num_years_participated }}</td>
-                        <td>{{ stat_entry.gp }}</td>
-                        <td>{{ stat_entry.w }}</td>
-                        <td>{{ stat_entry.otw }}</td>
-                        <td>{{ stat_entry.sow }}</td>
-                        <td>{{ stat_entry.l }}</td>
-                        <td>{{ stat_entry.otl }}</td>
-                        <td>{{ stat_entry.sol }}</td>
-                        <td>{{ stat_entry.gf }}</td>
-                        <td>{{ stat_entry.ga }}</td>
-                        <td>{{ stat_entry.gd }}</td>
-                        <td><strong>{{ stat_entry.pts }}</strong></td>
+                        <td data-value="{{ stat_entry.num_years_participated }}">{{ stat_entry.num_years_participated }}</td>
+                        <td data-value="{{ stat_entry.gp }}">{{ stat_entry.gp }}</td>
+                        <td data-value="{{ stat_entry.w }}">{{ stat_entry.w }}</td>
+                        <td data-value="{{ stat_entry.otw }}">{{ stat_entry.otw }}</td>
+                        <td data-value="{{ stat_entry.sow }}">{{ stat_entry.sow }}</td>
+                        <td data-value="{{ stat_entry.l }}">{{ stat_entry.l }}</td>
+                        <td data-value="{{ stat_entry.otl }}">{{ stat_entry.otl }}</td>
+                        <td data-value="{{ stat_entry.sol }}">{{ stat_entry.sol }}</td>
+                        <td data-value="{{ stat_entry.gf }}">{{ stat_entry.gf }}</td>
+                        <td data-value="{{ stat_entry.ga }}">{{ stat_entry.ga }}</td>
+                        <td data-value="{{ stat_entry.gd }}">{{ stat_entry.gd }}</td>
+                        <td data-value="{{ stat_entry.pts }}"><strong>{{ stat_entry.pts }}</strong></td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -131,14 +170,91 @@
     </div>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
 <script>
-// Optional: Initialize Bootstrap tooltips
-document.addEventListener('DOMContentLoaded', function () {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl)
-    })
+$(document).ready(function() {
+    let currentSort = { column: null, direction: 'asc' };
+    
+    // Function to update ranking numbers after sorting
+    function updateRankingNumbers() {
+        $('#allTimeStandingsTable tbody tr').each(function(index) {
+            $(this).find('td:first').text(index + 1);
+        });
+    }
+    
+    // Sorting functionality
+    $('#allTimeStandingsTable .sortable').on('click', function() {
+        const column = $(this).data('column');
+        const table = $('#allTimeStandingsTable tbody');
+        const rows = table.find('tr').toArray();
+        
+        // Determine sort direction
+        if (currentSort.column === column) {
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            // Default direction based on column type
+            if (['ga', 'l', 'otl', 'sol'].includes(column)) {
+                currentSort.direction = 'asc'; // Lower is better for these stats
+            } else {
+                currentSort.direction = 'desc'; // Higher is better for most stats
+            }
+        }
+        currentSort.column = column;
+        
+        // Update header indicators
+        $('#allTimeStandingsTable .sortable').removeClass('asc desc');
+        $(this).addClass(currentSort.direction);
+        
+        // Sort rows
+        rows.sort(function(a, b) {
+            let aVal, bVal;
+            
+            // Map column names to their actual column indices (accounting for colspan)
+            const columnMap = {
+                'years': 3,    // 4th column (0-based: #, flag, team, years)
+                'gp': 4,       // 5th column
+                'w': 5,        // 6th column
+                'otw': 6,      // 7th column
+                'sow': 7,      // 8th column
+                'l': 8,        // 9th column
+                'otl': 9,      // 10th column
+                'sol': 10,     // 11th column
+                'gf': 11,      // 12th column
+                'ga': 12,      // 13th column
+                'gd': 13,      // 14th column
+                'pts': 14      // 15th column
+            };
+            
+            const columnIndex = columnMap[column];
+            
+            if (columnIndex !== undefined) {
+                aVal = parseFloat($(a).find('td').eq(columnIndex).data('value')) || 0;
+                bVal = parseFloat($(b).find('td').eq(columnIndex).data('value')) || 0;
+            } else {
+                return 0;
+            }
+            
+            if (currentSort.direction === 'asc') {
+                return aVal - bVal;
+            } else {
+                return bVal - aVal;
+            }
+        });
+        
+        // Re-append sorted rows and update ranking numbers
+        table.empty().append(rows);
+        updateRankingNumbers();
+    });
+    
+    // Initial sort by points (descending)
+    setTimeout(function() {
+        $('#allTimeStandingsTable th[data-column="pts"]').click();
+    }, 100);
 });
+
+// Native browser tooltips are used via the title attribute - no Bootstrap tooltips needed
 </script>
 
 {% endblock %}

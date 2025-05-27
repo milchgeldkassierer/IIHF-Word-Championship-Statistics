@@ -344,7 +344,10 @@ $(document).ready(function() {
     
     // Sorting functionality for all tables
     function setupSorting(tableId, sortKey) {
-        $(`#${tableId} .sortable`).click(function() {
+        // Remove existing click handlers to prevent duplicates
+        $(`#${tableId} .sortable`).off('click.sorting');
+        
+        $(`#${tableId} .sortable`).on('click.sorting', function() {
             const column = $(this).data('column');
             const table = $(`#${tableId} tbody`);
             const rows = table.find('tr').toArray();
@@ -423,15 +426,18 @@ $(document).ready(function() {
                 $('#top-assist-providers-body').html($newContent.find('#top-assist-providers-body').html());
                 $('#top-penalty-players-body').html($newContent.find('#top-penalty-players-body').html());
                 
-                // Update toggle buttons visibility
+                // Update toggle buttons visibility and text
                 $('.toggle-stats-visibility').each(function() {
                     const $button = $(this);
                     const targetBodySelector = $button.data('target-body');
-                    const $newButton = $newContent.find(`.toggle-stats-visibility[data-target-body="${targetBodySelector}"]`);
+                    const $targetBody = $(targetBodySelector);
+                    const extraRows = $targetBody.find('tr.extra-stats-row');
                     
-                    if ($newButton.length > 0) {
+                    if (extraRows.length > 0) {
                         $button.show();
                         $button.text('Alle anzeigen'); // Reset button text
+                        // Make sure extra rows are hidden initially
+                        extraRows.addClass('d-none').hide();
                     } else {
                         $button.hide();
                     }
@@ -440,11 +446,30 @@ $(document).ready(function() {
                 // Remove loading indicator
                 $('.stats-section').removeClass('opacity-50');
                 
-                // Re-setup sorting for updated tables
+                // Reset sort state and re-setup sorting for updated tables
+                currentSort = { 
+                    scoring: { column: null, direction: 'asc' },
+                    goals: { column: null, direction: 'asc' },
+                    assists: { column: null, direction: 'asc' },
+                    pims: { column: null, direction: 'asc' }
+                };
+                
+                // Remove all sorting indicators
+                $('.sortable').removeClass('asc desc');
+                
                 setupSorting('scoringStatsTable', 'scoring');
                 setupSorting('goalScorersTable', 'goals');
                 setupSorting('assistProvidersTable', 'assists');
                 setupSorting('pimsStatsTable', 'pims');
+                
+                // Re-setup toggle functionality for new content
+                setupToggleFunctionality();
+                
+                // Update ranking numbers for all tables
+                updateRankingNumbers('scoringStatsTable');
+                updateRankingNumbers('goalScorersTable');
+                updateRankingNumbers('assistProvidersTable');
+                updateRankingNumbers('pimsStatsTable');
                 
                 // Apply initial sort
                 $('#scoringStatsTable th[data-column="scorer_points"]').click();
@@ -459,23 +484,35 @@ $(document).ready(function() {
         });
     });
     
-    // Statistics table toggle functionality
-    $('.toggle-stats-visibility').on('click', function() {
-        var $button = $(this);
-        var targetBodySelector = $button.data('target-body');
-        var $tableBody = $(targetBodySelector);
+    // Function to setup toggle functionality
+    function setupToggleFunctionality() {
+        // Remove existing event handlers to prevent duplicates
+        $('.toggle-stats-visibility').off('click.toggle');
         
-        if ($button.text() === 'Alle anzeigen') {
-            $tableBody.find('tr.extra-stats-row').removeClass('d-none').show();
-            $button.text('Weniger anzeigen');
-        } else {
-            $tableBody.find('tr.extra-stats-row').addClass('d-none').hide();
-            $button.text('Alle anzeigen');
-        }
-        
-        // Re-apply team filter after toggle
-        $('#teamFilter').trigger('change');
-    });
+        // Add new event handlers
+        $('.toggle-stats-visibility').on('click.toggle', function() {
+            var $button = $(this);
+            var targetBodySelector = $button.data('target-body');
+            var $tableBody = $(targetBodySelector);
+            
+            if ($button.text() === 'Alle anzeigen') {
+                $tableBody.find('tr.extra-stats-row').removeClass('d-none').show();
+                $button.text('Weniger anzeigen');
+            } else {
+                $tableBody.find('tr.extra-stats-row').addClass('d-none').hide();
+                $button.text('Alle anzeigen');
+            }
+            
+            // Update ranking numbers after toggle
+            const tableId = $tableBody.closest('table').attr('id');
+            if (tableId) {
+                updateRankingNumbers(tableId);
+            }
+        });
+    }
+    
+    // Initial setup of toggle functionality
+    setupToggleFunctionality();
 
     // Initial sort - all tables by their main stat (descending)
     $('#scoringStatsTable th[data-column="scorer_points"]').click(); // Points descending
