@@ -1004,10 +1004,11 @@
                     <p>Keine Scorer-Daten (Punkte) vorhanden{% if selected_team %} für {{ selected_team }}{% endif %}.</p>
                     {% endif %}
                 </div>
+            </div>
 
-                {# Remove the row that was making them side-by-side #}
-                {# Top Goal Scorers (Tore) - ensure it's col-md-12 #}
-                <div class="col-md-12 mb-4 stats-section" id="top-goal-scorers-section">
+            <div class="row">
+                {# Top Goal Scorers (Tore) - side by side with Assists #}
+                <div class="col-lg-6 mb-4 stats-section" id="top-goal-scorers-section">
                     <h3>Top Torschützen (Tore) {% if selected_team %} ({{ selected_team }}) {% endif %}</h3>
                     {% if top_goal_scorers %}
                     <table class="table table-sm table-striped">
@@ -1042,8 +1043,8 @@
                     {% endif %}
                 </div>
 
-                {# Top Assist Providers (Assists) - ensure it's col-md-12 #}
-                <div class="col-md-12 mb-4 stats-section" id="top-assist-providers-section">
+                {# Top Assist Providers (Assists) - side by side with Goals #}
+                <div class="col-lg-6 mb-4 stats-section" id="top-assist-providers-section">
                     <h3>Top Assistgeber (Assists) {% if selected_team %} ({{ selected_team }}) {% endif %}</h3>
                     {% if top_assist_providers %}
                     <table class="table table-sm table-striped">
@@ -1077,7 +1078,9 @@
                     <p>Keine Assist-Daten vorhanden{% if selected_team %} für {{ selected_team }}{% endif %}.</p>
                     {% endif %}
                 </div>
-                {# The .row div was removed from here #}
+            </div>
+
+            <div class="row">
 
                 {# Most Penalty Minutes (PIM) #}
                 <div class="col-md-12 mb-4 stats-section" id="top-penalty-players-section">
