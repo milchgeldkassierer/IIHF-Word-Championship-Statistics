@@ -376,7 +376,7 @@
         <div class="container">
             <div class="row align-items-center">
                 <div class="col-md-4 team-section">
-                    {% set t1_iso_header = team_iso_codes.get(t1_key) %}
+                    {% set t1_iso_header = team_iso_codes.get(t1_key.upper()) %}
                     {% if t1_iso_header %}
                         <img src="https://flagcdn.com/w80/{{ t1_iso_header }}.png" alt="{{ t1_key }}" class="team-flag mb-3">
                     {% endif %}
@@ -391,7 +391,7 @@
                     </div>
                 </div>
                 <div class="col-md-4 team-section">
-                    {% set t2_iso_header = team_iso_codes.get(t2_key) %}
+                    {% set t2_iso_header = team_iso_codes.get(t2_key.upper()) %}
                     {% if t2_iso_header %}
                         <img src="https://flagcdn.com/w80/{{ t2_iso_header }}.png" alt="{{ t2_key }}" class="team-flag mb-3">
                     {% endif %}
@@ -422,7 +422,7 @@
                     <tbody>
                         <tr>
                             <td class="text-left">
-                                {% set t1_iso_period = team_iso_codes.get(t1_key) %}
+                                {% set t1_iso_period = team_iso_codes.get(t1_key.upper()) %}
                                 {% if t1_iso_period %}<img src="https://flagcdn.com/w20/{{ t1_iso_period }}.png" alt="{{ t1_key }}" class="mr-2">{% endif %}
                                 {{ t1_key }}
                             </td>
@@ -436,7 +436,7 @@
                         </tr>
                         <tr>
                             <td class="text-left">
-                                {% set t2_iso_period = team_iso_codes.get(t2_key) %}
+                                {% set t2_iso_period = team_iso_codes.get(t2_key.upper()) %}
                                 {% if t2_iso_period %}<img src="https://flagcdn.com/w20/{{ t2_iso_period }}.png" alt="{{ t2_key }}" class="mr-2">{% endif %}
                                 {{ t2_key }}
                             </td>

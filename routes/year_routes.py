@@ -11,6 +11,7 @@ year_bp = Blueprint('year_bp', __name__, url_prefix='/year')
 
 @year_bp.route('/<int:year_id>', methods=['GET', 'POST'])
 def year_view(year_id):
+    
     year_obj = db.session.get(ChampionshipYear, year_id)
     if not year_obj:
         flash('Tournament year not found.', 'danger'); return redirect(url_for('main_bp.index'))
@@ -107,6 +108,8 @@ def year_view(year_id):
     
     qf_game_numbers = []
     sf_game_numbers = []
+    bronze_game_number = None
+    gold_game_number = None
     tournament_hosts = []
 
     fixture_path_exists = False # Default to false
@@ -126,20 +129,33 @@ def year_view(year_id):
             for i, game_data in enumerate(schedule_data):
                 round_name = game_data.get("round", "").lower()
                 game_num = game_data.get("gameNumber")
+                
+                # Debug output for playoff rounds
+                if "quarterfinal" in round_name or "semifinal" in round_name or "bronze" in round_name or "gold" in round_name or "final" in round_name:
+                    pass  # This was for debug output, now just continue
+                
                 if "quarterfinal" in round_name: 
                     qf_game_numbers.append(game_num)
                 elif "semifinal" in round_name: 
                     sf_game_numbers.append(game_num)
+                elif "bronze medal game" in round_name or "bronze" in round_name or "3rd place" in round_name:
+                    bronze_game_number = game_num
+                elif "gold medal game" in round_name or "final" in round_name or "gold" in round_name:
+                    gold_game_number = game_num
             sf_game_numbers.sort()
         except Exception as e: 
             current_app.logger.error(f"Could not parse fixture {year_obj.fixture_path} for playoff game numbers. Error: {e}") 
             if year_obj.year == 2025: 
                 qf_game_numbers = [57, 58, 59, 60]
                 sf_game_numbers = [61, 62]
+                bronze_game_number = 63
+                gold_game_number = 64
                 tournament_hosts = ["SWE", "DEN"]
             else:
                 qf_game_numbers = []
                 sf_game_numbers = []
+                bronze_game_number = None
+                gold_game_number = None
                 tournament_hosts = []
 
     if sf_game_numbers and len(sf_game_numbers) >= 2 and all(isinstance(item, int) for item in sf_game_numbers):
@@ -204,7 +220,7 @@ def year_view(year_id):
                 is_t2_final = is_code_final(g_disp.team2_code)
 
                 if g_disp.game_number in qf_game_numbers: # Specifically debug QF games
-                    pass # Was: print(f"DEBUG: Loop pass {_pass_num}, QF Game {g_disp.game_number}: Current g_disp.team1_code={g_disp.team1_code}, g_disp.team2_code={g_disp.team2_code}, is_t1_final={is_t1_final}, is_t2_final={is_t2_final}, score1={g_disp.team1_score}")
+                    pass  # Was used for debug output
 
                 if is_t1_final and is_t2_final:
                     actual_winner = g_disp.team1_code if g_disp.team1_score > g_disp.team2_score else g_disp.team2_code
@@ -223,6 +239,7 @@ def year_view(year_id):
     # This block is now OUTSIDE the main processing loop and runs once.
 
     if qf_game_numbers and sf_game_numbers and len(sf_game_numbers) == 2:
+        
         qf_winners_teams = []
         all_qf_winners_resolved = True
         for qf_game_num in qf_game_numbers:
@@ -234,12 +251,14 @@ def year_view(year_id):
             else:
                 all_qf_winners_resolved = False; break
         
+        
         if all_qf_winners_resolved and len(qf_winners_teams) == 4:
             qf_winners_stats = []
             for team_name in qf_winners_teams:
                 if team_name in teams_stats: 
                     qf_winners_stats.append(teams_stats[team_name])
-                else: all_qf_winners_resolved = False; break 
+                else: 
+                    all_qf_winners_resolved = False; break 
             
             if all_qf_winners_resolved and len(qf_winners_stats) == 4:
                 qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
@@ -262,6 +281,7 @@ def year_view(year_id):
                 if not primary_host_plays_sf1: 
                     sf_game1_teams = matchup1; sf_game2_teams = matchup2
 
+
                 sf_game_obj_1 = games_dict_by_num.get(sf_game_numbers[0])
                 sf_game_obj_2 = games_dict_by_num.get(sf_game_numbers[1])
 
@@ -276,7 +296,78 @@ def year_view(year_id):
                         playoff_team_map[sf_game_obj_2.team1_code] = sf_game2_teams[0]
                     if playoff_team_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
                         playoff_team_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
+                    
+                    # Add Q1-Q4 mappings based on the semifinal assignments
+                    # Q1 and Q2 are the teams in the first semifinal game
+                    # Q3 and Q4 are the teams in the second semifinal game
+                    playoff_team_map['Q1'] = sf_game1_teams[0]  # First team in SF1
+                    playoff_team_map['Q2'] = sf_game1_teams[1]  # Second team in SF1
+                    playoff_team_map['Q3'] = sf_game2_teams[0]  # First team in SF2
+                    playoff_team_map['Q4'] = sf_game2_teams[1]  # Second team in SF2
+                    
+                else:
+                    pass  # Empty else block
+            else:
+                pass  # Empty else block
+        else:
+            pass  # Empty else block
+    else:
+        pass  # Empty else block
 
+    # --- FALLBACK Q1-Q4 MAPPING ---
+    # If the full semifinal logic didn't run, try to map Q1-Q4 to available QF winners
+    if qf_game_numbers and len(qf_game_numbers) == 4 and 'Q1' not in playoff_team_map:
+        for i, qf_game_num in enumerate(qf_game_numbers):
+            winner_placeholder = f'W({qf_game_num})'
+            resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
+            
+            
+            if is_code_final(resolved_qf_winner):
+                q_code = f'Q{i+1}'  # Q1, Q2, Q3, Q4
+                playoff_team_map[q_code] = resolved_qf_winner
+            else:
+                pass  # Empty else block
+    else:
+        pass  # Empty else block
+
+    # --- BRONZE AND GOLD MEDAL GAME LOGIC ---
+    # Handle Bronze Medal Game (losers of semifinals) and Gold Medal Game (winners of semifinals)
+    if sf_game_numbers and len(sf_game_numbers) == 2 and bronze_game_number and gold_game_number:
+        bronze_game_obj = games_dict_by_num.get(bronze_game_number)
+        gold_game_obj = games_dict_by_num.get(gold_game_number)
+        
+        if bronze_game_obj and gold_game_obj:
+            # Map SF1 and SF2 to actual game numbers
+            sf1_game_number = sf_game_numbers[0]  # First semifinal game
+            sf2_game_number = sf_game_numbers[1]  # Second semifinal game
+            
+            # Add mappings for SF1 and SF2 placeholders
+            playoff_team_map['SF1'] = str(sf1_game_number)
+            playoff_team_map['SF2'] = str(sf2_game_number)
+            
+            # Bronze Medal Game: L(SF1) vs L(SF2) -> L(61) vs L(62)
+            sf1_loser_placeholder = f'L({sf1_game_number})'
+            sf2_loser_placeholder = f'L({sf2_game_number})'
+            
+            # Gold Medal Game: W(SF1) vs W(SF2) -> W(61) vs W(62)
+            sf1_winner_placeholder = f'W({sf1_game_number})'
+            sf2_winner_placeholder = f'W({sf2_game_number})'
+            
+            # Update Bronze Medal Game teams (map L(SF1) -> L(61), L(SF2) -> L(62))
+            if playoff_team_map.get(bronze_game_obj.team1_code) != sf1_loser_placeholder:
+                playoff_team_map[bronze_game_obj.team1_code] = sf1_loser_placeholder
+            if playoff_team_map.get(bronze_game_obj.team2_code) != sf2_loser_placeholder:
+                playoff_team_map[bronze_game_obj.team2_code] = sf2_loser_placeholder
+                
+            # Update Gold Medal Game teams (map W(SF1) -> W(61), W(SF2) -> W(62))
+            if playoff_team_map.get(gold_game_obj.team1_code) != sf1_winner_placeholder:
+                playoff_team_map[gold_game_obj.team1_code] = sf1_winner_placeholder
+            if playoff_team_map.get(gold_game_obj.team2_code) != sf2_winner_placeholder:
+                playoff_team_map[gold_game_obj.team2_code] = sf2_winner_placeholder
+        else:
+            pass  # Empty else block
+    else:
+        pass  # Empty else block
 
     # Perform a final resolution pass using the updated playoff_team_map
     for g_disp_final_pass in games_processed:
@@ -444,66 +535,51 @@ def year_view(year_id):
                 
                 # SOG stats
                 game_sog_info = sog_by_game_team.get(raw_game_obj_this_iter.id, {})
-                if current_team_original_fixture_code_for_game:
-                    stats.sog += game_sog_info.get(current_team_original_fixture_code_for_game, 0)
-                if opponent_original_fixture_code_for_game:
-                    stats.soga += game_sog_info.get(opponent_original_fixture_code_for_game, 0)
+                # Use resolved team codes to match SOG data from database (SOG is stored with resolved team names)
+                if resolved_game_this_iter.team1_code == current_team_code:
+                    # Current team is team1 in resolved game
+                    stats.sog += game_sog_info.get(current_team_code, 0)  # Use resolved team code
+                    stats.soga += game_sog_info.get(resolved_game_this_iter.team2_code, 0)  # Use opponent's resolved code
+                elif resolved_game_this_iter.team2_code == current_team_code:
+                    # Current team is team2 in resolved game  
+                    stats.sog += game_sog_info.get(current_team_code, 0)  # Use resolved team code
+                    stats.soga += game_sog_info.get(resolved_game_this_iter.team1_code, 0)  # Use opponent's resolved code
             
             # Goals and Powerplay related stats
             for goal_event in all_goals_for_year:
                 if goal_event.game_id not in games_processed_map: continue
                 
                 resolved_game_of_goal = games_processed_map.get(goal_event.game_id)
-                raw_game_of_goal = games_raw_map.get(goal_event.game_id)
-                if not raw_game_of_goal or not resolved_game_of_goal: continue
+                if not resolved_game_of_goal: continue
 
-                # Determine original fixture codes for the teams in the game of the goal
-                # based on current_team_code's participation in the resolved game
-                current_team_orig_code_in_goal_game = None
-                opponent_orig_code_in_goal_game = None
-
-                if resolved_game_of_goal.team1_code == current_team_code:
-                    current_team_orig_code_in_goal_game = raw_game_of_goal.team1_code
-                    opponent_orig_code_in_goal_game = raw_game_of_goal.team2_code
-                elif resolved_game_of_goal.team2_code == current_team_code:
-                    current_team_orig_code_in_goal_game = raw_game_of_goal.team2_code
-                    opponent_orig_code_in_goal_game = raw_game_of_goal.team1_code
-                else:
-                    continue # current_team_code did not play in the game of this goal
-
-                # goal_event.team_code is the original fixture code of the scoring team
-                if goal_event.team_code == current_team_orig_code_in_goal_game:
+                # goal_event.team_code is the resolved team name (stored when goal was added)
+                # Check if this goal was scored by the current team or against them
+                if goal_event.team_code == current_team_code:
+                    # Current team scored this goal
                     if goal_event.is_empty_net: stats.eng += 1
                     if goal_event.goal_type == 'PP': stats.ppgf += 1
-                elif goal_event.team_code == opponent_orig_code_in_goal_game:
-                    if goal_event.goal_type == 'PP': stats.ppga +=1
+                elif (resolved_game_of_goal.team1_code == current_team_code and goal_event.team_code == resolved_game_of_goal.team2_code) or \
+                     (resolved_game_of_goal.team2_code == current_team_code and goal_event.team_code == resolved_game_of_goal.team1_code):
+                    # Opponent scored this goal against current team
+                    if goal_event.goal_type == 'PP': stats.ppga += 1
 
             # Penalties and PIM/Opportunity related stats
             for penalty_event in all_penalties_for_year_detailed:
                 if penalty_event.game_id not in games_processed_map: continue
 
                 resolved_game_of_penalty = games_processed_map.get(penalty_event.game_id)
-                raw_game_of_penalty = games_raw_map.get(penalty_event.game_id)
-                if not raw_game_of_penalty or not resolved_game_of_penalty: continue
+                if not resolved_game_of_penalty: continue
                 
-                current_team_orig_code_in_penalty_game = None
-                opponent_orig_code_in_penalty_game = None
-
-                if resolved_game_of_penalty.team1_code == current_team_code:
-                    current_team_orig_code_in_penalty_game = raw_game_of_penalty.team1_code
-                    opponent_orig_code_in_penalty_game = raw_game_of_penalty.team2_code
-                elif resolved_game_of_penalty.team2_code == current_team_code:
-                    current_team_orig_code_in_penalty_game = raw_game_of_penalty.team2_code
-                    opponent_orig_code_in_penalty_game = raw_game_of_penalty.team1_code
-                else:
-                    continue # current_team_code did not play in the game of this penalty
-
-                # penalty_event.team_code is the original fixture code of the penalized team
-                if penalty_event.team_code == current_team_orig_code_in_penalty_game:
+                # penalty_event.team_code is the resolved team name (stored when penalty was added)
+                # Check if this penalty was against the current team or their opponent
+                if penalty_event.team_code == current_team_code:
+                    # Current team received this penalty
                     stats.pim += TEAM_PIM_MAP.get(penalty_event.penalty_type, 0)
                     if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES: stats.ppa += 1 
-                elif penalty_event.team_code == opponent_orig_code_in_penalty_game:
-                    if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES: stats.ppf += 1 
+                elif (resolved_game_of_penalty.team1_code == current_team_code and penalty_event.team_code == resolved_game_of_penalty.team2_code) or \
+                     (resolved_game_of_penalty.team2_code == current_team_code and penalty_event.team_code == resolved_game_of_penalty.team1_code):
+                    # Opponent received this penalty (current team gets powerplay opportunity)
+                    if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES: stats.ppf += 1
             team_stats_data_list.append(stats)
 
     return render_template('year_view.html', 
@@ -795,169 +871,343 @@ def game_stats_view(year_id, game_id):
     if not year_obj or not game_obj_for_stats or game_obj_for_stats.year_id != year_obj.id:
         flash('Tournament year or game not found.', 'danger'); return redirect(url_for('main_bp.index'))
 
-    # --- START: Adapted Name Resolution Logic from year_view ---
-    all_games_for_year_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
-    games_dict_by_num_for_resolution = {g.game_number: g for g in all_games_for_year_raw}
-
-    # Calculate preliminary round standings to build initial playoff_team_map
-    teams_stats_for_resolution = {}
-    prelim_games_for_resolution = [g for g in all_games_for_year_raw if g.round == 'Preliminary Round' and g.group]
+    # --- START: Simplified Name Resolution Logic ---
+    # Instead of duplicating the complex resolution logic from year_view,
+    # let's use a simpler approach that leverages the existing year_view logic
     
-    unique_teams_for_resolution = set()
-    for g in prelim_games_for_resolution:
-        if g.team1_code and g.group: unique_teams_for_resolution.add((g.team1_code, g.group))
-        if g.team2_code and g.group: unique_teams_for_resolution.add((g.team2_code, g.group))
+    # Get all processed games from year_view logic (this ensures consistent resolution)
+    games_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
+    games_raw_map = {g.id: g for g in games_raw}
 
-    for team_code, group_name in unique_teams_for_resolution:
-        if team_code not in teams_stats_for_resolution:
-            teams_stats_for_resolution[team_code] = TeamStats(name=team_code, group=group_name)
+    # Build preliminary round standings for playoff resolution
+    teams_stats = {}
+    prelim_games = [g for g in games_raw if g.round == 'Preliminary Round' and g.group]
+    
+    unique_teams_in_prelim_groups = set()
+    for g in prelim_games:
+        if g.team1_code and g.group: 
+            unique_teams_in_prelim_groups.add((g.team1_code, g.group))
+        if g.team2_code and g.group: 
+            unique_teams_in_prelim_groups.add((g.team2_code, g.group))
 
-    for g in [pg for pg in prelim_games_for_resolution if pg.team1_score is not None]:
-        for code, grp, gf, ga, pts, res, _ in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
-                                                 (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
-            stats = teams_stats_for_resolution.setdefault(code, TeamStats(name=code, group=grp))
-            if stats.group == grp:
+    for team_code, group_name in unique_teams_in_prelim_groups:
+        if team_code not in teams_stats: 
+            teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
+
+    for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
+        for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
+                                                   (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
+            stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
+            
+            if stats.group == grp: 
                  stats.gp+=1; stats.gf+=gf; stats.ga+=ga; stats.pts+=pts
-                 if res=='REG': stats.w+=1 if gf>ga else 0; stats.l+=1 if ga>gf else 0
+                 if res=='REG': stats.w+=1 if gf>ga else 0; stats.l+=1 if ga>gf else 0 
                  elif res=='OT': stats.otw+=1 if gf>ga else 0; stats.otl+=1 if ga>gf else 0
                  elif res=='SO': stats.sow+=1 if gf>ga else 0; stats.sol+=1 if ga>gf else 0
     
-    standings_by_group_for_resolution = {}
-    if teams_stats_for_resolution:
-        group_full_names_res = sorted(list(set(s.group for s in teams_stats_for_resolution.values() if s.group)))
-        for full_group_name_key in group_full_names_res:
-            current_group_teams_res = sorted(
-                [s for s in teams_stats_for_resolution.values() if s.group == full_group_name_key],
-                key=lambda x: (x.pts, x.gd, x.gf), reverse=True
+    standings_by_group = {}
+    if teams_stats:
+        group_full_names = sorted(list(set(s.group for s in teams_stats.values() if s.group))) 
+        for full_group_name_key in group_full_names: 
+            current_group_teams = sorted(
+                [s for s in teams_stats.values() if s.group == full_group_name_key],
+                key=lambda x: (x.pts, x.gd, x.gf),
+                reverse=True
             )
-            standings_by_group_for_resolution[full_group_name_key] = current_group_teams_res
+            for i, team_stat_obj in enumerate(current_group_teams):
+                team_stat_obj.rank_in_group = i + 1 
+            
+            standings_by_group[full_group_name_key] = current_group_teams
 
-    playoff_team_map_for_resolution = {}
-    for group_display_name, group_standings_list in standings_by_group_for_resolution.items():
-        group_letter_match = re.match(r"Group ([A-D])", group_display_name)
+    playoff_team_map = {}
+    for group_display_name, group_standings_list in standings_by_group.items():
+        group_letter_match = re.match(r"Group ([A-D])", group_display_name) 
         if group_letter_match:
             group_letter = group_letter_match.group(1)
-            for i, s_team_obj in enumerate(group_standings_list):
-                playoff_team_map_for_resolution[f'{group_letter}{i+1}'] = s_team_obj.name
+            for i, s_team_obj in enumerate(group_standings_list): 
+                playoff_team_map[f'{group_letter}{i+1}'] = s_team_obj.name 
+
+    games_dict_by_num = {g.game_number: g for g in games_raw}
     
-    # Placeholder for QF/SF game numbers if needed by get_resolved_code, similar to year_view
-    qf_game_numbers_res = []
-    sf_game_numbers_res = []
-    if year_obj.fixture_path and os.path.exists(year_obj.fixture_path):
+    # Load fixture data for playoff game numbers
+    qf_game_numbers = []
+    sf_game_numbers = []
+    bronze_game_number = None
+    gold_game_number = None
+    tournament_hosts = []
+
+    fixture_path_exists = False
+    if year_obj.fixture_path:
+        fixture_path_exists = os.path.exists(year_obj.fixture_path)
+
+    if year_obj.fixture_path and fixture_path_exists:
         try:
-            with open(year_obj.fixture_path, 'r', encoding='utf-8') as f: loaded_fixture_data = json.load(f)
+            with open(year_obj.fixture_path, 'r', encoding='utf-8') as f:
+                loaded_fixture_data = json.load(f)
+            tournament_hosts = loaded_fixture_data.get("hosts", [])
+            
             schedule_data = loaded_fixture_data.get("schedule", [])
-            for game_data in schedule_data:
+            for i, game_data in enumerate(schedule_data):
                 round_name = game_data.get("round", "").lower()
                 game_num = game_data.get("gameNumber")
-                if "quarterfinal" in round_name: qf_game_numbers_res.append(game_num)
-                elif "semifinal" in round_name: sf_game_numbers_res.append(game_num)
-            sf_game_numbers_res.sort() # sf_game_numbers were sorted in year_view
-            if sf_game_numbers_res and len(sf_game_numbers_res) >= 2: # Add SF placeholders
-                 playoff_team_map_for_resolution['SF1'] = str(sf_game_numbers_res[0])
-                 playoff_team_map_for_resolution['SF2'] = str(sf_game_numbers_res[1])
-        except Exception: pass # Ignore if fixture parsing fails, map will be less complete
+                
+                if "quarterfinal" in round_name: 
+                    qf_game_numbers.append(game_num)
+                elif "semifinal" in round_name: 
+                    sf_game_numbers.append(game_num)
+                elif "bronze medal game" in round_name or "bronze" in round_name or "3rd place" in round_name:
+                    bronze_game_number = game_num
+                elif "gold medal game" in round_name or "final" in round_name or "gold" in round_name:
+                    gold_game_number = game_num
+            sf_game_numbers.sort()
+        except Exception as e: 
+            current_app.logger.error(f"Could not parse fixture {year_obj.fixture_path} for playoff game numbers. Error: {e}") 
+            if year_obj.year == 2025: 
+                qf_game_numbers = [57, 58, 59, 60]
+                sf_game_numbers = [61, 62]
+                bronze_game_number = 63
+                gold_game_number = 64
+                tournament_hosts = ["SWE", "DEN"]
 
-    # Definition of get_resolved_code (copied and adapted from year_view)
-    # Ensure games_dict_by_num_for_resolution is used inside this function
-    def get_resolved_code_for_stats(placeholder_code_param, current_map_param):
-        max_depth = 10 # Increased depth slightly for safety, can be tuned
-        current_code_iter = placeholder_code_param
+    if sf_game_numbers and len(sf_game_numbers) >= 2 and all(isinstance(item, int) for item in sf_game_numbers):
+        playoff_team_map['SF1'] = str(sf_game_numbers[0])
+        playoff_team_map['SF2'] = str(sf_game_numbers[1])
+
+    # Use the same get_resolved_code function as year_view
+    def get_resolved_code(placeholder_code, current_map):
+        max_depth = 5 
+        current_code = placeholder_code
         for _ in range(max_depth):
-            if not isinstance(current_code_iter, str): # Safety break for non-string codes
-                return str(current_code_iter) if current_code_iter is not None else placeholder_code_param
+            if current_code in current_map:
+                next_code = current_map[current_code]
+                if next_code == current_code: return current_code 
+                current_code = next_code
+            elif (current_code.startswith('W(') or current_code.startswith('L(')) and current_code.endswith(')'):
+                match = re.search(r'\(([^()]+)\)', current_code) 
+                if match:
+                    inner_placeholder = match.group(1)
+                    if inner_placeholder.isdigit():
+                        game_num = int(inner_placeholder)
+                        game = games_dict_by_num.get(game_num)
+                        if game and game.team1_score is not None:
+                            raw_winner = game.team1_code if game.team1_score > game.team2_score else game.team2_code
+                            raw_loser = game.team2_code if game.team1_score > game.team2_score else game.team1_code
+                            outcome_based_code = raw_winner if current_code.startswith('W(') else raw_loser
+                            next_code = current_map.get(outcome_based_code, outcome_based_code)
+                            if next_code == current_code: return next_code 
+                            current_code = next_code 
+                        else: return current_code 
+                    else: 
+                        resolved_inner = current_map.get(inner_placeholder, inner_placeholder)
+                        if resolved_inner == inner_placeholder: return current_code 
+                        if resolved_inner.isdigit():
+                             current_code = f"{'W' if current_code.startswith('W(') else 'L'}({resolved_inner})"
+                        else: 
+                             return resolved_inner 
+                else: return current_code 
+            else: 
+                return current_code
+        return current_code
 
-            if current_code_iter in current_map_param:
-                next_code_iter = current_map_param[current_code_iter]
-                if next_code_iter == current_code_iter: return current_code_iter # Stable
-                current_code_iter = next_code_iter
-            elif (current_code_iter.startswith('W(') or current_code_iter.startswith('L(')) and current_code_iter.endswith(')'):
-                match_res = re.search(r'\(([^()]+)\)', current_code_iter)
-                if match_res:
-                    inner_placeholder_res = match_res.group(1)
-                    if inner_placeholder_res.isdigit(): # e.g. W(57)
-                        game_num_res = int(inner_placeholder_res)
-                        game_res_lookup = games_dict_by_num_for_resolution.get(game_num_res)
-                        if game_res_lookup and game_res_lookup.team1_score is not None: # Game played
-                            # IMPORTANT: Resolve codes of teams from the game that defines W/L before using them
-                            winner_raw_code = get_resolved_code_for_stats(game_res_lookup.team1_code if game_res_lookup.team1_score > game_res_lookup.team2_score else game_res_lookup.team2_code, current_map_param)
-                            loser_raw_code = get_resolved_code_for_stats(game_res_lookup.team2_code if game_res_lookup.team1_score > game_res_lookup.team2_score else game_res_lookup.team1_code, current_map_param)
-                            
-                            outcome_based_code_res = winner_raw_code if current_code_iter.startswith('W(') else loser_raw_code
-                            # Resolve one more time in case the outcome_based_code_res itself is a placeholder like A1
-                            next_code_res = current_map_param.get(outcome_based_code_res, outcome_based_code_res)
-                            if next_code_res == current_code_iter: return next_code_res # Avoid infinite if W(57) resolves to W(57) via map
-                            current_code_iter = next_code_res
-                        else: return current_code_iter # Game not played or not found, return current W/L placeholder
-                    else: # e.g. W(SF1) - inner is not a digit
-                        resolved_inner_res = current_map_param.get(inner_placeholder_res, inner_placeholder_res)
-                        if resolved_inner_res == inner_placeholder_res: return current_code_iter # Inner did not resolve
-                        if resolved_inner_res.isdigit(): # If SF1 resolved to a game number, reconstruct W(num)
-                             current_code_iter = f"{'W' if current_code_iter.startswith('W(') else 'L'}({resolved_inner_res})"
-                        else: # SF1 resolved to a team name (e.g. CAN)
-                             return resolved_inner_res 
-                else: return current_code_iter # Malformed W/L placeholder
-            else: # Not in map, not W/L placeholder
-                return current_code_iter
-        return current_code_iter # Max depth reached
+    # Create GameDisplay objects and resolve them using the same logic as year_view
+    games_processed = [GameDisplay(id=g.id, year_id=g.year_id, date=g.date, start_time=g.start_time, round=g.round, group=g.group, game_number=g.game_number, location=g.location, venue=g.venue, team1_code=g.team1_code, team2_code=g.team2_code, original_team1_code=g.team1_code, original_team2_code=g.team2_code, team1_score=g.team1_score, team2_score=g.team2_score, result_type=g.result_type, team1_points=g.team1_points, team2_points=g.team2_points) for g in games_raw]
 
-    # Iterative resolution pass, similar to year_view
-    # We need to build a temporary list of GameDisplay-like objects for this game or all games
-    # For simplicity here, we'll resolve for all games to build a complete map,
-    # then pick the specific game's resolved names.
-    temp_games_for_map_build = []
-    for g_raw in all_games_for_year_raw:
-        temp_games_for_map_build.append({
-            'id': g_raw.id, 'game_number': g_raw.game_number,
-            'team1_code': g_raw.team1_code, 'team2_code': g_raw.team2_code, # These will be updated
-            'original_team1_code': g_raw.team1_code, 'original_team2_code': g_raw.team2_code,
-            'team1_score': g_raw.team1_score, 'team2_score': g_raw.team2_score,
-            'round': g_raw.round
-        })
-
-    for _pass_num in range(max(3, len(all_games_for_year_raw) // 2) + 2): # +2 for more assurance
-        changes_in_pass_res = 0
-        for g_disp_item in temp_games_for_map_build:
-            resolved_t1_item = get_resolved_code_for_stats(g_disp_item['original_team1_code'], playoff_team_map_for_resolution)
-            if g_disp_item['team1_code'] != resolved_t1_item:
-                g_disp_item['team1_code'] = resolved_t1_item; changes_in_pass_res += 1
+    # Resolution passes (same logic as year_view)
+    for _pass_num in range(max(3, len(games_processed) // 2)): 
+        changes_in_pass = 0
+        for g_disp in games_processed:
+            resolved_t1 = get_resolved_code(g_disp.original_team1_code, playoff_team_map)
+            if g_disp.team1_code != resolved_t1: 
+                g_disp.team1_code = resolved_t1
+                changes_in_pass += 1
             
-            resolved_t2_item = get_resolved_code_for_stats(g_disp_item['original_team2_code'], playoff_team_map_for_resolution)
-            if g_disp_item['team2_code'] != resolved_t2_item:
-                g_disp_item['team2_code'] = resolved_t2_item; changes_in_pass_res += 1
+            resolved_t2 = get_resolved_code(g_disp.original_team2_code, playoff_team_map)
+            if g_disp.team2_code != resolved_t2: 
+                g_disp.team2_code = resolved_t2
+                changes_in_pass += 1
 
-            if g_disp_item['round'] != 'Preliminary Round' and g_disp_item['team1_score'] is not None:
-                # is_code_final (simplified for this context, or copy full from year_view if complex cases arise)
-                def is_code_final_local(code_val):
-                    if not code_val or len(code_val) > 3 : return True # Assume >3 char is a resolved name
-                    if re.match(r"^[A-D][1-8]$", code_val): return False
-                    if re.match(r"^[WL]\(\d+\)$", code_val): return False
-                    if re.match(r"^(SF|QF)[1-4]$", code_val): return False
-                    return True
+            if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:
+                is_t1_final = is_code_final(g_disp.team1_code)
+                is_t2_final = is_code_final(g_disp.team2_code)
 
-                is_t1_item_final = is_code_final_local(g_disp_item['team1_code'])
-                is_t2_item_final = is_code_final_local(g_disp_item['team2_code'])
-
-                if is_t1_item_final and is_t2_item_final:
-                    actual_winner_item = g_disp_item['team1_code'] if g_disp_item['team1_score'] > g_disp_item['team2_score'] else g_disp_item['team2_code']
-                    actual_loser_item  = g_disp_item['team2_code'] if g_disp_item['team1_score'] > g_disp_item['team2_score'] else g_disp_item['team1_code']
+                if is_t1_final and is_t2_final:
+                    actual_winner = g_disp.team1_code if g_disp.team1_score > g_disp.team2_score else g_disp.team2_code
+                    actual_loser  = g_disp.team2_code if g_disp.team1_score > g_disp.team2_score else g_disp.team1_code
                     
-                    win_key_item = f'W({g_disp_item["game_number"]})'; lose_key_item = f'L({g_disp_item["game_number"]})'
-                    if playoff_team_map_for_resolution.get(win_key_item) != actual_winner_item:
-                        playoff_team_map_for_resolution[win_key_item] = actual_winner_item; changes_in_pass_res +=1
-                    if playoff_team_map_for_resolution.get(lose_key_item) != actual_loser_item:
-                        playoff_team_map_for_resolution[lose_key_item] = actual_loser_item; changes_in_pass_res +=1
+                    win_key = f'W({g_disp.game_number})'; lose_key = f'L({g_disp.game_number})'
+                    if playoff_team_map.get(win_key) != actual_winner: 
+                        playoff_team_map[win_key] = actual_winner; changes_in_pass +=1
+                    if playoff_team_map.get(lose_key) != actual_loser: 
+                        playoff_team_map[lose_key] = actual_loser; changes_in_pass +=1
         
-        if changes_in_pass_res == 0 and _pass_num > 0: break
-    
-    # Now resolve the specific game_obj_for_stats's team codes
-    resolved_team1_name = get_resolved_code_for_stats(game_obj_for_stats.team1_code, playoff_team_map_for_resolution)
-    resolved_team2_name = get_resolved_code_for_stats(game_obj_for_stats.team2_code, playoff_team_map_for_resolution)
+        if changes_in_pass == 0 and _pass_num > 0: 
+            break 
 
-    # Add resolved names to the game object for the template
+    # --- SEMIFINAL AND FINALS PAIRING LOGIC --- 
+    # This block is now OUTSIDE the main processing loop and runs once.
+
+    if qf_game_numbers and sf_game_numbers and len(sf_game_numbers) == 2:
+        
+        qf_winners_teams = []
+        all_qf_winners_resolved = True
+        for qf_game_num in qf_game_numbers:
+            winner_placeholder = f'W({qf_game_num})'
+            resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
+
+            if is_code_final(resolved_qf_winner):
+                qf_winners_teams.append(resolved_qf_winner)
+            else:
+                all_qf_winners_resolved = False; break
+        
+        
+        if all_qf_winners_resolved and len(qf_winners_teams) == 4:
+            qf_winners_stats = []
+            for team_name in qf_winners_teams:
+                if team_name in teams_stats: 
+                    qf_winners_stats.append(teams_stats[team_name])
+                else: 
+                    all_qf_winners_resolved = False; break 
+            
+            if all_qf_winners_resolved and len(qf_winners_stats) == 4:
+                qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
+                R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats] 
+
+                matchup1 = (R1, R4); matchup2 = (R2, R3)
+                sf_game1_teams = None; sf_game2_teams = None
+                primary_host_plays_sf1 = False
+
+                if tournament_hosts:
+                    if tournament_hosts[0] in [R1,R2,R3,R4]: 
+                         primary_host_plays_sf1 = True
+                         if R1 == tournament_hosts[0] or R4 == tournament_hosts[0]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
+                         else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
+                    elif len(tournament_hosts) > 1 and tournament_hosts[1] in [R1,R2,R3,R4]: 
+                         primary_host_plays_sf1 = True 
+                         if R1 == tournament_hosts[1] or R4 == tournament_hosts[1]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
+                         else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
+                
+                if not primary_host_plays_sf1: 
+                    sf_game1_teams = matchup1; sf_game2_teams = matchup2
+
+
+                sf_game_obj_1 = games_dict_by_num.get(sf_game_numbers[0])
+                sf_game_obj_2 = games_dict_by_num.get(sf_game_numbers[1])
+
+                if sf_game_obj_1 and sf_game_obj_2 and sf_game1_teams and sf_game2_teams:
+                    # Note: changes_in_pass is no longer relevant here as we are outside that loop.
+                    # We directly update playoff_team_map.
+                    if playoff_team_map.get(sf_game_obj_1.team1_code) != sf_game1_teams[0]:
+                        playoff_team_map[sf_game_obj_1.team1_code] = sf_game1_teams[0]
+                    if playoff_team_map.get(sf_game_obj_1.team2_code) != sf_game1_teams[1]:
+                        playoff_team_map[sf_game_obj_1.team2_code] = sf_game1_teams[1]
+                    if playoff_team_map.get(sf_game_obj_2.team1_code) != sf_game2_teams[0]:
+                        playoff_team_map[sf_game_obj_2.team1_code] = sf_game2_teams[0]
+                    if playoff_team_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
+                        playoff_team_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
+                    
+                    # Add Q1-Q4 mappings based on the semifinal assignments
+                    # Q1 and Q2 are the teams in the first semifinal game
+                    # Q3 and Q4 are the teams in the second semifinal game
+                    playoff_team_map['Q1'] = sf_game1_teams[0]  # First team in SF1
+                    playoff_team_map['Q2'] = sf_game1_teams[1]  # Second team in SF1
+                    playoff_team_map['Q3'] = sf_game2_teams[0]  # First team in SF2
+                    playoff_team_map['Q4'] = sf_game2_teams[1]  # Second team in SF2
+                    
+                else:
+                    pass  # Empty else block
+            else:
+                pass  # Empty else block
+        else:
+            pass  # Empty else block
+    else:
+        pass  # Empty else block
+
+    # --- FALLBACK Q1-Q4 MAPPING ---
+    # If the full semifinal logic didn't run, try to map Q1-Q4 to available QF winners
+    if qf_game_numbers and len(qf_game_numbers) == 4 and 'Q1' not in playoff_team_map:
+        for i, qf_game_num in enumerate(qf_game_numbers):
+            winner_placeholder = f'W({qf_game_num})'
+            resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
+            
+            
+            if is_code_final(resolved_qf_winner):
+                q_code = f'Q{i+1}'  # Q1, Q2, Q3, Q4
+                playoff_team_map[q_code] = resolved_qf_winner
+            else:
+                pass  # Empty else block
+    else:
+        pass  # Empty else block
+
+    # --- BRONZE AND GOLD MEDAL GAME LOGIC ---
+    # Handle Bronze Medal Game (losers of semifinals) and Gold Medal Game (winners of semifinals)
+    if sf_game_numbers and len(sf_game_numbers) == 2 and bronze_game_number and gold_game_number:
+        bronze_game_obj = games_dict_by_num.get(bronze_game_number)
+        gold_game_obj = games_dict_by_num.get(gold_game_number)
+        
+        if bronze_game_obj and gold_game_obj:
+            # Map SF1 and SF2 to actual game numbers
+            sf1_game_number = sf_game_numbers[0]  # First semifinal game
+            sf2_game_number = sf_game_numbers[1]  # Second semifinal game
+            
+            # Add mappings for SF1 and SF2 placeholders
+            playoff_team_map['SF1'] = str(sf1_game_number)
+            playoff_team_map['SF2'] = str(sf2_game_number)
+            
+            # Bronze Medal Game: L(SF1) vs L(SF2) -> L(61) vs L(62)
+            sf1_loser_placeholder = f'L({sf1_game_number})'
+            sf2_loser_placeholder = f'L({sf2_game_number})'
+            
+            # Gold Medal Game: W(SF1) vs W(SF2) -> W(61) vs W(62)
+            sf1_winner_placeholder = f'W({sf1_game_number})'
+            sf2_winner_placeholder = f'W({sf2_game_number})'
+            
+            # Update Bronze Medal Game teams (map L(SF1) -> L(61), L(SF2) -> L(62))
+            if playoff_team_map.get(bronze_game_obj.team1_code) != sf1_loser_placeholder:
+                playoff_team_map[bronze_game_obj.team1_code] = sf1_loser_placeholder
+            if playoff_team_map.get(bronze_game_obj.team2_code) != sf2_loser_placeholder:
+                playoff_team_map[bronze_game_obj.team2_code] = sf2_loser_placeholder
+                
+            # Update Gold Medal Game teams (map W(SF1) -> W(61), W(SF2) -> W(62))
+            if playoff_team_map.get(gold_game_obj.team1_code) != sf1_winner_placeholder:
+                playoff_team_map[gold_game_obj.team1_code] = sf1_winner_placeholder
+            if playoff_team_map.get(gold_game_obj.team2_code) != sf2_winner_placeholder:
+                playoff_team_map[gold_game_obj.team2_code] = sf2_winner_placeholder
+        else:
+            pass  # Empty else block
+    else:
+        pass  # Empty else block
+
+    # Perform a final resolution pass using the updated playoff_team_map
+    for g_disp_final_pass in games_processed:
+        # Resolve from original placeholder if current is still a placeholder, 
+        # or re-resolve current if it might have been an intermediate placeholder.
+        # Prioritizing original_teamX_code ensures we pick up changes from playoff_team_map like Q1->CAN directly.
+        code_to_resolve_t1 = g_disp_final_pass.original_team1_code 
+        resolved_t1_final = get_resolved_code(code_to_resolve_t1, playoff_team_map)
+        if g_disp_final_pass.team1_code != resolved_t1_final:
+            g_disp_final_pass.team1_code = resolved_t1_final
+
+        code_to_resolve_t2 = g_disp_final_pass.original_team2_code
+        resolved_t2_final = get_resolved_code(code_to_resolve_t2, playoff_team_map)
+        if g_disp_final_pass.team2_code != resolved_t2_final:
+            g_disp_final_pass.team2_code = resolved_t2_final
+
+    # Find the specific game and get its resolved team names
+    games_processed_map = {g.id: g for g in games_processed}
+    resolved_game = games_processed_map.get(game_id)
+    
+    if resolved_game:
+        resolved_team1_name = resolved_game.team1_code
+        resolved_team2_name = resolved_game.team2_code
+    else:
+        # Fallback: resolve directly from the game object
+        resolved_team1_name = get_resolved_code(game_obj_for_stats.team1_code, playoff_team_map)
+        resolved_team2_name = get_resolved_code(game_obj_for_stats.team2_code, playoff_team_map)
+
+    # Set the resolved names on the game object for the template
     game_obj_for_stats.team1_display_name = resolved_team1_name
     game_obj_for_stats.team2_display_name = resolved_team2_name
-    # --- END: Adapted Name Resolution Logic ---
+    # --- END: Simplified Name Resolution Logic ---
 
     # --- START: Statistics Calculation using RESOLVED names ---
     sog_entries = ShotsOnGoal.query.filter_by(game_id=game_id).all()
