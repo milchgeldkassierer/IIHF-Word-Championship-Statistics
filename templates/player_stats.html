@@ -122,6 +122,14 @@
     body.dark-mode .sortable.desc::after {
         color: #4299e1;
     }
+    
+    /* Ensure player names stay on one line */
+    .table td:first-child {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+    }
 </style>
 {% endblock %}
 
@@ -172,7 +180,7 @@
                             {% for player in player_stats %}
                                 {% if player.scorer_points > 0 %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}">
-                                    <td>{{ player.last_name|upper }}, {{ player.first_name }}</td>
+                                    <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}"> 
@@ -208,7 +216,7 @@
                             {% for player in player_stats %}
                                 {% if player.pims > 0 %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}">
-                                    <td>{{ player.last_name|upper }}, {{ player.first_name }}</td>
+                                    <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}"> 
