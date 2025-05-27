@@ -11,308 +11,581 @@
 {% block head_scripts %}
 {{ super() }}
 <style>
-    .stat-bar-container {
+    body {
+        background-color: #f8f9fa;
+    }
+    
+    body.dark-mode {
+        background-color: #1a202c;
+    }
+    
+    .game-header {
+        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        border-radius: 12px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .game-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+        opacity: 0.3;
+    }
+    
+    .game-header .container {
+        position: relative;
+        z-index: 1;
+    }
+    
+    .team-section {
+        text-align: center;
+    }
+    
+    .team-name {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+    
+    .team-flag {
+        width: 48px;
+        height: 32px;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .final-score {
+        font-size: 4rem;
+        font-weight: 900;
+        color: #ffd700;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        margin: 0;
+    }
+    
+    .game-info {
+        background: rgba(255,255,255,0.1);
+        padding: 0.75rem 1.5rem;
+        border-radius: 25px;
+        backdrop-filter: blur(10px);
+        margin-top: 1rem;
+        display: inline-block;
+    }
+    
+    .stats-container {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    body.dark-mode .stats-container {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    .nav-pills {
+        background: #f8f9fa;
+        padding: 0.5rem;
+        border-radius: 50px;
+        margin-bottom: 2rem;
+    }
+    
+    body.dark-mode .nav-pills {
+        background: #4a5568;
+    }
+    
+    .nav-pills .nav-link {
+        border-radius: 25px;
+        padding: 0.75rem 1.5rem;
+        color: #6c757d;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .nav-pills .nav-link.active {
+        background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(66, 153, 225, 0.3);
+    }
+    
+    .stat-row {
         display: flex;
         align-items: center;
-        margin-bottom: 10px;
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    
+    body.dark-mode .stat-row {
+        background: #4a5568;
+    }
+    
+    .stat-row:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .stat-value-left {
+        width: 60px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #4299e1;
+    }
+    
+    .stat-value-right {
+        width: 60px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #e53e3e;
+    }
+    
+    .stat-bar-container {
+        flex: 1;
+        height: 24px;
+        display: flex;
+        margin: 0 1rem;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #e2e8f0;
+    }
+    
+    body.dark-mode .stat-bar-container {
+        background: #2d3748;
+    }
+    
+    .stat-bar-left {
+        background: linear-gradient(90deg, #4299e1 0%, #63b3ed 100%);
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 8px;
+        color: white;
+        font-weight: 600;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+    }
+    
+    .stat-bar-right {
+        background: linear-gradient(90deg, #f56565 0%, #fc8181 100%);
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding-left: 8px;
+        color: white;
+        font-weight: 600;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+    }
+    
+    .stat-label {
+        font-weight: 600;
+        color: #4a5568;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 0.25rem;
+        text-align: center;
+    }
+    
+    body.dark-mode .stat-label {
+        color: #a0aec0;
+    }
+    
+    .period-table {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    body.dark-mode .period-table {
+        background: #2d3748;
+    }
+    
+    .period-table .table {
+        margin-bottom: 0;
+    }
+    
+    .period-table .table th {
+        background: #4a5568;
+        color: white;
+        border: none;
+        padding: 1rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .period-table .table td {
+        padding: 1rem;
+        border-color: #e2e8f0;
+        font-weight: 600;
+    }
+    
+    body.dark-mode .period-table .table td {
+        border-color: #4a5568;
+        color: #e2e8f0;
+    }
+    
+    .scoring-summary {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    body.dark-mode .scoring-summary {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    .period-header {
+        background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        margin: 1.5rem 0 1rem 0;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .goal-item {
+        display: flex;
+        align-items: center;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid #4299e1;
+        transition: all 0.3s ease;
+    }
+    
+    body.dark-mode .goal-item {
+        background: #4a5568;
+        border-left-color: #63b3ed;
+    }
+    
+    .goal-item:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .goal-time {
+        width: 60px;
+        font-weight: 700;
+        color: #4299e1;
         font-size: 0.9rem;
     }
-    .stat-bar-label {
-        width: 30px; /* Adjust as needed */
-        text-align: right;
-        padding-right: 10px;
-        font-weight: bold;
+    
+    .goal-details {
+        flex: 1;
+        margin-left: 1rem;
     }
-    .stat-bar-team1 {
-        height: 20px;
-        background-color: #007bff; /* Blue for Team 1 */
-        color: white;
-        text-align: right;
-        padding-right: 5px;
-        line-height: 20px;
-        border-top-left-radius: 3px;
-        border-bottom-left-radius: 3px;
+    
+    .goal-scorer {
+        font-weight: 700;
+        font-size: 1rem;
+        margin-bottom: 0.25rem;
     }
-    .stat-bar-team2 {
-        height: 20px;
-        background-color: #dc3545; /* Red for Team 2 */
-        color: white;
-        text-align: left;
-        padding-left: 5px;
-        line-height: 20px;
-        border-top-right-radius: 3px;
-        border-bottom-right-radius: 3px;
-    }
-    .stat-bar-middle-label {
-        padding: 0 15px;
-        font-weight: bold;
+    
+    .goal-assists {
         color: #6c757d;
-        font-size: 0.8rem;
-        white-space: nowrap;
+        font-size: 0.85rem;
     }
-    .nav-pills .nav-link.active, .nav-pills .show>.nav-link {
-        background-color: #007bff;
+    
+    body.dark-mode .goal-assists {
+        color: #a0aec0;
     }
-    .nav-pills .nav-link {
-        color: #007bff;
+    
+    .jersey-number {
+        background: #4299e1;
+        color: white;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        margin-right: 0.5rem;
     }
-    .card-header-pills {
-        margin-right: -0.75rem;
-        margin-left: -0.75rem;
+    
+    .powerplay-stats {
+        display: flex;
+        justify-content: space-around;
+        margin-top: 2rem;
+        padding: 1.5rem;
+        background: #f8f9fa;
+        border-radius: 12px;
     }
-    .game-stats-content-wrapper {
-        padding-top: 1.5rem;
-        width: 100%;
+    
+    body.dark-mode .powerplay-stats {
+        background: #4a5568;
     }
-    .scoring-summary-column { /* Just a marker class, no specific style needed if list is handled */
+    
+    .pp-stat {
+        text-align: center;
     }
-    .scoring-summary-list { /* THIS div should ONLY wrap the actual list of goals */
-        padding-right: 0; /* Was for scrollbar */
+    
+    .pp-percentage {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #4299e1;
     }
-    /* Minimal styles for debugging if needed */
-    /* .row { border: 1px solid green; } */
-    /* .scoring-summary-column { border: 1px dashed blue; } */
-    /* .team-stats-column { border: 1px dashed purple; } */
+    
+    .pp-details {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+    
+    body.dark-mode .pp-details {
+        color: #a0aec0;
+    }
+    
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #2d3748;
+        margin-bottom: 1.5rem;
+        text-align: center;
+    }
+    
+    body.dark-mode .section-title {
+        color: #e2e8f0;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="game-stats-content-wrapper">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1>Spielstatistik</h1>
-        {# <a href="{{ url_for('year_bp.year_view', year_id=year.id, _anchor='game-' + game.id|string) }}" class="btn btn-secondary">&laquo; Zurück zur Jahresansicht</a> #} {# Removed back button #}
-    </div>
-
-    <!-- 1. Game Header (from old col-md-7 card-header) -->
-    <div class="card mb-4"> {# Using a card for grouping, can be styled as needed #}
-        <div class="card-header">
-            <div class="row align-items-center"> {# Keep inner row for alignment if desired #}
-                <div class="col-md-4 text-center text-md-left">
+<div class="container-fluid px-4">
+    <!-- Game Header -->
+    <div class="game-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-4 team-section">
                     {% set t1_iso_header = team_iso_codes.get(t1_key) %}
-                    {% if t1_iso_header %}<img src="https://flagcdn.com/w40/{{ t1_iso_header }}.png" alt="{{ t1_key }}" class="mr-2">{% endif %}
-                    <span class="h4">{{ t1_key }}</span>
+                    {% if t1_iso_header %}
+                        <img src="https://flagcdn.com/w80/{{ t1_iso_header }}.png" alt="{{ t1_key }}" class="team-flag mb-3">
+                    {% endif %}
+                    <div class="team-name">{{ t1_key }}</div>
                 </div>
                 <div class="col-md-4 text-center">
-                    <span class="h3">{{ game.team1_score|default(0) }} - {{ game.team2_score|default(0) }}</span>
-                    <div class="text-muted small">
-                        {{ game.round }} {% if game.group %}(Gruppe {{ game.group }}){% endif %}<br>
-                        {{ game.date.split('-') | reverse | join('.') }} - {{ game.start_time }}
+                    <div class="final-score">{{ game.team1_score|default(0) }} - {{ game.team2_score|default(0) }}</div>
+                    <div class="game-info">
+                        <div><strong>FINAL</strong></div>
+                        <div>{{ game.date.split('-') | reverse | join('.') }}</div>
+                        <div>{{ game.round }}{% if game.group %} (Gruppe {{ game.group }}){% endif %}</div>
                     </div>
                 </div>
-                <div class="col-md-4 text-center text-md-right">
-                    <span class="h4">{{ t2_key }}</span>
+                <div class="col-md-4 team-section">
                     {% set t2_iso_header = team_iso_codes.get(t2_key) %}
-                    {% if t2_iso_header %}<img src="https://flagcdn.com/w40/{{ t2_iso_header }}.png" alt="{{ t2_key }}" class="ml-2">{% endif %}
+                    {% if t2_iso_header %}
+                        <img src="https://flagcdn.com/w80/{{ t2_iso_header }}.png" alt="{{ t2_key }}" class="team-flag mb-3">
+                    {% endif %}
+                    <div class="team-name">{{ t2_key }}</div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 2. Period Scores Table (from old col-md-5) -->
-    <div class="mb-3">
-        <h4 class="mb-2">Periodenübersicht</h4> {# Added a title for this section #}
-        <table class="table table-sm table-bordered text-center fixed-table-layout">
-            <thead class="thead-light">
-                <tr>
-                    <th style="width: 25%;">Teams</th>
-                    <th style="width: 15%;">1</th>
-                    <th style="width: 15%;">2</th>
-                    <th style="width: 15%;">3</th>
-                    {% if team1_scores_by_period[4] > 0 or team2_scores_by_period[4] > 0 %}
-                    <th style="width: 15%;">OT</th>
-                    {% endif %}
-                    <th style="width: 15%;">TOT</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td class="text-left pl-2">
-                        {% set t1_iso_period = team_iso_codes.get(t1_key) %}
-                        {% if t1_iso_period %}<img src="https://flagcdn.com/w20/{{ t1_iso_period }}.png" alt="{{ t1_key }}" class="mr-2" style="vertical-align: middle;">{% endif %}
-                        {{ t1_key }}
-                    </td>
-                    <td>{{ team1_scores_by_period[1] }}</td>
-                    <td>{{ team1_scores_by_period[2] }}</td>
-                    <td>{{ team1_scores_by_period[3] }}</td>
-                    {% if team1_scores_by_period[4] > 0 or team2_scores_by_period[4] > 0 %}
-                    <td>{{ team1_scores_by_period[4] }}</td>
-                    {% endif %}
-                    <td><strong>{{ game.team1_score|default(0) }}</strong></td>
-                </tr>
-                <tr>
-                    <td class="text-left pl-2">
-                        {% set t2_iso_period = team_iso_codes.get(t2_key) %}
-                        {% if t2_iso_period %}<img src="https://flagcdn.com/w20/{{ t2_iso_period }}.png" alt="{{ t2_key }}" class="mr-2" style="vertical-align: middle;">{% endif %}
-                        {{ t2_key }}
-                    </td>
-                    <td>{{ team2_scores_by_period[1] }}</td>
-                    <td>{{ team2_scores_by_period[2] }}</td>
-                    <td>{{ team2_scores_by_period[3] }}</td>
-                    {% if team1_scores_by_period[4] > 0 or team2_scores_by_period[4] > 0 %}
-                    <td>{{ team2_scores_by_period[4] }}</td>
-                    {% endif %}
-                    <td><strong>{{ game.team2_score|default(0) }}</strong></td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- 3. Team Statistics Tabs (from old col-md-7 card-body) -->
-    <div class="card mb-4"> {# Kept card for visual grouping of stats tabs #}
-        <div class="card-body">
-             <h4 class="mb-3 text-center">Team-Statistiken</h4> {# Added a title for this section #}
-            <ul class="nav nav-pills card-header-pills justify-content-center mb-3" id="statsTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link active" id="total-tab" data-toggle="tab" href="#total" role="tab" aria-controls="total" aria-selected="true">Total</a>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link" id="p1-tab" data-toggle="tab" href="#p1" role="tab" aria-controls="p1" aria-selected="false">1st Period</a>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link" id="p2-tab" data-toggle="tab" href="#p2" role="tab" aria-controls="p2" aria-selected="false">2nd Period</a>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link" id="p3-tab" data-toggle="tab" href="#p3" role="tab" aria-controls="p3" aria-selected="false">3rd Period</a>
-                </li>
-                {% set team1_sog_ot = sog_data_for_stats_page.get(t1_key, {}).get(4, 0) %}
-                {% set team2_sog_ot = sog_data_for_stats_page.get(t2_key, {}).get(4, 0) %}
-                {% if team1_sog_ot > 0 or team2_sog_ot > 0 %}
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link" id="ot-tab" data-toggle="tab" href="#ot" role="tab" aria-controls="ot" aria-selected="false">Overtime</a>
-                </li>
-                {% endif %}
-            </ul>
-
-            <div class="tab-content" id="statsTabsContent">
-                {% macro render_stat_bar(team1_val, team2_val, label) %}
-                    {% set total_val = team1_val + team2_val %}
-                    {% if total_val == 0 %}{% set total_val = 1 %}{% endif %} {# Avoid division by zero #}
-                    {% set team1_perc = (team1_val / total_val) * 100 %}
-                    {% set team2_perc = (team2_val / total_val) * 100 %}
-                    <div class="stat-bar-container">
-                        <div class="stat-bar-label">{{ team1_val }}</div>
-                        <div class="flex-grow-1 d-flex">
-                            <div class="stat-bar-team1" style="width: {{ team1_perc }}%;"></div>
-                            <div class="stat-bar-team2" style="width: {{ team2_perc }}%;"></div>
-                        </div>
-                        <div class="stat-bar-label" style="text-align: left; padding-left: 10px; padding-right:0;">{{ team2_val }}</div>
-                    </div>
-                    <div class="text-center stat-bar-middle-label">{{ label }}</div>
-                {% endmacro %}
-
-                <!-- Total Stats Tab -->
-                <div class="tab-pane fade show active" id="total" role="tabpanel" aria-labelledby="total-tab">
-                    <h5 class="text-center mt-3">Gesamtstatistik</h5>
-                    {{ render_stat_bar(sog_totals.get(t1_key, 0), sog_totals.get(t2_key, 0), 'SHOTS') }}
-                    {{ render_stat_bar(pim_totals.get(t1_key, 0), pim_totals.get(t2_key, 0), 'PIM') }}
-                    
-                    <hr class="my-3">
-                    <h6 class="text-center text-muted">Power Play</h6>
-                    <div class="row justify-content-center">
-                        <div class="col-auto text-center px-3">
-                            <span class="h5">{{ pp_percentage.get(t1_key, 0.0) }}%</span><br>
-                            <small class="text-muted">({{ pp_goals_scored.get(t1_key, 0) }} / {{ pp_opportunities.get(t1_key, 0) }})</small><br>
-                            <small>{{ t1_key }}</small>
-                        </div>
-                        <div class="col-auto text-center px-3">
-                            <span class="h5">{{ pp_percentage.get(t2_key, 0.0) }}%</span><br>
-                            <small class="text-muted">({{ pp_goals_scored.get(t2_key, 0) }} / {{ pp_opportunities.get(t2_key, 0) }})</small><br>
-                            <small>{{ t2_key }}</small>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Period 1 Stats Tab -->
-                <div class="tab-pane fade" id="p1" role="tabpanel" aria-labelledby="p1-tab">
-                    <h5 class="text-center mt-3">1. Drittel</h5>
-                    {{ render_stat_bar(sog_data_for_stats_page.get(t1_key, {}).get(1,0), sog_data_for_stats_page.get(t2_key, {}).get(1,0), 'SHOTS') }}
-                </div>
-
-                <!-- Period 2 Stats Tab -->
-                <div class="tab-pane fade" id="p2" role="tabpanel" aria-labelledby="p2-tab">
-                    <h5 class="text-center mt-3">2. Drittel</h5>
-                    {{ render_stat_bar(sog_data_for_stats_page.get(t1_key, {}).get(2,0), sog_data_for_stats_page.get(t2_key, {}).get(2,0), 'SHOTS') }}
-                </div>
-
-                <!-- Period 3 Stats Tab -->
-                <div class="tab-pane fade" id="p3" role="tabpanel" aria-labelledby="p3-tab">
-                    <h5 class="text-center mt-3">3. Drittel</h5>
-                    {{ render_stat_bar(sog_data_for_stats_page.get(t1_key, {}).get(3,0), sog_data_for_stats_page.get(t2_key, {}).get(3,0), 'SHOTS') }}
-                </div>
-
-                <!-- Overtime Stats Tab (conditional) -->
-                {% set team1_sog_ot_check = sog_data_for_stats_page.get(t1_key, {}).get(4, 0) %}
-                {% set team2_sog_ot_check = sog_data_for_stats_page.get(t2_key, {}).get(4, 0) %}
-                {% if team1_sog_ot_check > 0 or team2_sog_ot_check > 0 %}
-                <div class="tab-pane fade" id="ot" role="tabpanel" aria-labelledby="ot-tab">
-                    <h5 class="text-center mt-3">Overtime</h5>
-                    {{ render_stat_bar(sog_data_for_stats_page.get(t1_key, {}).get(4,0), sog_data_for_stats_page.get(t2_key, {}).get(4,0), 'SHOTS') }}
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    <!-- 4. Scoring Summary (from old col-md-5) -->
-    <div class="mb-4"> {# Wrapper for scoring summary section #}
-        <h4 class="mb-3">Scoring Summary</h4>
-        {% if game_events %}
-            <div class="scoring-summary-list">
-                {% set ns = namespace(current_period='') %}
-                {% for event in game_events %}
-                    {% if event.type == 'goal' %}
-                        {% set trimmed_period_display = event.period_display | trim %}
-                        {% if trimmed_period_display != ns.current_period %}
-                            {% if ns.current_period != '' %}
-                                </div> {# Close previous period-goals-container #}
+    <div class="row">
+        <!-- Left Column: Period Table and Scoring -->
+        <div class="col-lg-5">
+            <!-- Period Scores -->
+            <div class="period-table">
+                <table class="table table-sm text-center">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">TEAMS</th>
+                            <th style="width: 15%;">1</th>
+                            <th style="width: 15%;">2</th>
+                            <th style="width: 15%;">3</th>
+                            {% if team1_scores_by_period[4] > 0 or team2_scores_by_period[4] > 0 %}
+                            <th style="width: 15%;">OT</th>
                             {% endif %}
-                            <div class="text-center my-2 py-1 bg-light text-muted font-weight-bold small text-uppercase period-header-item">{{ trimmed_period_display }}</div>
-                            <div class="period-goals-container"> {# Open container for this period's goals #}
-                            {% set ns.current_period = trimmed_period_display %}
-                        {% endif %}
-                        <div class="goal-event-item mb-2 p-2 border-bottom">
-                            <div class="row align-items-center"> 
-                                <div class="col-2 text-center pr-0">
-                                    <span class="goal-time d-block small text-muted">{{ event.time_str }}</span>
-                                </div>
-                                <div class="col-10 goal-scorer-details">
-                                    <div class="d-flex align-items-center">
-                                        <strong class="scorer-name">
-                                            {% if event.scorer_obj and event.scorer_obj.jersey_number is not none %}
-                                                <span class="jersey-number mr-1">{{ event.scorer_obj.jersey_number }}</span>
-                                            {% endif %}
-                                            {{ event.scorer }}
-                                        </strong>
-                                        <span class="goal-type small text-muted ml-2">
-                                            ({{ event.goal_type_display }}{% if event.is_empty_net %}, EN{% endif %})
-                                        </span>
-                                        {% if event.team_iso %}<img src="https://flagcdn.com/w20/{{ event.team_iso }}.png" alt="{{ event.team_code }}" class="ml-2" style="vertical-align: middle; height: 16px;">{% endif %}
+                            <th style="width: 10%;">TOT</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="text-left">
+                                {% set t1_iso_period = team_iso_codes.get(t1_key) %}
+                                {% if t1_iso_period %}<img src="https://flagcdn.com/w20/{{ t1_iso_period }}.png" alt="{{ t1_key }}" class="mr-2">{% endif %}
+                                {{ t1_key }}
+                            </td>
+                            <td>{{ team1_scores_by_period[1] }}</td>
+                            <td>{{ team1_scores_by_period[2] }}</td>
+                            <td>{{ team1_scores_by_period[3] }}</td>
+                            {% if team1_scores_by_period[4] > 0 or team2_scores_by_period[4] > 0 %}
+                            <td>{{ team1_scores_by_period[4] }}</td>
+                            {% endif %}
+                            <td><strong>{{ game.team1_score|default(0) }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="text-left">
+                                {% set t2_iso_period = team_iso_codes.get(t2_key) %}
+                                {% if t2_iso_period %}<img src="https://flagcdn.com/w20/{{ t2_iso_period }}.png" alt="{{ t2_key }}" class="mr-2">{% endif %}
+                                {{ t2_key }}
+                            </td>
+                            <td>{{ team2_scores_by_period[1] }}</td>
+                            <td>{{ team2_scores_by_period[2] }}</td>
+                            <td>{{ team2_scores_by_period[3] }}</td>
+                            {% if team1_scores_by_period[4] > 0 or team2_scores_by_period[4] > 0 %}
+                            <td>{{ team2_scores_by_period[4] }}</td>
+                            {% endif %}
+                            <td><strong>{{ game.team2_score|default(0) }}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Scoring Summary -->
+            <div class="scoring-summary">
+                <h4 class="section-title">SCORING</h4>
+                {% if game_events %}
+                    {% set ns = namespace(current_period='') %}
+                    {% for event in game_events %}
+                        {% if event.type == 'goal' %}
+                            {% set trimmed_period_display = event.period_display | trim %}
+                            {% if trimmed_period_display != ns.current_period %}
+                                <div class="period-header">{{ trimmed_period_display }}</div>
+                                {% set ns.current_period = trimmed_period_display %}
+                            {% endif %}
+                            <div class="goal-item">
+                                <div class="goal-time">{{ event.time_str }}</div>
+                                <div class="goal-details">
+                                    <div class="goal-scorer">
+                                        {% if event.scorer_obj and event.scorer_obj.jersey_number is not none %}
+                                            <span class="jersey-number">{{ event.scorer_obj.jersey_number }}</span>
+                                        {% endif %}
+                                        {{ event.scorer }}
+                                        {% if event.team_iso %}<img src="https://flagcdn.com/w20/{{ event.team_iso }}.png" alt="{{ event.team_code }}" class="ml-2">{% endif %}
                                     </div>
-                                    <div class="assists small text-muted mt-1" style="padding-left: 5px;">
+                                    <div class="goal-assists">
                                         {% if event.assist1 %}
                                             {% if event.assist1_obj and event.assist1_obj.jersey_number is not none %}#{{ event.assist1_obj.jersey_number }}{% endif %} {{ event.assist1 }}
-                                            {% if event.assist2 %}
-                                                <span class="mx-1"></span> {% if event.assist2_obj and event.assist2_obj.jersey_number is not none %}#{{ event.assist2_obj.jersey_number }}{% endif %} {{ event.assist2 }}
-                                            {% endif %}
+                                            {% if event.assist2 %}, {% if event.assist2_obj and event.assist2_obj.jersey_number is not none %}#{{ event.assist2_obj.jersey_number }}{% endif %} {{ event.assist2 }}{% endif %}
                                         {% else %}
                                             Unassisted
                                         {% endif %}
+                                        <span class="ml-2 text-muted">({{ event.goal_type_display }}{% if event.is_empty_net %}, EN{% endif %})</span>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    {% endif %}
-                {% endfor %}
-                {% if ns.current_period != '' %} {# Check if the last period-goals-container needs closing #}
-                    </div>{# Close last period-goals-container #}
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted text-center">No goals scored in this game.</p>
                 {% endif %}
             </div>
-        {% else %}
-            <p class="text-muted">No goals scored in this game.</p>
-        {% endif %}
-    </div>
+        </div>
 
-</div> {# End of game-stats-content-wrapper #}
+        <!-- Right Column: Statistics -->
+        <div class="col-lg-7">
+            <div class="stats-container">
+                <h4 class="section-title">STATISTICS</h4>
+                
+                <!-- Navigation Pills -->
+                <ul class="nav nav-pills justify-content-center" id="statsTabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="total-tab" data-toggle="tab" href="#total" role="tab">TOTAL</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="p1-tab" data-toggle="tab" href="#p1" role="tab">1ST PERIOD</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="p2-tab" data-toggle="tab" href="#p2" role="tab">2ND PERIOD</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="p3-tab" data-toggle="tab" href="#p3" role="tab">3RD PERIOD</a>
+                    </li>
+                    {% set team1_sog_ot = sog_data_for_stats_page.get(t1_key, {}).get(4, 0) %}
+                    {% set team2_sog_ot = sog_data_for_stats_page.get(t2_key, {}).get(4, 0) %}
+                    {% if team1_sog_ot > 0 or team2_sog_ot > 0 %}
+                    <li class="nav-item">
+                        <a class="nav-link" id="ot-tab" data-toggle="tab" href="#ot" role="tab">OVERTIME</a>
+                    </li>
+                    {% endif %}
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content" id="statsTabsContent">
+                    {% macro render_stat_bar(team1_val, team2_val, label) %}
+                        {% set total_val = team1_val + team2_val %}
+                        {% if total_val == 0 %}{% set total_val = 1 %}{% endif %}
+                        {% set team1_perc = (team1_val / total_val) * 100 %}
+                        {% set team2_perc = (team2_val / total_val) * 100 %}
+                        <div class="stat-row">
+                            <div class="stat-value-left">{{ team1_val }}</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar-left" style="width: {{ team1_perc }}%;"></div>
+                                <div class="stat-bar-right" style="width: {{ team2_perc }}%;"></div>
+                            </div>
+                            <div class="stat-value-right">{{ team2_val }}</div>
+                        </div>
+                        <div class="stat-label">{{ label }}</div>
+                    {% endmacro %}
+
+                    <!-- Total Stats -->
+                    <div class="tab-pane fade show active" id="total" role="tabpanel">
+                        {{ render_stat_bar(sog_totals.get(t1_key, 0), sog_totals.get(t2_key, 0), 'SHOTS') }}
+                        {{ render_stat_bar(pim_totals.get(t1_key, 0), pim_totals.get(t2_key, 0), 'PIM') }}
+                        
+                        <!-- Power Play Stats -->
+                        <div class="powerplay-stats">
+                            <div class="pp-stat">
+                                <div class="pp-percentage">{{ pp_percentage.get(t1_key, 0.0) }}%</div>
+                                <div class="pp-details">
+                                    POWERPLAY<br>
+                                    ({{ pp_goals_scored.get(t1_key, 0) }}/{{ pp_opportunities.get(t1_key, 0) }})
+                                </div>
+                            </div>
+                            <div class="pp-stat">
+                                <div class="pp-percentage">{{ pp_percentage.get(t2_key, 0.0) }}%</div>
+                                <div class="pp-details">
+                                    POWERPLAY<br>
+                                    ({{ pp_goals_scored.get(t2_key, 0) }}/{{ pp_opportunities.get(t2_key, 0) }})
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Period Stats -->
+                    <div class="tab-pane fade" id="p1" role="tabpanel">
+                        {{ render_stat_bar(sog_data_for_stats_page.get(t1_key, {}).get(1,0), sog_data_for_stats_page.get(t2_key, {}).get(1,0), 'SHOTS') }}
+                    </div>
+
+                    <div class="tab-pane fade" id="p2" role="tabpanel">
+                        {{ render_stat_bar(sog_data_for_stats_page.get(t1_key, {}).get(2,0), sog_data_for_stats_page.get(t2_key, {}).get(2,0), 'SHOTS') }}
+                    </div>
+
+                    <div class="tab-pane fade" id="p3" role="tabpanel">
+                        {{ render_stat_bar(sog_data_for_stats_page.get(t1_key, {}).get(3,0), sog_data_for_stats_page.get(t2_key, {}).get(3,0), 'SHOTS') }}
+                    </div>
+
+                    {% if team1_sog_ot > 0 or team2_sog_ot > 0 %}
+                    <div class="tab-pane fade" id="ot" role="tabpanel">
+                        {{ render_stat_bar(sog_data_for_stats_page.get(t1_key, {}).get(4,0), sog_data_for_stats_page.get(t2_key, {}).get(4,0), 'SHOTS') }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -330,7 +603,7 @@
             if(history.pushState) {
                 history.pushState(null, null, e.target.hash);
             } else {
-                window.location.hash = e.target.hash; // Fallback
+                window.location.hash = e.target.hash;
             }
         });
     });
