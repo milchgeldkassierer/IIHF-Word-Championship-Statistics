@@ -819,11 +819,14 @@ def get_medal_tally_data():
     current_app.logger.info("Finished medal tally calculation.")
     return medal_tally_results
 
-def get_all_player_stats():
+def get_all_player_stats(team_filter=None):
     """
     Calculates aggregated statistics (goals, assists, PIMs) for all players.
+    
+    Args:
+        team_filter (str, optional): If provided, only return stats for players from this team.
     """
-    current_app.logger.info("Starting all-player statistics calculation.")
+    current_app.logger.info(f"Starting player statistics calculation. Team filter: {team_filter}")
 
     # Subquery for Goals
     goals_sq = db.session.query(
@@ -885,6 +888,10 @@ def get_all_player_stats():
     .outerjoin(assists2_sq, Player.id == assists2_sq.c.player_id) \
     .outerjoin(pims_sq, Player.id == pims_sq.c.player_id)
 
+    # Apply team filter if provided
+    if team_filter:
+        player_stats_query = player_stats_query.filter(Player.team_code == team_filter)
+
     # Log distinct penalty types from DB not in PIM_MAP
     # This is a separate query for logging purposes, run once.
     # It does not affect the main stats calculation which defaults unmapped types to 0 PIM.
@@ -912,16 +919,21 @@ def get_all_player_stats():
     # Primary sort: scorer_points (descending), Secondary sort: goals (descending)
     results.sort(key=lambda x: (x['scorer_points'], x['goals']), reverse=True)
     
-    current_app.logger.info(f"Finished all-player statistics calculation. Found {len(results)} players.")
+    current_app.logger.info(f"Finished player statistics calculation. Found {len(results)} players.")
     return results
 
 @main_bp.route('/player-stats')
 def player_stats_view():
     """
     Displays the player statistics page.
+    Supports team filtering via 'team_filter' query parameter.
     """
-    current_app.logger.info("Accessing player statistics page.")
-    player_stats_data = get_all_player_stats() # This function is defined in the same file
+    team_filter = request.args.get('team_filter', '').strip()
+    if not team_filter:
+        team_filter = None
+    
+    current_app.logger.info(f"Accessing player statistics page. Team filter: {team_filter}")
+    player_stats_data = get_all_player_stats(team_filter=team_filter)
     # TEAM_ISO_CODES is already imported in this file
     return render_template('player_stats.html', player_stats=player_stats_data, team_iso_codes=TEAM_ISO_CODES)
 

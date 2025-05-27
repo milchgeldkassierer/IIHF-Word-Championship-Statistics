@@ -130,6 +130,13 @@
         text-overflow: ellipsis;
         max-width: 150px;
     }
+    
+    /* Loading indicator */
+    .opacity-50 {
+        opacity: 0.5;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+    }
 </style>
 {% endblock %}
 
@@ -379,8 +386,12 @@ $(document).ready(function() {
     
     // Function to update ranking numbers after sorting
     function updateRankingNumbers(tableId) {
-        $(`#${tableId} tbody tr`).each(function(index) {
-            $(this).find('td:first').text(index + 1);
+        let visibleIndex = 1;
+        $(`#${tableId} tbody tr`).each(function() {
+            if ($(this).is(':visible')) {
+                $(this).find('td:first').text(visibleIndex);
+                visibleIndex++;
+            }
         });
     }
     
@@ -390,37 +401,62 @@ $(document).ready(function() {
     setupSorting('assistProvidersTable', 'assists');
     setupSorting('pimsStatsTable', 'pims');
     
-    // Team filtering functionality for all tables
+        // Team filtering functionality - load data dynamically
     $('#teamFilter').change(function() {
         const selectedTeam = $(this).val();
-        const scoringRows = $('#scoringStatsTable tbody tr');
-        const goalRows = $('#goalScorersTable tbody tr');
-        const assistRows = $('#assistProvidersTable tbody tr');
-        const pimsRows = $('#pimsStatsTable tbody tr');
         
-        function filterRows(rows, tableId) {
-            if (selectedTeam === '') {
-                // Show all rows
-                rows.show();
-            } else {
-                // Hide/show rows based on team
-                rows.each(function() {
-                    const rowTeam = $(this).data('team');
-                    if (rowTeam === selectedTeam) {
-                        $(this).show();
+        // Show loading indicator
+        $('.stats-section').addClass('opacity-50');
+        
+        // Make AJAX request to get filtered stats
+        $.ajax({
+            url: '{{ url_for("main_bp.player_stats_view") }}',
+            method: 'GET',
+            data: { team_filter: selectedTeam },
+            success: function(response) {
+                // Update the page content with new data
+                const $newContent = $(response);
+                
+                // Update each table body
+                $('#top-scorers-points-body').html($newContent.find('#top-scorers-points-body').html());
+                $('#top-goal-scorers-body').html($newContent.find('#top-goal-scorers-body').html());
+                $('#top-assist-providers-body').html($newContent.find('#top-assist-providers-body').html());
+                $('#top-penalty-players-body').html($newContent.find('#top-penalty-players-body').html());
+                
+                // Update toggle buttons visibility
+                $('.toggle-stats-visibility').each(function() {
+                    const $button = $(this);
+                    const targetBodySelector = $button.data('target-body');
+                    const $newButton = $newContent.find(`.toggle-stats-visibility[data-target-body="${targetBodySelector}"]`);
+                    
+                    if ($newButton.length > 0) {
+                        $button.show();
+                        $button.text('Alle anzeigen'); // Reset button text
                     } else {
-                        $(this).hide();
+                        $button.hide();
                     }
                 });
+                
+                // Remove loading indicator
+                $('.stats-section').removeClass('opacity-50');
+                
+                // Re-setup sorting for updated tables
+                setupSorting('scoringStatsTable', 'scoring');
+                setupSorting('goalScorersTable', 'goals');
+                setupSorting('assistProvidersTable', 'assists');
+                setupSorting('pimsStatsTable', 'pims');
+                
+                // Apply initial sort
+                $('#scoringStatsTable th[data-column="scorer_points"]').click();
+                $('#goalScorersTable th[data-column="goals"]').click();
+                $('#assistProvidersTable th[data-column="assists"]').click();
+                $('#pimsStatsTable th[data-column="pims"]').click();
+            },
+            error: function() {
+                alert('Fehler beim Laden der Statistiken');
+                $('.stats-section').removeClass('opacity-50');
             }
-            // Update ranking numbers after filtering
-            updateRankingNumbers(tableId);
-        }
-        
-        filterRows(scoringRows, 'scoringStatsTable');
-        filterRows(goalRows, 'goalScorersTable');
-        filterRows(assistRows, 'assistProvidersTable');
-        filterRows(pimsRows, 'pimsStatsTable');
+        });
     });
     
     // Statistics table toggle functionality
@@ -429,13 +465,16 @@ $(document).ready(function() {
         var targetBodySelector = $button.data('target-body');
         var $tableBody = $(targetBodySelector);
         
-        $tableBody.find('tr.extra-stats-row').toggleClass('d-none');
-
         if ($button.text() === 'Alle anzeigen') {
+            $tableBody.find('tr.extra-stats-row').removeClass('d-none').show();
             $button.text('Weniger anzeigen');
         } else {
+            $tableBody.find('tr.extra-stats-row').addClass('d-none').hide();
             $button.text('Alle anzeigen');
         }
+        
+        // Re-apply team filter after toggle
+        $('#teamFilter').trigger('change');
     });
 
     // Initial sort - all tables by their main stat (descending)
