@@ -1,368 +1,188 @@
 {% extends "base.html" %}
 
-{% block title %}Medaillenspiegel - IIHF Tabellenrechner{% endblock %}
+{% block title %}Medaillenspiegel - IIHF WM Tracker{% endblock %}
 
 {% block head_scripts %}
-{{ super() }}
 <style>
-    .medal-hero {
-        background: linear-gradient(135deg, var(--dark-surface) 0%, var(--dark-bg) 100%);
-        color: white;
-        padding: 3rem 0;
-        margin-bottom: 3rem;
-        border-radius: 16px;
-        position: relative;
-        overflow: hidden;
+    .stats-section {
+        background-color: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: box-shadow 0.3s ease;
     }
     
-    .medal-hero::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
-        opacity: 0.3;
+    .stats-section:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
     
-    .medal-hero-content {
-        position: relative;
-        z-index: 1;
-        text-align: center;
-    }
-    
-    .medal-title {
-        font-size: 3rem;
-        font-weight: 900;
-        margin-bottom: 1rem;
-        background: linear-gradient(45deg, var(--accent-gold), #ffed4e);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-    
-    .medal-subtitle {
-        font-size: 1.2rem;
-        opacity: 0.9;
-    }
-    
-    .medal-table-container {
-        background: var(--light-surface);
-        border-radius: 16px;
-        overflow: hidden;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        margin-bottom: 2rem;
-    }
-    
-    body.dark-mode .medal-table-container {
-        background: var(--dark-surface);
-        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-    }
-    
-    .medal-table {
-        margin-bottom: 0;
-    }
-    
-    .medal-table th {
-        background: linear-gradient(135deg, var(--dark-surface) 0%, var(--dark-bg) 100%);
-        color: white;
-        border: none;
-        padding: 1.25rem 1rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-size: 0.9rem;
-    }
-    
-    .medal-table td {
-        padding: 1.25rem 1rem;
-        border-color: #e2e8f0;
-        font-weight: 600;
-        vertical-align: middle;
-    }
-    
-    body.dark-mode .medal-table td {
-        border-color: var(--dark-border);
-        color: var(--text-light);
-    }
-    
-    .medal-table tbody tr:hover {
-        background: linear-gradient(90deg, rgba(66, 153, 225, 0.1), rgba(229, 62, 62, 0.1));
-        transform: scale(1.01);
-        transition: all 0.3s ease;
-    }
-    
-    body.dark-mode .medal-table tbody tr:hover {
-        background: linear-gradient(90deg, rgba(66, 153, 225, 0.2), rgba(229, 62, 62, 0.2));
-    }
-    
-    .team-info {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    
-    .team-flag {
-        width: 32px;
-        height: 21px;
-        border-radius: 4px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-    }
-    
-    .team-name {
-        font-weight: 700;
-        font-size: 1rem;
-    }
-    
-    .medal-badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        font-weight: 700;
-        font-size: 1.1rem;
-        color: white;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        transition: all 0.3s ease;
-    }
-    
-    .medal-badge:hover {
-        transform: scale(1.1);
-    }
-    
-    .medal-gold {
-        background: linear-gradient(135deg, #ffd700 0%, #ffb347 100%);
-        border: 2px solid #ffa500;
-    }
-    
-    .medal-silver {
-        background: linear-gradient(135deg, #c0c0c0 0%, #a8a8a8 100%);
-        border: 2px solid #999999;
-        color: #333 !important;
-    }
-    
-    .medal-bronze {
-        background: linear-gradient(135deg, #cd7f32 0%, #b8860b 100%);
-        border: 2px solid #8b4513;
-    }
-    
-    .total-medals {
-        background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-red) 100%);
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 25px;
-        font-weight: 700;
-        font-size: 1.1rem;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    }
-    
-    .summary-cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 2rem;
-        margin-top: 3rem;
-    }
-    
-    .summary-card {
-        background: var(--light-surface);
-        border-radius: 16px;
-        padding: 2rem;
-        text-align: center;
-        transition: all 0.3s ease;
-        border: 1px solid rgba(255,255,255,0.1);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    body.dark-mode .summary-card {
-        background: var(--dark-surface);
-        border: 1px solid var(--dark-border);
-    }
-    
-    .summary-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-    }
-    
-    .summary-card.gold::before {
-        background: linear-gradient(90deg, #ffd700, #ffb347);
-    }
-    
-    .summary-card.silver::before {
-        background: linear-gradient(90deg, #c0c0c0, #a8a8a8);
-    }
-    
-    .summary-card.bronze::before {
-        background: linear-gradient(90deg, #cd7f32, #b8860b);
-    }
-    
-    .summary-card:hover {
-        transform: translateY(-6px);
-        box-shadow: 0 12px 35px rgba(0,0,0,0.15);
-    }
-    
-    body.dark-mode .summary-card:hover {
-        box-shadow: 0 12px 35px rgba(0,0,0,0.4);
-    }
-    
-    .summary-icon {
-        font-size: 3rem;
-        margin-bottom: 1rem;
-    }
-    
-    .summary-icon.gold {
-        color: #ffd700;
-    }
-    
-    .summary-icon.silver {
-        color: #c0c0c0;
-    }
-    
-    .summary-icon.bronze {
-        color: #cd7f32;
-    }
-    
-    .summary-number {
-        font-size: 2.5rem;
-        font-weight: 900;
-        margin-bottom: 0.5rem;
-        color: var(--dark-surface);
-    }
-    
-    body.dark-mode .summary-number {
-        color: var(--text-light);
-    }
-    
-    .summary-label {
-        font-size: 1rem;
-        color: #6c757d;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+    .stats-title {
+        color: #495057;
+        border-bottom: 2px solid #6c757d;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
         font-weight: 600;
     }
     
-    body.dark-mode .summary-label {
-        color: var(--text-muted);
+    /* Dark mode improvements */
+    body.dark-mode .stats-section {
+        background-color: #2d3748;
+        border-color: #4a5568;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
     
-    .year-badge {
-        background: linear-gradient(135deg, var(--primary-blue) 0%, #3182ce 100%);
-        color: white;
-        padding: 0.25rem 0.75rem;
-        border-radius: 15px;
-        font-size: 0.85rem;
+    body.dark-mode .stats-section:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    
+    body.dark-mode .stats-title {
+        color: #e2e8f0;
+        border-bottom-color: #a0aec0;
+    }
+    
+    body.dark-mode .table {
+        background-color: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    body.dark-mode .table th,
+    body.dark-mode .table td {
+        border-color: #4a5568;
+        color: #e2e8f0;
+        background-color: transparent;
+    }
+    
+    body.dark-mode .table .thead-dark th {
+        background-color: #1a202c;
+        border-color: #2d3748;
+        color: #e2e8f0;
         font-weight: 600;
-        margin-left: 0.5rem;
     }
     
-    .no-data-state {
-        text-align: center;
-        padding: 4rem 2rem;
-        color: #6c757d;
+    body.dark-mode .table-striped tbody tr:nth-of-type(odd) {
+        background-color: rgba(255, 255, 255, 0.08) !important;
     }
     
-    body.dark-mode .no-data-state {
-        color: var(--text-muted);
+    body.dark-mode .table-striped tbody tr:nth-of-type(even) {
+        background-color: rgba(255, 255, 255, 0.03) !important;
     }
     
-    .no-data-icon {
-        font-size: 4rem;
-        margin-bottom: 1.5rem;
-        opacity: 0.5;
+    body.dark-mode .table-hover tbody tr:hover {
+        background-color: rgba(66, 153, 225, 0.15) !important;
+    }
+    
+    body.dark-mode .table-responsive {
+        border: 1px solid #4a5568;
+        border-radius: 8px;
+        background-color: #2d3748;
+    }
+    
+    body.dark-mode .badge.bg-warning {
+        background-color: #ffd700 !important;
+        color: #1a202c !important;
+        font-weight: bold;
+    }
+    
+    body.dark-mode .badge.bg-secondary {
+        background-color: #c0c0c0 !important;
+        color: #1a202c !important;
+        font-weight: bold;
+    }
+    
+    body.dark-mode .badge.bg-dark {
+        background-color: #cd7f32 !important;
+        color: #ffffff !important;
+        font-weight: bold;
+    }
+    
+    body.dark-mode .badge.bg-info {
+        background-color: #4299e1 !important;
+        color: #1a202c !important;
+        font-weight: bold;
+    }
+    
+    body.dark-mode .text-muted {
+        color: #a0aec0 !important;
+    }
+    
+    body.dark-mode td strong {
+        color: #ffffff;
+        font-weight: 700;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- Medal Hero Section -->
-<div class="medal-hero slide-up">
-    <div class="medal-hero-content">
-        <h1 class="medal-title">
-            <i class="fas fa-medal mr-3"></i>
-            Medaillenspiegel
-        </h1>
-        <p class="medal-subtitle">
-            Übersicht aller Medaillen und Erfolge der IIHF Turniere
-        </p>
-    </div>
-</div>
+<div class="container mt-4">
+    <h1 class="mb-4">Medaillenspiegel</h1>
 
-{% if medal_data %}
-    <!-- Medal Table -->
-    <div class="stats-container fade-in">
-        <h2 class="section-title">Medaillenverteilung nach Jahren</h2>
-        
-        <div class="medal-table-container">
-            <table class="table medal-table table-hover">
-                <thead>
+    <div class="stats-section">
+        <h3 class="stats-title">Medaillen nach Jahr</h3>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="thead-dark">
                     <tr>
-                        <th style="width: 30%;">Team</th>
-                        <th style="width: 15%;">Jahr</th>
-                        <th style="width: 15%;" class="text-center">
-                            <i class="fas fa-medal" style="color: #ffd700;"></i>
-                            Gold
-                        </th>
-                        <th style="width: 15%;" class="text-center">
-                            <i class="fas fa-medal" style="color: #c0c0c0;"></i>
-                            Silber
-                        </th>
-                        <th style="width: 15%;" class="text-center">
-                            <i class="fas fa-medal" style="color: #cd7f32;"></i>
-                            Bronze
-                        </th>
-                        <th style="width: 10%;" class="text-center">Gesamt</th>
+                        <th>Jahr</th>
+                        <th>Gold</th>
+                        <th>Silber</th>
+                        <th>Bronze</th>
+                        <th>4. Platz</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for medal_entry in medal_data | sort(attribute='year_obj.year') %}
                     <tr>
+                        <td>{{ medal_entry.year_obj.year }}</td>
                         <td>
-                            <div class="team-info">
-                                {% set team_iso = team_iso_codes.get(medal_entry.team_name) %}
-                                {% if team_iso %}
-                                    <img src="https://flagcdn.com/w40/{{ team_iso }}.png" 
-                                         alt="{{ medal_entry.team_name }}" 
-                                         class="team-flag">
+                            {% if medal_entry.gold %}
+                                {% set team_code = medal_entry.gold %}
+                                {% if team_iso_codes.get(team_code) %}
+                                    <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}"> 
                                 {% endif %}
-                                <span class="team-name">{{ medal_entry.team_name }}</span>
-                            </div>
+                                {{ team_code }}
+                            {% else %}
+                                N/A
+                            {% endif %}
                         </td>
                         <td>
-                            <strong>{{ medal_entry.year_obj.year }}</strong>
-                            <span class="year-badge">{{ medal_entry.year_obj.name }}</span>
-                        </td>
-                        <td class="text-center">
-                            {% if medal_entry.gold > 0 %}
-                                <span class="medal-badge medal-gold">{{ medal_entry.gold }}</span>
+                            {% if medal_entry.silver %}
+                                {% set team_code = medal_entry.silver %}
+                                {% if team_iso_codes.get(team_code) %}
+                                    <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}"> 
+                                {% endif %}
+                                {{ team_code }}
                             {% else %}
-                                <span class="text-muted">-</span>
+                                N/A
                             {% endif %}
                         </td>
-                        <td class="text-center">
-                            {% if medal_entry.silver > 0 %}
-                                <span class="medal-badge medal-silver">{{ medal_entry.silver }}</span>
+                        <td>
+                            {% if medal_entry.bronze %}
+                                {% set team_code = medal_entry.bronze %}
+                                {% if team_iso_codes.get(team_code) %}
+                                    <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}"> 
+                                {% endif %}
+                                {{ team_code }}
                             {% else %}
-                                <span class="text-muted">-</span>
+                                N/A
                             {% endif %}
                         </td>
-                        <td class="text-center">
-                            {% if medal_entry.bronze > 0 %}
-                                <span class="medal-badge medal-bronze">{{ medal_entry.bronze }}</span>
+                        <td>
+                            {% if medal_entry.fourth %}
+                                {% set team_code = medal_entry.fourth %}
+                                {% if team_iso_codes.get(team_code) %}
+                                    <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}"> 
+                                {% endif %}
+                                {{ team_code }}
                             {% else %}
-                                <span class="text-muted">-</span>
+                                N/A
                             {% endif %}
                         </td>
-                        <td class="text-center">
-                            <span class="total-medals">{{ medal_entry.total }}</span>
-                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center">Keine Medaillendaten verfügbar.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -370,59 +190,89 @@
         </div>
     </div>
 
-    <!-- Summary Statistics -->
-    <div class="stats-container fade-in">
-        <h2 class="section-title">Medaillen-Statistiken</h2>
-        
-        <div class="summary-cards">
-            <div class="summary-card gold">
-                <div class="summary-icon gold">
-                    <i class="fas fa-trophy"></i>
-                </div>
-                <div class="summary-number">{{ total_gold }}</div>
-                <div class="summary-label">Gold Medaillen</div>
-            </div>
-            
-            <div class="summary-card silver">
-                <div class="summary-icon silver">
-                    <i class="fas fa-medal"></i>
-                </div>
-                <div class="summary-number">{{ total_silver }}</div>
-                <div class="summary-label">Silber Medaillen</div>
-            </div>
-            
-            <div class="summary-card bronze">
-                <div class="summary-icon bronze">
-                    <i class="fas fa-award"></i>
-                </div>
-                <div class="summary-number">{{ total_bronze }}</div>
-                <div class="summary-label">Bronze Medaillen</div>
-            </div>
-            
-            <div class="summary-card">
-                <div class="summary-icon" style="color: var(--primary-blue);">
-                    <i class="fas fa-chart-bar"></i>
-                </div>
-                <div class="summary-number">{{ total_medals }}</div>
-                <div class="summary-label">Gesamt Medaillen</div>
-            </div>
-        </div>
-    </div>
+    <!-- Medal Count Summary -->
+    <div class="stats-section">
+        <h3 class="stats-title">Medaillenspiegel Zusammenfassung</h3>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="thead-dark">
+                    <tr>
+                        <th>Team</th>
+                        <th class="text-center">🥇 Gold</th>
+                        <th class="text-center">🥈 Silber</th>
+                        <th class="text-center">🥉 Bronze</th>
+                        <th class="text-center">4. Platz</th>
+                        <th class="text-center">Gesamt</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set medal_counts = {} %}
+                    {% for medal_entry in medal_data %}
+                        {% if medal_entry.gold %}
+                            {% set _ = medal_counts.setdefault(medal_entry.gold, {'gold': 0, 'silver': 0, 'bronze': 0, 'fourth': 0}) %}
+                            {% set _ = medal_counts[medal_entry.gold].update({'gold': medal_counts[medal_entry.gold]['gold'] + 1}) %}
+                        {% endif %}
+                        {% if medal_entry.silver %}
+                            {% set _ = medal_counts.setdefault(medal_entry.silver, {'gold': 0, 'silver': 0, 'bronze': 0, 'fourth': 0}) %}
+                            {% set _ = medal_counts[medal_entry.silver].update({'silver': medal_counts[medal_entry.silver]['silver'] + 1}) %}
+                        {% endif %}
+                        {% if medal_entry.bronze %}
+                            {% set _ = medal_counts.setdefault(medal_entry.bronze, {'gold': 0, 'silver': 0, 'bronze': 0, 'fourth': 0}) %}
+                            {% set _ = medal_counts[medal_entry.bronze].update({'bronze': medal_counts[medal_entry.bronze]['bronze'] + 1}) %}
+                        {% endif %}
+                        {% if medal_entry.fourth %}
+                            {% set _ = medal_counts.setdefault(medal_entry.fourth, {'gold': 0, 'silver': 0, 'bronze': 0, 'fourth': 0}) %}
+                            {% set _ = medal_counts[medal_entry.fourth].update({'fourth': medal_counts[medal_entry.fourth]['fourth'] + 1}) %}
+                        {% endif %}
+                    {% endfor %}
 
-{% else %}
-    <!-- No Data State -->
-    <div class="stats-container fade-in">
-        <div class="no-data-state">
-            <div class="no-data-icon">
-                <i class="fas fa-medal"></i>
-            </div>
-            <h3>Keine Medaillendaten verfügbar</h3>
-            <p>Es wurden noch keine Turniere mit Medaillenverteilung gefunden.</p>
-            <a href="{{ url_for('main.index') }}" class="btn btn-primary mt-3">
-                <i class="fas fa-plus mr-2"></i>
-                Turnier erstellen
-            </a>
+                    {% for team_code, counts in medal_counts.items() | sort(attribute='1.gold', reverse=true) %}
+                        {% set total = counts.gold + counts.silver + counts.bronze + counts.fourth %}
+                        {% if total > 0 %}
+                        <tr>
+                            <td>
+                                {% if team_iso_codes.get(team_code) %}
+                                    <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}" class="me-2"> 
+                                {% endif %}
+                                <strong>{{ team_code }}</strong>
+                            </td>
+                            <td class="text-center">
+                                {% if counts.gold > 0 %}
+                                    <span class="badge bg-warning text-dark fs-5 px-3 py-2" style="font-weight: bold;">{{ counts.gold }}</span>
+                                {% else %}
+                                    <span class="text-muted fs-5">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if counts.silver > 0 %}
+                                    <span class="badge bg-secondary text-white fs-5 px-3 py-2" style="font-weight: bold;">{{ counts.silver }}</span>
+                                {% else %}
+                                    <span class="text-muted fs-5">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if counts.bronze > 0 %}
+                                    <span class="badge bg-dark text-white fs-5 px-3 py-2" style="font-weight: bold;">{{ counts.bronze }}</span>
+                                {% else %}
+                                    <span class="text-muted fs-5">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if counts.fourth > 0 %}
+                                    <span class="badge bg-info text-dark fs-5 px-3 py-2" style="font-weight: bold;">{{ counts.fourth }}</span>
+                                {% else %}
+                                    <span class="text-muted fs-5">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <strong class="fs-4">{{ total }}</strong>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
-{% endif %}
+</div>
 {% endblock %}
