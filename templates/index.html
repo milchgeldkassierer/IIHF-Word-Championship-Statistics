@@ -63,9 +63,18 @@
     body.dark-mode .text-success {
         color: #68d391 !important;
     }
-    
-    body.dark-mode .text-warning {
+      body.dark-mode .text-warning {
         color: #fbb040 !important;
+    }
+    
+    .tournament-stats {
+        min-width: 120px;
+        text-align: right;
+    }
+    
+    .tournament-stats small {
+        display: block;
+        line-height: 1.3;
     }
 </style>
 {% endblock %}
@@ -102,14 +111,24 @@
             <h2 class="stats-title">Vorhandene Turniere</h2>
             {% if all_years %}
                 <ul class="list-group">
-                    {% for y in all_years %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                    {% for y in all_years %}                    <li class="list-group-item d-flex justify-content-between align-items-center">
                         <a href="{{ url_for('year_bp.year_view', year_id=y.id) }}">{{ y.name }} ({{y.year}})</a>
-                        <span>
-                            {% if y.fixture_path %}
-                                <small class="text-success">Spielplan vorhanden</small>
+                        <span class="tournament-stats d-flex flex-column align-items-end">
+                            {% if y.stats.total_games > 0 %}
+                                {% if y.stats.completed_games == y.stats.total_games %}
+                                    <small class="text-success">{{ y.stats.completed_games }}/{{ y.stats.total_games }} Spiele eingetragen</small>
+                                {% elif y.stats.completed_games > 0 %}
+                                    <small class="text-warning">{{ y.stats.completed_games }}/{{ y.stats.total_games }} Spiele eingetraten</small>
+                                {% else %}
+                                    <small class="text-danger">{{ y.stats.completed_games }}/{{ y.stats.total_games }} Spiele eingetragen</small>
+                                {% endif %}                                {% if y.stats.completed_games == y.stats.total_games and y.stats.winner %}
+                                    <small class="text-success">Sieger: {% if team_iso_codes.get(y.stats.winner) %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[y.stats.winner] }}.png" alt="{{ y.stats.winner }}" style="margin-right: 5px;">{% endif %}{{ y.stats.winner }}</small>
+                                {% else %}
+                                    <small class="text-muted">Sieger: ---</small>
+                                {% endif %}
                             {% else %}
                                 <small class="text-warning">Kein Spielplan</small>
+                                <small class="text-muted">Sieger: ---</small>
                             {% endif %}
                         </span>
                         <form method="POST" style="display: inline;" onsubmit="return confirm('Sind Sie sicher, dass Sie das Turnier \'{{ y.name }} ({{ y.year }})\' und alle zugehörigen Daten löschen möchten?');" action="{{ url_for('main_bp.index') }}">

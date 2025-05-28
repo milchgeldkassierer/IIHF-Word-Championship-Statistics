@@ -1,15 +1,71 @@
 import os
 import json
-import re # Added for regex in playoff map building
 from typing import Dict, List # Added typing imports
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
 from models import db, ChampionshipYear, Game, AllTimeTeamStats, TeamStats, Player, Goal, Penalty # Added Player, Goal, Penalty
 from constants import TEAM_ISO_CODES, PRELIM_ROUNDS, PLAYOFF_ROUNDS, QF_GAME_NUMBERS_BY_YEAR, SF_GAME_NUMBERS_BY_YEAR, FINAL_BRONZE_GAME_NUMBERS_BY_YEAR, PIM_MAP # Added more constants, PIM_MAP
-from utils import get_resolved_team_code, is_code_final # Added utils imports
+from utils import get_resolved_team_code, is_code_final, resolve_game_participants # Added utils imports
 from sqlalchemy import func, case # Added func, case for SQLAlchemy
 import traceback
 
 main_bp = Blueprint('main_bp', __name__)
+
+def get_tournament_statistics(year_obj):
+    """
+    Calculate tournament statistics: games completed, total games, and winner
+    Returns dict with: total_games, completed_games, winner
+    """
+    if not year_obj:
+        return {'total_games': 0, 'completed_games': 0, 'winner': None}
+    
+    # Get all games for this tournament
+    all_games = Game.query.filter_by(year_id=year_obj.id).all()
+    total_games = len(all_games)
+    
+    # Count games with results (both scores not None)
+    completed_games = sum(1 for game in all_games if game.team1_score is not None and game.team2_score is not None)
+    
+    winner = None
+    # If all games are completed, try to find the winner (Gold Medal Game winner)
+    if completed_games == total_games and total_games > 0:
+        # Look for Gold Medal Game or Final
+        final_game = None
+        
+        # First try to find by round name
+        for game in all_games:
+            if game.round and ('final' in game.round.lower() or 'gold medal' in game.round.lower() or 'gold' in game.round.lower()):
+                final_game = game
+                break
+        
+        # If not found by round name, try to find the highest game number (usually the final)
+        if not final_game and all_games:
+            max_game_number = max(game.game_number for game in all_games if game.game_number is not None)
+            for game in all_games:
+                if game.game_number == max_game_number:
+                    final_game = game
+                    break
+          # If we found a final game and it has a result, determine winner
+        if final_game and final_game.team1_score is not None and final_game.team2_score is not None:
+            # Resolve the team codes to actual team names
+            try:
+                resolved_team1, resolved_team2 = resolve_game_participants(final_game, year_obj, all_games)
+                
+                if final_game.team1_score > final_game.team2_score:
+                    winner = resolved_team1
+                elif final_game.team2_score > final_game.team1_score:
+                    winner = resolved_team2
+            except Exception:
+                # Fallback to original codes if resolution fails
+                if final_game.team1_score > final_game.team2_score:
+                    winner = final_game.team1_code
+                elif final_game.team2_score > final_game.team1_score:
+                    winner = final_game.team2_code
+    
+    return {
+        'total_games': total_games,
+        'completed_games': completed_games,
+        'winner': winner
+    }
 
 def calculate_all_time_standings():
     """
@@ -211,109 +267,8 @@ def calculate_all_time_standings():
                             current_year_playoff_map['Q4'] = q4_team
                             map_changed_this_iter = True
 
-            
-            # Add complex semifinal pairing logic INSIDE the loop (ported from year_routes.py) - DISABLED FOR NOW
-            if False and qf_gns and sf_gns and len(qf_gns) >= 4 and len(sf_gns) >= 2:
-
-                # Get QF winners
-                qf_winners_teams = []
-                all_qf_winners_resolved = True
-                for qf_game_num in qf_gns[:4]:  # Only take first 4 QF games
-                    winner_placeholder = f'W({qf_game_num})'
-                    resolved_qf_winner = current_year_playoff_map.get(winner_placeholder)
-
-                    if resolved_qf_winner and is_code_final(resolved_qf_winner):
-                        qf_winners_teams.append(resolved_qf_winner)
-                    else:
-                        all_qf_winners_resolved = False
-
-                        break
-                
-                if all_qf_winners_resolved and len(qf_winners_teams) == 4:
-                    # Get preliminary stats for QF winners to determine rankings
-                    qf_winners_stats = []
-                    for team_name in qf_winners_teams:
-                        # Find this team in the preliminary standings
-                        team_found = False
-                        for group_standings in prelim_standings_by_group_this_year.values():
-                            for team_stat in group_standings:
-                                if team_stat.name == team_name:
-                                    qf_winners_stats.append(team_stat)
-                                    team_found = True
-                                    break
-                            if team_found:
-                                break
-                        if not team_found:
-                            all_qf_winners_resolved = False
-                            break
                     
-                    if all_qf_winners_resolved and len(qf_winners_stats) == 4:
-                        # Sort by preliminary standings (same logic as year_routes.py)
-                        qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
-                        R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats]
-
-                        
-                        # Create matchups: R1 vs R4, R2 vs R3
-                        matchup1 = (R1, R4)
-                        matchup2 = (R2, R3)
-                        sf_game1_teams = None
-                        sf_game2_teams = None
-                        primary_host_plays_sf1 = False
-                        
-                        # Check for host country preferences (same logic as year_routes.py)
-                        if h_tcs:  # h_tcs = host teams
-                            if h_tcs[0] in [R1, R2, R3, R4]:
-                                primary_host_plays_sf1 = True
-                                if R1 == h_tcs[0] or R4 == h_tcs[0]:
-                                    sf_game1_teams = matchup1
-                                    sf_game2_teams = matchup2
-                                else:
-                                    sf_game1_teams = matchup2
-                                    sf_game2_teams = matchup1
-                            elif len(h_tcs) > 1 and h_tcs[1] in [R1, R2, R3, R4]:
-                                primary_host_plays_sf1 = True
-                                if R1 == h_tcs[1] or R4 == h_tcs[1]:
-                                    sf_game1_teams = matchup1
-                                    sf_game2_teams = matchup2
-                                else:
-                                    sf_game1_teams = matchup2
-                                    sf_game2_teams = matchup1
-                        
-                        if not primary_host_plays_sf1:
-                            sf_game1_teams = matchup1
-                            sf_game2_teams = matchup2
-                        
-                        # Map semifinal games to actual teams
-                        if sf_game1_teams and sf_game2_teams and len(sf_gns) >= 2:
-                            sf_game_obj_1 = all_games_this_year_map_by_number.get(sf_gns[0])
-                            sf_game_obj_2 = all_games_this_year_map_by_number.get(sf_gns[1])
-                            
-                            if sf_game_obj_1 and sf_game_obj_2:
-
-                                # Map SF game 1 teams
-                                if current_year_playoff_map.get(sf_game_obj_1.team1_code) != sf_game1_teams[0]:
-
-                                    current_year_playoff_map[sf_game_obj_1.team1_code] = sf_game1_teams[0]
-                                    map_changed_this_iter = True
-                                if current_year_playoff_map.get(sf_game_obj_1.team2_code) != sf_game1_teams[1]:
-
-                                    current_year_playoff_map[sf_game_obj_1.team2_code] = sf_game1_teams[1]
-                                    map_changed_this_iter = True
-                                
-                                # Map SF game 2 teams
-                                if current_year_playoff_map.get(sf_game_obj_2.team1_code) != sf_game2_teams[0]:
-
-                                    current_year_playoff_map[sf_game_obj_2.team1_code] = sf_game2_teams[0]
-                                    map_changed_this_iter = True
-                                if current_year_playoff_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
-
-                                    current_year_playoff_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
-                                    map_changed_this_iter = True
-        
         resolved_playoff_maps_by_year_id[year_id] = current_year_playoff_map
-
-        
-
 
 
     # --- End of new precomputation logic ---
@@ -526,6 +481,10 @@ def index():
 
     all_years_db = ChampionshipYear.query.order_by(ChampionshipYear.year.desc(), ChampionshipYear.name).all()
     
+    # Add tournament statistics to each year
+    for year in all_years_db:
+        year.stats = get_tournament_statistics(year)
+    
     # Example of how you might call it in a route (for testing, not part of this function's definition)
     # all_time_table = calculate_all_time_standings()
     # for team_stat in all_time_table:
@@ -554,7 +513,7 @@ def index():
     
     sorted_fixture_years = sorted(list(all_found_years), reverse=True)
 
-    return render_template('index.html', all_years=all_years_db, available_fixture_years=sorted_fixture_years)
+    return render_template('index.html', all_years=all_years_db, available_fixture_years=sorted_fixture_years, team_iso_codes=TEAM_ISO_CODES)
 
 @main_bp.route('/all-time-standings')
 def all_time_standings_view():
