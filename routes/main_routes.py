@@ -87,17 +87,15 @@ def calculate_all_time_standings():
         qf_gns, sf_gns, h_tcs = [], [], []
         if year_obj.fixture_path and os.path.exists(year_obj.fixture_path):
             try:
-                with open(year_obj.fixture_path, 'r', encoding='utf-8') as f: fixture_data = json.load(f)
+                with open(year_obj.fixture_path, 'r', encoding='utf-8') as f: 
+                    fixture_data = json.load(f)
                 qf_gns = fixture_data.get("qf_game_numbers") or QF_GAME_NUMBERS_BY_YEAR.get(year_id, [])
                 sf_gns = fixture_data.get("sf_game_numbers") or SF_GAME_NUMBERS_BY_YEAR.get(year_id, [])
                 h_tcs = fixture_data.get("host_teams", [])
-                current_app.logger.debug(f"Year {year_id}: Loaded from fixture - QF: {qf_gns}, SF: {sf_gns}, Hosts: {h_tcs}")
             except (json.JSONDecodeError, OSError): 
                 qf_gns = QF_GAME_NUMBERS_BY_YEAR.get(year_id, []); sf_gns = SF_GAME_NUMBERS_BY_YEAR.get(year_id, [])
-                current_app.logger.debug(f"Year {year_id}: Loaded from constants (fixture error) - QF: {qf_gns}, SF: {sf_gns}")
         else: 
             qf_gns = QF_GAME_NUMBERS_BY_YEAR.get(year_id, []); sf_gns = SF_GAME_NUMBERS_BY_YEAR.get(year_id, [])
-            current_app.logger.debug(f"Year {year_id}: Loaded from constants (no fixture) - QF: {qf_gns}, SF: {sf_gns}")
 
         for grp_name_iter, grp_teams_stats_list in prelim_standings_by_group_this_year.items(): # Renamed grp_name
             for team_s in grp_teams_stats_list:
@@ -116,7 +114,7 @@ def calculate_all_time_standings():
                 game_winner_placeholder = f"W({qf_game_num})"
                 # Q1 = W(57), Q2 = W(58), Q3 = W(59), Q4 = W(60)
                 current_year_playoff_map[qf_winner_placeholder] = game_winner_placeholder
-                current_app.logger.debug(f"Year {year_id}: Added QF winner mapping {qf_winner_placeholder} -> {game_winner_placeholder}")
+
 
         max_iter_passes, current_pass, map_changed_this_iter = 10, 0, True
         while map_changed_this_iter and current_pass < max_iter_passes:
@@ -156,7 +154,7 @@ def calculate_all_time_standings():
                 sf_game_2 = all_games_this_year_map_by_number.get(sf_gns[1])
                 
                 if sf_game_1 and sf_game_2:
-                    current_app.logger.debug(f"Year {year_id}: Found SF games - Game {sf_gns[0]}: {sf_game_1.team1_code} vs {sf_game_1.team2_code}, Game {sf_gns[1]}: {sf_game_2.team1_code} vs {sf_game_2.team2_code}")
+
                     
                     # Try to resolve Q1, Q2, Q3, Q4 to actual teams
                     q1_team = current_year_playoff_map.get('Q1')
@@ -164,7 +162,7 @@ def calculate_all_time_standings():
                     q3_team = current_year_playoff_map.get('Q3')
                     q4_team = current_year_playoff_map.get('Q4')
                     
-                    current_app.logger.debug(f"Year {year_id}: Q-team mappings - Q1: {q1_team}, Q2: {q2_team}, Q3: {q3_team}, Q4: {q4_team}")
+
                     
                     # If Q1-Q4 are mapped to W(X) placeholders, resolve them
                     if q1_team and q1_team.startswith('W('):
@@ -173,7 +171,7 @@ def calculate_all_time_standings():
                             current_year_playoff_map['Q1'] = q1_resolved
                             q1_team = q1_resolved
                             map_changed_this_iter = True
-                            current_app.logger.debug(f"Year {year_id}: Resolved Q1 -> {q1_resolved}")
+
                     
                     if q2_team and q2_team.startswith('W('):
                         q2_resolved = current_year_playoff_map.get(q2_team)
@@ -181,7 +179,7 @@ def calculate_all_time_standings():
                             current_year_playoff_map['Q2'] = q2_resolved
                             q2_team = q2_resolved
                             map_changed_this_iter = True
-                            current_app.logger.debug(f"Year {year_id}: Resolved Q2 -> {q2_resolved}")
+
                     
                     if q3_team and q3_team.startswith('W('):
                         q3_resolved = current_year_playoff_map.get(q3_team)
@@ -189,7 +187,7 @@ def calculate_all_time_standings():
                             current_year_playoff_map['Q3'] = q3_resolved
                             q3_team = q3_resolved
                             map_changed_this_iter = True
-                            current_app.logger.debug(f"Year {year_id}: Resolved Q3 -> {q3_resolved}")
+
                     
                     if q4_team and q4_team.startswith('W('):
                         q4_resolved = current_year_playoff_map.get(q4_team)
@@ -197,7 +195,7 @@ def calculate_all_time_standings():
                             current_year_playoff_map['Q4'] = q4_resolved
                             q4_team = q4_resolved
                             map_changed_this_iter = True
-                            current_app.logger.debug(f"Year {year_id}: Resolved Q4 -> {q4_resolved}")
+
                     
                     # Now map the semifinal games directly
                     if q1_team and is_code_final(q1_team) and q2_team and is_code_final(q2_team):
@@ -205,30 +203,30 @@ def calculate_all_time_standings():
                             current_year_playoff_map['Q1'] = q1_team
                             current_year_playoff_map['Q2'] = q2_team
                             map_changed_this_iter = True
-                            current_app.logger.debug(f"Year {year_id}: Mapped SF Game {sf_gns[0]} - Q1 -> {q1_team}, Q2 -> {q2_team}")
+
                     
                     if q3_team and is_code_final(q3_team) and q4_team and is_code_final(q4_team):
                         if sf_game_2.team1_code == 'Q3' and sf_game_2.team2_code == 'Q4':
                             current_year_playoff_map['Q3'] = q3_team
                             current_year_playoff_map['Q4'] = q4_team
                             map_changed_this_iter = True
-                            current_app.logger.debug(f"Year {year_id}: Mapped SF Game {sf_gns[1]} - Q3 -> {q3_team}, Q4 -> {q4_team}")
+
             
             # Add complex semifinal pairing logic INSIDE the loop (ported from year_routes.py) - DISABLED FOR NOW
             if False and qf_gns and sf_gns and len(qf_gns) >= 4 and len(sf_gns) >= 2:
-                current_app.logger.debug(f"Year {year_id}: Attempting semifinal resolution. QF games: {qf_gns}, SF games: {sf_gns}")
+
                 # Get QF winners
                 qf_winners_teams = []
                 all_qf_winners_resolved = True
                 for qf_game_num in qf_gns[:4]:  # Only take first 4 QF games
                     winner_placeholder = f'W({qf_game_num})'
                     resolved_qf_winner = current_year_playoff_map.get(winner_placeholder)
-                    current_app.logger.debug(f"Year {year_id}: QF game {qf_game_num} winner placeholder '{winner_placeholder}' -> '{resolved_qf_winner}'")
+
                     if resolved_qf_winner and is_code_final(resolved_qf_winner):
                         qf_winners_teams.append(resolved_qf_winner)
                     else:
                         all_qf_winners_resolved = False
-                        current_app.logger.debug(f"Year {year_id}: QF winner not resolved for game {qf_game_num}")
+
                         break
                 
                 if all_qf_winners_resolved and len(qf_winners_teams) == 4:
@@ -253,7 +251,7 @@ def calculate_all_time_standings():
                         # Sort by preliminary standings (same logic as year_routes.py)
                         qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
                         R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats]
-                        current_app.logger.debug(f"Year {year_id}: QF winners sorted by prelim standings: R1={R1}, R2={R2}, R3={R3}, R4={R4}")
+
                         
                         # Create matchups: R1 vs R4, R2 vs R3
                         matchup1 = (R1, R4)
@@ -291,29 +289,29 @@ def calculate_all_time_standings():
                             sf_game_obj_2 = all_games_this_year_map_by_number.get(sf_gns[1])
                             
                             if sf_game_obj_1 and sf_game_obj_2:
-                                current_app.logger.debug(f"Year {year_id}: Mapping SF games - Game {sf_gns[0]}: {sf_game1_teams}, Game {sf_gns[1]}: {sf_game2_teams}")
+
                                 # Map SF game 1 teams
                                 if current_year_playoff_map.get(sf_game_obj_1.team1_code) != sf_game1_teams[0]:
-                                    current_app.logger.debug(f"Year {year_id}: Mapping {sf_game_obj_1.team1_code} -> {sf_game1_teams[0]}")
+
                                     current_year_playoff_map[sf_game_obj_1.team1_code] = sf_game1_teams[0]
                                     map_changed_this_iter = True
                                 if current_year_playoff_map.get(sf_game_obj_1.team2_code) != sf_game1_teams[1]:
-                                    current_app.logger.debug(f"Year {year_id}: Mapping {sf_game_obj_1.team2_code} -> {sf_game1_teams[1]}")
+
                                     current_year_playoff_map[sf_game_obj_1.team2_code] = sf_game1_teams[1]
                                     map_changed_this_iter = True
                                 
                                 # Map SF game 2 teams
                                 if current_year_playoff_map.get(sf_game_obj_2.team1_code) != sf_game2_teams[0]:
-                                    current_app.logger.debug(f"Year {year_id}: Mapping {sf_game_obj_2.team1_code} -> {sf_game2_teams[0]}")
+
                                     current_year_playoff_map[sf_game_obj_2.team1_code] = sf_game2_teams[0]
                                     map_changed_this_iter = True
                                 if current_year_playoff_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
-                                    current_app.logger.debug(f"Year {year_id}: Mapping {sf_game_obj_2.team2_code} -> {sf_game2_teams[1]}")
+
                                     current_year_playoff_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
                                     map_changed_this_iter = True
         
         resolved_playoff_maps_by_year_id[year_id] = current_year_playoff_map
-        current_app.logger.debug(f"Year {year_id}: Final playoff map: {current_year_playoff_map}")
+
         
 
 
@@ -345,10 +343,7 @@ def calculate_all_time_standings():
         
         # Debug logging for semifinal games specifically
         if game.round in ['SF', 'F'] or game.game_number in [61, 62, 63, 64]:
-            current_app.logger.debug(f"SEMIFINAL/FINAL DEBUG - Game {game.id} (#{game.game_number}): "
-                                   f"Original: '{game.team1_code}' vs '{game.team2_code}' -> "
-                                   f"Resolved: '{resolved_team1_code}' vs '{resolved_team2_code}' "
-                                   f"(Year {year_id}, Round: {game.round})")
+            pass
         
 
 
@@ -359,12 +354,7 @@ def calculate_all_time_standings():
         has_final_original_codes = is_code_final(game.team1_code) and is_code_final(game.team2_code)
         
         if not (has_final_resolved_codes or has_final_original_codes):
-            # Log individual games at debug level and count for summary
-            current_app.logger.debug(
-                f"Game ID {game.id} (Original: '{game.team1_code}' vs '{game.team2_code}') resolved to "
-                f"('{resolved_team1_code}' vs '{resolved_team2_code}'). "
-                f"Skipping for all-time stats due to non-final team codes."
-            )
+            # Skip games where participants can't be resolved to final codes
             skipped_games_count = getattr(calculate_all_time_standings, '_skipped_count', 0) + 1
             calculate_all_time_standings._skipped_count = skipped_games_count
             continue # Skip this game if participants can't be resolved to final codes
@@ -735,12 +725,12 @@ def get_medal_tally_data():
                             current_year_playoff_map['Q3'] = q3_team; current_year_playoff_map['Q4'] = q4_team; map_changed_this_iter = True
         
         resolved_playoff_maps_by_year_id[year_id_iter] = current_year_playoff_map
-        current_app.logger.debug(f"MedalTally: Year {year_id_iter} final playoff map: {current_year_playoff_map}")
+
     # --- End of precomputation logic ---
 
     for year_obj_medal_calc in all_years: # Iterating through sorted all_years
         year_id_current = year_obj_medal_calc.id # Renamed for clarity
-        current_app.logger.debug(f"MedalTally: Processing year {year_obj_medal_calc.year} (ID: {year_id_current})")
+
 
         gold, silver, bronze, fourth = None, None, None, None
         
@@ -755,16 +745,16 @@ def get_medal_tally_data():
         game_numbers = FINAL_BRONZE_GAME_NUMBERS_BY_YEAR.get(year_id_current, (63, 64)) 
         bronze_game_num, final_game_num = game_numbers[0], game_numbers[1]
 
-        current_app.logger.debug(f"MedalTally: Year {year_obj_medal_calc.year} - Bronze Game #: {bronze_game_num}, Final Game #: {final_game_num}")
+
 
         # Bronze Medal Game
         bronze_game = games_this_year_map_by_number.get(bronze_game_num)
         if bronze_game:
-            current_app.logger.debug(f"MedalTally: Found potential bronze game for {year_obj_medal_calc.year}: G#{bronze_game.game_number} {bronze_game.team1_code} vs {bronze_game.team2_code}")
+
             if bronze_game.team1_score is not None and bronze_game.team2_score is not None:
                 b_team1 = get_resolved_team_code(bronze_game.team1_code, current_playoff_map, games_this_year_map_by_number)
                 b_team2 = get_resolved_team_code(bronze_game.team2_code, current_playoff_map, games_this_year_map_by_number)
-                current_app.logger.debug(f"MedalTally: Bronze game {year_obj_medal_calc.year} resolved teams: {b_team1} vs {b_team2}")
+
 
                 if is_code_final(b_team1) and is_code_final(b_team2):
                     if bronze_game.team1_score > bronze_game.team2_score:
@@ -784,11 +774,11 @@ def get_medal_tally_data():
         # Final/Gold Medal Game
         final_game = games_this_year_map_by_number.get(final_game_num)
         if final_game:
-            current_app.logger.debug(f"MedalTally: Found potential final game for {year_obj_medal_calc.year}: G#{final_game.game_number} {final_game.team1_code} vs {final_game.team2_code}")
+
             if final_game.team1_score is not None and final_game.team2_score is not None:
                 f_team1 = get_resolved_team_code(final_game.team1_code, current_playoff_map, games_this_year_map_by_number)
                 f_team2 = get_resolved_team_code(final_game.team2_code, current_playoff_map, games_this_year_map_by_number)
-                current_app.logger.debug(f"MedalTally: Final game {year_obj_medal_calc.year} resolved teams: {f_team1} vs {f_team2}")
+
 
                 if is_code_final(f_team1) and is_code_final(f_team2):
                     if final_game.team1_score > final_game.team2_score:

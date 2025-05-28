@@ -130,10 +130,6 @@ def year_view(year_id):
                 round_name = game_data.get("round", "").lower()
                 game_num = game_data.get("gameNumber")
                 
-                # Debug output for playoff rounds
-                if "quarterfinal" in round_name or "semifinal" in round_name or "bronze" in round_name or "gold" in round_name or "final" in round_name:
-                    pass  # This was for debug output, now just continue
-                
                 if "quarterfinal" in round_name: 
                     qf_game_numbers.append(game_num)
                 elif "semifinal" in round_name: 
@@ -214,13 +210,9 @@ def year_view(year_id):
                 g_disp.team2_code = resolved_t2
                 changes_in_pass += 1
 
-            if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:
-                # Revised is_tX_final logic
+            if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:                # Revised is_tX_final logic
                 is_t1_final = is_code_final(g_disp.team1_code)
                 is_t2_final = is_code_final(g_disp.team2_code)
-
-                if g_disp.game_number in qf_game_numbers: # Specifically debug QF games
-                    pass  # Was used for debug output
 
                 if is_t1_final and is_t2_final:
                     actual_winner = g_disp.team1_code if g_disp.team1_score > g_disp.team2_score else g_disp.team2_code
@@ -414,7 +406,9 @@ def year_view(year_id):
     player_nat_teams = set(p.team_code for p in all_players_list if p.team_code and not (p.team_code.startswith(('A','B','W','L','Q','S')) and p.team_code[1:].isdigit()))
     unique_teams_filter = sorted(list(game_nat_teams.union(player_nat_teams)))
     
-    def get_pname(pid): p=player_cache.get(pid); return f"{p.first_name} {p.last_name}" if p else "N/A"
+    def get_pname(pid): 
+        p = player_cache.get(pid)
+        return f"{p.first_name} {p.last_name}" if p else "N/A"
 
     for g_disp in games_processed:
         # Clear existing events if any were added prematurely (shouldn't be the case with current structure but safe)
@@ -428,7 +422,6 @@ def year_view(year_id):
             g_disp.sorted_events.append({'type':'penalty','time_str':pnlty.minute_of_game,'time_for_sort':convert_time_to_seconds(pnlty.minute_of_game), 'data':{'id':pnlty.id,'team_code':pnlty.team_code,'player_name':get_pname(pnlty.player_id) if pnlty.player_id else "Bank",'minute_of_game':pnlty.minute_of_game,'penalty_type':pnlty.penalty_type,'reason':pnlty.reason,'team_iso':TEAM_ISO_CODES.get(pnlty.team_code.upper())}})
         g_disp.sorted_events.sort(key=lambda x: x['time_for_sort'])
         
-        # Debug prints for SOG association
         sog_data_for_this_game_from_flat = sog_by_game_flat.get(g_disp.id, {})
         
         sog_src = sog_by_game_flat.get(g_disp.id, {}) # sog_by_game_flat should be keyed by resolved codes from DB
