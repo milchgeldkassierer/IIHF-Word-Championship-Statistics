@@ -533,9 +533,162 @@ def medal_tally_view():
     # TEAM_ISO_CODES is already imported in this file
     return render_template('medal_tally.html', medal_data=medal_data, team_iso_codes=TEAM_ISO_CODES)
 
+def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, year_obj_for_map):
+    """
+    Calculate the complete final ranking (1-16) for a single year according to IIHF rules.
+    
+    Rules:
+    1. Top 4 teams are determined by medal games
+    2. Teams 5-16 are ranked by their group standings before quarterfinals:
+       - Higher position in group
+       - Higher number of points  
+       - Better goal difference
+       - Higher number of goals scored for
+       - Better seeding number
+    """
+    final_ranking = {}
+    games_map_by_number = {g.game_number: g for g in games_this_year if g.game_number is not None}
+    
+    # Get game numbers for bronze and final
+    game_numbers = FINAL_BRONZE_GAME_NUMBERS_BY_YEAR.get(year_obj.id, (63, 64))
+    bronze_game_num, final_game_num = game_numbers[0], game_numbers[1]
+    
+    # Calculate Top 4 from medal games
+    bronze_game = games_map_by_number.get(bronze_game_num)
+    final_game = games_map_by_number.get(final_game_num)
+    
+    if bronze_game and bronze_game.team1_score is not None and bronze_game.team2_score is not None:
+        b_team1 = get_resolved_team_code(bronze_game.team1_code, playoff_map, games_map_by_number)
+        b_team2 = get_resolved_team_code(bronze_game.team2_code, playoff_map, games_map_by_number)
+        
+        if is_code_final(b_team1) and is_code_final(b_team2):
+            if bronze_game.team1_score > bronze_game.team2_score:
+                final_ranking[3] = b_team1  # Bronze
+                final_ranking[4] = b_team2  # Fourth
+            else:
+                final_ranking[3] = b_team2  # Bronze  
+                final_ranking[4] = b_team1  # Fourth
+    
+    if final_game and final_game.team1_score is not None and final_game.team2_score is not None:
+        f_team1 = get_resolved_team_code(final_game.team1_code, playoff_map, games_map_by_number)
+        f_team2 = get_resolved_team_code(final_game.team2_code, playoff_map, games_map_by_number)
+        
+        if is_code_final(f_team1) and is_code_final(f_team2):
+            if final_game.team1_score > final_game.team2_score:
+                final_ranking[1] = f_team1  # Gold
+                final_ranking[2] = f_team2  # Silver
+            else:
+                final_ranking[1] = f_team2  # Gold
+                final_ranking[2] = f_team1  # Silver
+    
+    # Calculate preliminary standings for positions 5-16
+    prelim_stats_map = {}
+    prelim_games = [
+        g for g in games_this_year
+        if g.round in PRELIM_ROUNDS and \
+           is_code_final(g.team1_code) and \
+           is_code_final(g.team2_code) and \
+           g.team1_score is not None and g.team2_score is not None
+    ]
+    
+    for game in prelim_games:
+        current_game_group = game.group or "N/A"
+        for team_code in [game.team1_code, game.team2_code]:
+            if team_code not in prelim_stats_map:
+                prelim_stats_map[team_code] = TeamStats(name=team_code, group=current_game_group)
+            elif prelim_stats_map[team_code].group == "N/A" and current_game_group != "N/A":
+                prelim_stats_map[team_code].group = current_game_group
+        
+        t1_stats = prelim_stats_map[game.team1_code]
+        t2_stats = prelim_stats_map[game.team2_code]
+        
+        t1_stats.gp += 1; t2_stats.gp += 1
+        t1_stats.gf += game.team1_score; t1_stats.ga += game.team2_score
+        t2_stats.gf += game.team2_score; t2_stats.ga += game.team1_score
+        
+        if game.result_type == 'REG':
+            if game.team1_score > game.team2_score: 
+                t1_stats.w += 1; t1_stats.pts += 3; t2_stats.l += 1
+            else: 
+                t2_stats.w += 1; t2_stats.pts += 3; t1_stats.l += 1
+        elif game.result_type == 'OT':
+            if game.team1_score > game.team2_score: 
+                t1_stats.otw += 1; t1_stats.pts += 2; t2_stats.otl += 1; t2_stats.pts += 1
+            else: 
+                t2_stats.otw += 1; t2_stats.pts += 2; t1_stats.otl += 1; t1_stats.pts += 1
+        elif game.result_type == 'SO':
+            if game.team1_score > game.team2_score: 
+                t1_stats.sow += 1; t1_stats.pts += 2; t2_stats.sol += 1; t2_stats.pts += 1
+            else: 
+                t2_stats.sow += 1; t2_stats.pts += 2; t1_stats.sol += 1; t1_stats.pts += 1
+    
+    # Group teams by group and sort within groups
+    standings_by_group = {}
+    for ts in prelim_stats_map.values():
+        group_key = ts.group if ts.group else "UnknownGroup"
+        standings_by_group.setdefault(group_key, []).append(ts)
+    
+    for group_list in standings_by_group.values():
+        group_list.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
+        for i, ts in enumerate(group_list):
+            ts.rank_in_group = i + 1
+    
+    # Get QF losers (teams eliminated in quarterfinals) for positions 5-8
+    qf_gns = []
+    if year_obj_for_map and year_obj_for_map.fixture_path and os.path.exists(year_obj_for_map.fixture_path):
+        try:
+            with open(year_obj_for_map.fixture_path, 'r', encoding='utf-8') as f:
+                fixture_data = json.load(f)
+            qf_gns = fixture_data.get("qf_game_numbers") or QF_GAME_NUMBERS_BY_YEAR.get(year_obj.id, [])
+        except (json.JSONDecodeError, OSError): 
+            qf_gns = QF_GAME_NUMBERS_BY_YEAR.get(year_obj.id, [])
+    else: 
+        qf_gns = QF_GAME_NUMBERS_BY_YEAR.get(year_obj.id, [])
+    
+    qf_losers = []
+    for qf_game_num in qf_gns:
+        qf_game = games_map_by_number.get(qf_game_num)
+        if qf_game and qf_game.team1_score is not None and qf_game.team2_score is not None:
+            qf_team1 = get_resolved_team_code(qf_game.team1_code, playoff_map, games_map_by_number)
+            qf_team2 = get_resolved_team_code(qf_game.team2_code, playoff_map, games_map_by_number)
+            
+            if is_code_final(qf_team1) and is_code_final(qf_team2):
+                if qf_game.team1_score > qf_game.team2_score:
+                    qf_losers.append(qf_team2)
+                else:
+                    qf_losers.append(qf_team1)
+    
+    # Sort QF losers by their preliminary standings (positions 5-8)
+    qf_losers_stats = [prelim_stats_map.get(team) for team in qf_losers if team in prelim_stats_map]
+    qf_losers_stats = [ts for ts in qf_losers_stats if ts is not None]
+    qf_losers_stats.sort(key=lambda x: (x.rank_in_group, -x.pts, -x.gd, -x.gf))
+    
+    for i, ts in enumerate(qf_losers_stats):
+        final_ranking[5 + i] = ts.name
+    
+    # Get teams that didn't make QF (positions 9-16)
+    all_playoff_teams = set(final_ranking.values()) | set(qf_losers)
+    remaining_teams = []
+    
+    for ts in prelim_stats_map.values():
+        if ts.name not in all_playoff_teams:
+            remaining_teams.append(ts)
+    
+    # Sort remaining teams by preliminary standings (positions 9-16)
+    remaining_teams.sort(key=lambda x: (x.rank_in_group, -x.pts, -x.gd, -x.gf))
+    
+    current_position = 9
+    for ts in remaining_teams:
+        if current_position <= 16:
+            final_ranking[current_position] = ts.name
+            current_position += 1
+    
+    return final_ranking
+
 def get_medal_tally_data():
     """
     Calculates the medal tally (Gold, Silver, Bronze, 4th) for each championship year.
+    Only includes completed tournaments.
     """
     current_app.logger.info("Starting medal tally calculation.")
     medal_tally_results = []
@@ -545,16 +698,31 @@ def get_medal_tally_data():
     all_years = ChampionshipYear.query.order_by(ChampionshipYear.year.desc()).all() # Fetch all years, sort later
     year_objects_map = {year.id: year for year in all_years}
 
+    # Filter to only completed tournaments
+    completed_years = []
+    for year_obj in all_years:
+        tournament_stats = get_tournament_statistics(year_obj)
+        is_completed = (tournament_stats['total_games'] > 0 and 
+                       tournament_stats['completed_games'] == tournament_stats['total_games'])
+        if is_completed:
+            completed_years.append(year_obj)
+            current_app.logger.info(f"Including completed tournament: {year_obj.year} ({tournament_stats['completed_games']}/{tournament_stats['total_games']} games)")
+        else:
+            current_app.logger.info(f"Excluding incomplete tournament: {year_obj.year} ({tournament_stats['completed_games']}/{tournament_stats['total_games']} games)")
+
     games_by_year_id: Dict[int, List[Game]] = {}
     for game_obj in all_games:
         games_by_year_id.setdefault(game_obj.year_id, []).append(game_obj)
 
     resolved_playoff_maps_by_year_id: Dict[int, Dict[str, str]] = {}
 
-    for year_id_iter, games_in_this_year in games_by_year_id.items(): # Renamed year_id to avoid conflict
-        year_obj_for_map = year_objects_map.get(year_id_iter)
-        if not year_obj_for_map:
-            current_app.logger.warning(f"MedalTally: Year object not found for year_id {year_id_iter}. Skipping playoff map generation.")
+    # Only process completed years
+    for year_obj_for_map in completed_years:
+        year_id_iter = year_obj_for_map.id
+        games_in_this_year = games_by_year_id.get(year_id_iter, [])
+        
+        if not games_in_this_year:
+            current_app.logger.warning(f"MedalTally: No games found for completed year_id {year_id_iter}. Skipping.")
             continue
 
         prelim_stats_map_this_year: Dict[str, TeamStats] = {}
@@ -669,13 +837,16 @@ def get_medal_tally_data():
                         if q1_resolved and is_code_final(q1_resolved): current_year_playoff_map['Q1'] = q1_resolved; q1_team = q1_resolved; map_changed_this_iter = True
                     if q2_team and q2_team.startswith('W('):
                         q2_resolved = current_year_playoff_map.get(q2_team)
-                        if q2_resolved and is_code_final(q2_resolved): current_year_playoff_map['Q2'] = q2_resolved; q2_team = q2_resolved; map_changed_this_iter = True
+                        if q2_resolved and is_code_final(q2_resolved):
+                            current_year_playoff_map['Q2'] = q2_resolved; q2_team = q2_resolved; map_changed_this_iter = True
                     if q3_team and q3_team.startswith('W('):
                         q3_resolved = current_year_playoff_map.get(q3_team)
-                        if q3_resolved and is_code_final(q3_resolved): current_year_playoff_map['Q3'] = q3_resolved; q3_team = q3_resolved; map_changed_this_iter = True
+                        if q3_resolved and is_code_final(q3_resolved):
+                            current_year_playoff_map['Q3'] = q3_resolved; q3_team = q3_resolved; map_changed_this_iter = True
                     if q4_team and q4_team.startswith('W('):
                         q4_resolved = current_year_playoff_map.get(q4_team)
-                        if q4_resolved and is_code_final(q4_resolved): current_year_playoff_map['Q4'] = q4_resolved; q4_team = q4_resolved; map_changed_this_iter = True
+                        if q4_resolved and is_code_final(q4_resolved):
+                            current_year_playoff_map['Q4'] = q4_resolved; q4_team = q4_resolved; map_changed_this_iter = True
                     if q1_team and is_code_final(q1_team) and q2_team and is_code_final(q2_team):
                         if sf_game_1_obj.team1_code == 'Q1' and sf_game_1_obj.team2_code == 'Q2':
                             current_year_playoff_map['Q1'] = q1_team; current_year_playoff_map['Q2'] = q2_team; map_changed_this_iter = True
@@ -687,85 +858,33 @@ def get_medal_tally_data():
 
     # --- End of precomputation logic ---
 
-    for year_obj_medal_calc in all_years: # Iterating through sorted all_years
+    for year_obj_medal_calc in completed_years: # Iterating through sorted all_years
         year_id_current = year_obj_medal_calc.id # Renamed for clarity
 
-
-        gold, silver, bronze, fourth = None, None, None, None
-        
-        # Get the precomputed playoff map and games list for the current year
+        # Calculate complete final ranking
         current_playoff_map = resolved_playoff_maps_by_year_id.get(year_id_current, {})
-        games_this_year = games_by_year_id.get(year_id_current, [])
-        games_this_year_map_by_number = {g.game_number: g for g in games_this_year if g.game_number is not None}
-
-        # Get bronze and final game numbers for the year
-        # FINAL_BRONZE_GAME_NUMBERS_BY_YEAR = { year_id: (bronze_game_num, final_game_num), ... }
-        # Default to (63, 64) if not specified for the year_id
-        game_numbers = FINAL_BRONZE_GAME_NUMBERS_BY_YEAR.get(year_id_current, (63, 64)) 
-        bronze_game_num, final_game_num = game_numbers[0], game_numbers[1]
-
-
-
-        # Bronze Medal Game
-        bronze_game = games_this_year_map_by_number.get(bronze_game_num)
-        if bronze_game:
-
-            if bronze_game.team1_score is not None and bronze_game.team2_score is not None:
-                b_team1 = get_resolved_team_code(bronze_game.team1_code, current_playoff_map, games_this_year_map_by_number)
-                b_team2 = get_resolved_team_code(bronze_game.team2_code, current_playoff_map, games_this_year_map_by_number)
-
-
-                if is_code_final(b_team1) and is_code_final(b_team2):
-                    if bronze_game.team1_score > bronze_game.team2_score:
-                        bronze = b_team1
-                        fourth = b_team2
-                    else:
-                        bronze = b_team2
-                        fourth = b_team1
-                    current_app.logger.info(f"MedalTally: Year {year_obj_medal_calc.year} - Bronze: {bronze}, Fourth: {fourth}")
-                else:
-                    current_app.logger.warning(f"MedalTally: Bronze game for {year_obj_medal_calc.year} (G#{bronze_game_num}) has non-final team codes: {b_team1} or {b_team2}. Medals might be incorrect.")
-            else:
-                current_app.logger.warning(f"MedalTally: Bronze game for {year_obj_medal_calc.year} (G#{bronze_game_num}) is missing scores. Cannot determine bronze/fourth.")
-        else:
-            current_app.logger.warning(f"MedalTally: Bronze game (expected G#{bronze_game_num}) not found for year {year_obj_medal_calc.year}.")
-
-        # Final/Gold Medal Game
-        final_game = games_this_year_map_by_number.get(final_game_num)
-        if final_game:
-
-            if final_game.team1_score is not None and final_game.team2_score is not None:
-                f_team1 = get_resolved_team_code(final_game.team1_code, current_playoff_map, games_this_year_map_by_number)
-                f_team2 = get_resolved_team_code(final_game.team2_code, current_playoff_map, games_this_year_map_by_number)
-
-
-                if is_code_final(f_team1) and is_code_final(f_team2):
-                    if final_game.team1_score > final_game.team2_score:
-                        gold = f_team1
-                        silver = f_team2
-                    else:
-                        gold = f_team2
-                        silver = f_team1
-                    current_app.logger.info(f"MedalTally: Year {year_obj_medal_calc.year} - Gold: {gold}, Silver: {silver}")
-                else:
-                    current_app.logger.warning(f"MedalTally: Final game for {year_obj_medal_calc.year} (G#{final_game_num}) has non-final team codes: {f_team1} or {f_team2}. Medals might be incorrect.")
-            else:
-                current_app.logger.warning(f"MedalTally: Final game for {year_obj_medal_calc.year} (G#{final_game_num}) is missing scores. Cannot determine gold/silver.")
-        else:
-            current_app.logger.warning(f"MedalTally: Final game (expected G#{final_game_num}) not found for year {year_obj_medal_calc.year}.")
+        final_ranking = calculate_complete_final_ranking(year_obj_medal_calc, games_by_year_id.get(year_id_current, []), current_playoff_map, year_obj_medal_calc)
+        
+        # Extract top 4 for legacy compatibility
+        gold = final_ranking.get(1)
+        silver = final_ranking.get(2)
+        bronze = final_ranking.get(3)
+        fourth = final_ranking.get(4)
             
         medal_tally_results.append({
             'year_obj': year_obj_medal_calc,
+            'final_ranking': final_ranking,
+            # Keep legacy format for backward compatibility
             'gold': gold,
             'silver': silver,
             'bronze': bronze,
             'fourth': fourth
         })
 
-    # Already sorted by year desc by `all_years` query, but explicit sort here is fine.
+    # Sort by year desc for completed years only
     medal_tally_results.sort(key=lambda x: x['year_obj'].year, reverse=True)
     
-    current_app.logger.info("Finished medal tally calculation.")
+    current_app.logger.info(f"Finished medal tally calculation. Processed {len(completed_years)} completed tournaments.")
     return medal_tally_results
 
 def get_all_player_stats(team_filter=None):
