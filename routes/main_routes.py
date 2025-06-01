@@ -10,6 +10,25 @@ import traceback
 
 main_bp = Blueprint('main_bp', __name__)
 
+def resolve_fixture_path(relative_path):
+    """
+    Converts a relative fixture path to an absolute path.
+    For files starting with 'fixtures/', looks in BASE_DIR/fixtures/
+    For other files, looks in UPLOAD_FOLDER/
+    """
+    if not relative_path:
+        return None
+    
+    if relative_path.startswith('fixtures/'):
+        # Remove 'fixtures/' prefix and look in BASE_DIR/fixtures/
+        filename = relative_path[9:]  # Remove 'fixtures/' prefix
+        absolute_path = os.path.join(current_app.config['BASE_DIR'], 'fixtures', filename)
+    else:
+        # Look in upload folder
+        absolute_path = os.path.join(current_app.config['UPLOAD_FOLDER'], relative_path)
+    
+    return absolute_path
+
 def get_tournament_statistics(year_obj):
     """
     Calculate tournament statistics: games completed, total games, and winner
@@ -141,9 +160,10 @@ def calculate_all_time_standings():
         all_games_this_year_map_by_number: Dict[int, Game] = {g.game_number: g for g in games_in_this_year if g.game_number is not None}
 
         qf_gns, sf_gns, h_tcs = [], [], []
-        if year_obj.fixture_path and os.path.exists(year_obj.fixture_path):
+        fixture_absolute_path = resolve_fixture_path(year_obj.fixture_path)
+        if year_obj.fixture_path and fixture_absolute_path and os.path.exists(fixture_absolute_path):
             try:
-                with open(year_obj.fixture_path, 'r', encoding='utf-8') as f: 
+                with open(fixture_absolute_path, 'r', encoding='utf-8') as f: 
                     fixture_data = json.load(f)
                 qf_gns = fixture_data.get("qf_game_numbers") or QF_GAME_NUMBERS_BY_YEAR.get(year_id, [])
                 sf_gns = fixture_data.get("sf_game_numbers") or SF_GAME_NUMBERS_BY_YEAR.get(year_id, [])
@@ -385,15 +405,17 @@ def index():
             year_id_to_delete = request.form.get('year_id_to_delete')
             year_obj_del = db.session.get(ChampionshipYear, year_id_to_delete)
             if year_obj_del:
-                if year_obj_del.fixture_path and os.path.exists(year_obj_del.fixture_path):
-                    try:
-                        abs_fixture_path = os.path.abspath(year_obj_del.fixture_path)
-                        abs_upload_folder = os.path.abspath(current_app.config['UPLOAD_FOLDER'])
-                        if abs_fixture_path.startswith(abs_upload_folder):
-                             os.remove(year_obj_del.fixture_path)
-                             flash(f'Associated fixture file "{os.path.basename(year_obj_del.fixture_path)}" from data directory deleted.', 'info')
-                    except OSError as e:
-                        flash(f"Error deleting managed fixture file: {e}", "danger")
+                if year_obj_del.fixture_path:
+                    absolute_fixture_path = resolve_fixture_path(year_obj_del.fixture_path)
+                    if absolute_fixture_path and os.path.exists(absolute_fixture_path):
+                        try:
+                            abs_fixture_path = os.path.abspath(absolute_fixture_path)
+                            abs_upload_folder = os.path.abspath(current_app.config['UPLOAD_FOLDER'])
+                            if abs_fixture_path.startswith(abs_upload_folder):
+                                 os.remove(absolute_fixture_path)
+                                 flash(f'Associated fixture file "{os.path.basename(absolute_fixture_path)}" from data directory deleted.', 'info')
+                        except OSError as e:
+                            flash(f"Error deleting managed fixture file: {e}", "danger")
                 
                 db.session.delete(year_obj_del)
                 db.session.commit()
@@ -430,25 +452,34 @@ def index():
         if target_year_obj:
             potential_fixture_filename = f"{year_str}.json"
             fixture_path_to_load = None
+            # Store relative path in database
+            relative_fixture_path = None
 
             path_in_upload_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], potential_fixture_filename)
             if os.path.exists(path_in_upload_folder):
                 fixture_path_to_load = path_in_upload_folder
+                # Store relative path for upload folder files
+                relative_fixture_path = potential_fixture_filename
             else:
                 path_in_root_fixtures = os.path.join(current_app.config['BASE_DIR'], 'fixtures', potential_fixture_filename)
                 if os.path.exists(path_in_root_fixtures):
                     fixture_path_to_load = path_in_root_fixtures
+                    # Store relative path for fixtures folder files
+                    relative_fixture_path = f"fixtures/{potential_fixture_filename}"
             
             if not fixture_path_to_load and target_year_obj.id:
                  potential_id_fixture_filename = f"{target_year_obj.id}_{year_str}.json"
                  path_id_in_upload_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], potential_id_fixture_filename)
                  if os.path.exists(path_id_in_upload_folder):
                       fixture_path_to_load = path_id_in_upload_folder
+                      # Store relative path for ID-based upload folder files
+                      relative_fixture_path = potential_id_fixture_filename
 
             if fixture_path_to_load:
                 Game.query.filter_by(year_id=target_year_obj.id).delete()
                 try:
-                    target_year_obj.fixture_path = fixture_path_to_load
+                    # Store only the relative path in the database
+                    target_year_obj.fixture_path = relative_fixture_path
                     with open(fixture_path_to_load, 'r', encoding='utf-8') as f:
                         fixture_data = json.load(f)
                     
@@ -773,9 +804,11 @@ def get_medal_tally_data():
         all_games_this_year_map_by_number_local: Dict[int, Game] = {g.game_number: g for g in games_in_this_year if g.game_number is not None} # Renamed to avoid conflict
 
         qf_gns, sf_gns, h_tcs = [], [], []
-        if year_obj_for_map.fixture_path and os.path.exists(year_obj_for_map.fixture_path):
+        fixture_absolute_path = resolve_fixture_path(year_obj_for_map.fixture_path)
+        if year_obj_for_map.fixture_path and fixture_absolute_path and os.path.exists(fixture_absolute_path):
             try:
-                with open(year_obj_for_map.fixture_path, 'r', encoding='utf-8') as f: fixture_data = json.load(f)
+                with open(fixture_absolute_path, 'r', encoding='utf-8') as f: 
+                    fixture_data = json.load(f)
                 qf_gns = fixture_data.get("qf_game_numbers") or QF_GAME_NUMBERS_BY_YEAR.get(year_id_iter, [])
                 sf_gns = fixture_data.get("sf_game_numbers") or SF_GAME_NUMBERS_BY_YEAR.get(year_id_iter, [])
                 h_tcs = fixture_data.get("host_teams", [])

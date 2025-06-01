@@ -582,9 +582,9 @@
                                     <span id="scoreMatchIndicatorContainer-{{ game.id }}">
                                     {% if game.team1_score is not none or game.team2_score is not none %} {# Nur anzeigen, wenn mind. ein Score gesetzt ist #}
                                         {% if game.scores_fully_match_goals %}
-                                            <span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt">✓</span>
+                                            <span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>
                                         {% else %}
-                                            <span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein oder SOG-Daten fehlen für P1-P3">✗</span>
+                                            <span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1)">✗</span>
                                         {% endif %}
                                     {% endif %}
                                     </span>
@@ -1753,8 +1753,8 @@ $(document).ready(function(){
                 var team1ScoreIsSet = scoreInput1.val() !== '' && scoreInput1.val() !== null;
                 var team2ScoreIsSet = scoreInput2.val() !== '' && scoreInput2.val() !== null;
                 if (team1ScoreIsSet || team2ScoreIsSet) {
-                    if (data.scores_fully_match_goals) indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt">✓</span>');
-                    else indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein oder SOG-Daten fehlen für P1-P3">✗</span>');
+                    if (data.scores_fully_match_goals) indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>');
+                    else indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1)">✗</span>');
                 } else { indicatorContainer.empty(); }
             }
         })
@@ -1938,9 +1938,9 @@ $(document).ready(function(){
 
                     if (team1ScoreIsSet || team2ScoreIsSet) {
                         if (data.scores_fully_match_goals) {
-                            indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt">✓</span>');
+                            indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>');
                         } else {
-                            indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein oder SOG-Daten fehlen für P1-P3">✗</span>');
+                            indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1)">✗</span>');
                         }
                     } else {
                         indicatorContainer.empty();
@@ -2018,9 +2018,9 @@ $(document).ready(function(){
 
                     if (team1ScoreIsSet || team2ScoreIsSet) {
                          if (data.scores_fully_match_goals) {
-                            indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt">✓</span>');
+                            indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>');
                         } else {
-                            indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein oder SOG-Daten fehlen für P1-P3">✗</span>');
+                            indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1)">✗</span>');
                         }
                     } else {
                         indicatorContainer.empty();

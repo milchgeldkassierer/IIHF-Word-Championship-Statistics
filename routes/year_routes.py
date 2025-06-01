@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoal, TeamStats, TeamOverallStats, GameDisplay
 from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, OPP_COUNT_MAP, GOAL_TYPE_DISPLAY_MAP
 from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final
+from routes.main_routes import resolve_fixture_path
 
 year_bp = Blueprint('year_bp', __name__, url_prefix='/year')
 
@@ -114,13 +115,14 @@ def year_view(year_id):
 
     fixture_path_exists = False # Default to false
     if year_obj.fixture_path:
-        fixture_path_exists = os.path.exists(year_obj.fixture_path)
+        absolute_fixture_path = resolve_fixture_path(year_obj.fixture_path)
+        fixture_path_exists = absolute_fixture_path and os.path.exists(absolute_fixture_path)
     else:
         pass # year_obj.fixture_path is None or empty.
 
     if year_obj.fixture_path and fixture_path_exists:
         try:
-            with open(year_obj.fixture_path, 'r', encoding='utf-8') as f:
+            with open(absolute_fixture_path, 'r', encoding='utf-8') as f:
                 loaded_fixture_data = json.load(f)
             tournament_hosts = loaded_fixture_data.get("hosts", [])
             
@@ -931,11 +933,12 @@ def game_stats_view(year_id, game_id):
 
     fixture_path_exists = False
     if year_obj.fixture_path:
-        fixture_path_exists = os.path.exists(year_obj.fixture_path)
+        absolute_fixture_path = resolve_fixture_path(year_obj.fixture_path)
+        fixture_path_exists = absolute_fixture_path and os.path.exists(absolute_fixture_path)
 
     if year_obj.fixture_path and fixture_path_exists:
         try:
-            with open(year_obj.fixture_path, 'r', encoding='utf-8') as f:
+            with open(absolute_fixture_path, 'r', encoding='utf-8') as f:
                 loaded_fixture_data = json.load(f)
             tournament_hosts = loaded_fixture_data.get("hosts", [])
             

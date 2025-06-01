@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple, Set, Optional
 
 # Assuming models.py and constants.py are accessible in the Python path
 from models import Game, ChampionshipYear, TeamStats
-from constants import PRELIM_ROUNDS, PLAYOFF_ROUNDS, QF_GAME_NUMBERS_BY_YEAR, SF_GAME_NUMBERS_BY_YEAR, FINAL_BRONZE_GAME_NUMBERS_BY_YEAR
+from constants import PRELIM_ROUNDS, PLAYOFF_ROUNDS, QF_GAME_NUMBERS_BY_YEAR, SF_GAME_NUMBERS_BY_YEAR, FINAL_BRONZE_GAME_NUMBERS_BY_YEAR, TEAM_ISO_CODES
 
 # Helper to check if a team code is a final, resolved code (e.g., "USA", "SWE")
 def is_code_final(team_code: Optional[str]) -> bool:
@@ -118,18 +118,21 @@ def _build_playoff_team_map_for_year(
     # final_bronze_game_numbers: List[int] = [] # Not directly used for map construction from W/L
     host_team_codes: List[str] = []
 
-    if year_obj.fixture_path and os.path.exists(year_obj.fixture_path):
-        try:
-            with open(year_obj.fixture_path, 'r', encoding='utf-8') as f:
-                fixture_data = json.load(f)
-            # Use .get for game numbers list, falling back to constants if key missing or empty
-            qf_game_numbers = fixture_data.get("qf_game_numbers") or QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
-            sf_game_numbers = fixture_data.get("sf_game_numbers") or SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
-            host_team_codes = fixture_data.get("host_teams", []) 
-        except (json.JSONDecodeError, OSError) as e:
-            # print(f"Warning: Could not load or parse fixture {year_obj.fixture_path}: {e}") # Consider logging
-            qf_game_numbers = QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
-            sf_game_numbers = SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+    if year_obj.fixture_path:
+        from flask import current_app
+        absolute_fixture_path = resolve_fixture_path_local(year_obj.fixture_path, current_app)
+        if absolute_fixture_path and os.path.exists(absolute_fixture_path):
+            try:
+                with open(absolute_fixture_path, 'r', encoding='utf-8') as f:
+                    fixture_data = json.load(f)
+                # Use .get for game numbers list, falling back to constants if key missing or empty
+                qf_game_numbers = fixture_data.get("qf_game_numbers") or QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+                sf_game_numbers = fixture_data.get("sf_game_numbers") or SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+                host_team_codes = fixture_data.get("host_teams", []) 
+            except (json.JSONDecodeError, OSError) as e:
+                # print(f"Warning: Could not load or parse fixture {year_obj.fixture_path}: {e}") # Consider logging
+                qf_game_numbers = QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+                sf_game_numbers = SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
     else:
         qf_game_numbers = QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
         sf_game_numbers = SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
@@ -498,14 +501,47 @@ def check_game_data_consistency(game_display, sog_data=None):
         # Count goals for each team from sorted_events
         team1_goals = 0
         team2_goals = 0
+        overtime_goals = []  # Track goals scored in overtime
         
         for event in game_display.sorted_events:
             if event.get('type') == 'goal':
-                goal_team = event.get('data', {}).get('team_code')
+                goal_data = event.get('data', {})
+                goal_team = goal_data.get('team_code')
+                goal_time = goal_data.get('minute', '')
+                
+                # Check if goal was scored after 60:00 (overtime)
+                goal_seconds = convert_time_to_seconds(goal_time)
+                if goal_seconds > 3600:  # 60 minutes = 3600 seconds
+                    overtime_goals.append({
+                        'team': goal_team,
+                        'time': goal_time,
+                        'seconds': goal_seconds
+                    })
+                
                 if goal_team == game_display.team1_code:
                     team1_goals += 1
                 elif goal_team == game_display.team2_code:
                     team2_goals += 1
+        
+        # NEW: Check overtime goal rules
+        if overtime_goals:
+            # If there are overtime goals, the result_type must be OT
+            if game_display.result_type != 'OT':
+                warnings.append(f"Game {game_display.id}: Goal(s) scored after 60:00 but result type is not 'OT' (n.V.)")
+                scores_fully_match_data = False
+            
+            # The team that scored the overtime goal must have exactly 1 more goal than the other team
+            score_diff = abs(game_display.team1_score - game_display.team2_score)
+            if score_diff != 1:
+                warnings.append(f"Game {game_display.id}: Overtime goal(s) present but score difference is not 1")
+                scores_fully_match_data = False
+            
+            # Verify that the winning team actually scored the overtime goal
+            winning_team = game_display.team1_code if game_display.team1_score > game_display.team2_score else game_display.team2_code
+            overtime_scoring_teams = [goal['team'] for goal in overtime_goals]
+            if winning_team not in overtime_scoring_teams:
+                warnings.append(f"Game {game_display.id}: Overtime goal(s) not scored by the winning team")
+                scores_fully_match_data = False
         
         # Check if goals match scores
         goals_match_scores = False
@@ -575,3 +611,21 @@ def calculate_expected_points(team1_score: int, team2_score: int, result_type: s
             return (1, 2)
     else:
         return (0, 0)  # Unknown result type
+
+def resolve_fixture_path_local(relative_path, current_app):
+    """
+    Local version of resolve_fixture_path to avoid circular imports.
+    Converts a relative fixture path to an absolute path.
+    """
+    if not relative_path:
+        return None
+    
+    if relative_path.startswith('fixtures/'):
+        # Remove 'fixtures/' prefix and look in BASE_DIR/fixtures/
+        filename = relative_path[9:]  # Remove 'fixtures/' prefix
+        absolute_path = os.path.join(current_app.config['BASE_DIR'], 'fixtures', filename)
+    else:
+        # Look in upload folder
+        absolute_path = os.path.join(current_app.config['UPLOAD_FOLDER'], relative_path)
+    
+    return absolute_path
