@@ -224,26 +224,26 @@
                             {% for position, team_code in medal_entry.final_ranking.items() %}
                                 {% if team_code %}
                                     {% set _ = team_rankings.setdefault(team_code, []) %}
-                                    {% set _ = team_rankings[team_code].append(position) %}
+                                    {% set _ = team_rankings[team_code].append((position, medal_entry.year_obj.year)) %}
                                 {% endif %}
                             {% endfor %}
                         {% else %}
                             {# Fallback for legacy data structure #}
                             {% if medal_entry.gold %}
                                 {% set _ = team_rankings.setdefault(medal_entry.gold, []) %}
-                                {% set _ = team_rankings[medal_entry.gold].append(1) %}
+                                {% set _ = team_rankings[medal_entry.gold].append((1, medal_entry.year_obj.year)) %}
                             {% endif %}
                             {% if medal_entry.silver %}
                                 {% set _ = team_rankings.setdefault(medal_entry.silver, []) %}
-                                {% set _ = team_rankings[medal_entry.silver].append(2) %}
+                                {% set _ = team_rankings[medal_entry.silver].append((2, medal_entry.year_obj.year)) %}
                             {% endif %}
                             {% if medal_entry.bronze %}
                                 {% set _ = team_rankings.setdefault(medal_entry.bronze, []) %}
-                                {% set _ = team_rankings[medal_entry.bronze].append(3) %}
+                                {% set _ = team_rankings[medal_entry.bronze].append((3, medal_entry.year_obj.year)) %}
                             {% endif %}
                             {% if medal_entry.fourth %}
                                 {% set _ = team_rankings.setdefault(medal_entry.fourth, []) %}
-                                {% set _ = team_rankings[medal_entry.fourth].append(4) %}
+                                {% set _ = team_rankings[medal_entry.fourth].append((4, medal_entry.year_obj.year)) %}
                             {% endif %}
                         {% endif %}
                     {% endfor %}
@@ -251,15 +251,25 @@
                     {% set final_rankings = [] %}
                     {% for team_code, rankings in team_rankings.items() %}
                         {% set position_counts = {} %}
+                        {% set position_years = {} %}
                         {% for i in range(1, 17) %}
-                            {% set _ = position_counts.update({i: rankings.count(i)}) %}
+                            {% set _ = position_counts.update({i: 0}) %}
+                            {% set _ = position_years.update({i: []}) %}
                         {% endfor %}
-                        {% set total_rankings = rankings | length %}
-                        {% set sum_rankings = rankings | sum %}
+                        
+                        {% set rankings_only = [] %}
+                        {% for position, year in rankings %}
+                            {% set _ = rankings_only.append(position) %}
+                            {% set _ = position_counts.update({position: position_counts[position] + 1}) %}
+                            {% set _ = position_years[position].append(year) %}
+                        {% endfor %}
+                        
+                        {% set total_rankings = rankings_only | length %}
+                        {% set sum_rankings = rankings_only | sum %}
                         {% set avg_ranking = (sum_rankings / total_rankings) %}
                         
                         {# Create sorted list of all positions achieved by this team #}
-                        {% set sorted_positions = rankings | sort %}
+                        {% set sorted_positions = rankings_only | sort %}
                         
                         {# Create sort key from sorted positions - pad with 17s to ensure consistent comparison #}
                         {% set sort_key = [] %}
@@ -271,10 +281,10 @@
                             {% set _ = sort_key.append(17) %}
                         {% endfor %}
                         
-                        {% set _ = final_rankings.append((sort_key, team_code, position_counts, avg_ranking)) %}
+                        {% set _ = final_rankings.append((sort_key, team_code, position_counts, position_years, avg_ranking)) %}
                     {% endfor %}
 
-                    {% for sort_key, team_code, position_counts, avg_ranking in final_rankings | sort(attribute='0') %}
+                    {% for sort_key, team_code, position_counts, position_years, avg_ranking in final_rankings | sort(attribute='0') %}
                         <tr>
                             <td>
                                 {% if team_iso_codes.get(team_code) %}
@@ -286,18 +296,20 @@
                             <td class="text-center">
                                 {% set count = position_counts[position] %}
                                 {% if count > 0 %}
+                                    {% set years_list = position_years[position] | sort %}
+                                    {% set years_text = years_list | join(', ') %}
                                     {% if position == 1 %}
-                                        <span class="badge bg-warning text-dark fs-6 px-2 py-1" style="font-weight: bold;">{{ count }}</span>
+                                        <span class="badge bg-warning text-dark fs-6 px-2 py-1" style="font-weight: bold;" title="{{ years_text }}">{{ count }}</span>
                                     {% elif position == 2 %}
-                                        <span class="badge bg-secondary text-white fs-6 px-2 py-1" style="font-weight: bold;">{{ count }}</span>
+                                        <span class="badge bg-secondary text-white fs-6 px-2 py-1" style="font-weight: bold;" title="{{ years_text }}">{{ count }}</span>
                                     {% elif position == 3 %}
-                                        <span class="badge bg-dark text-white fs-6 px-2 py-1" style="font-weight: bold;">{{ count }}</span>
+                                        <span class="badge bg-dark text-white fs-6 px-2 py-1" style="font-weight: bold;" title="{{ years_text }}">{{ count }}</span>
                                     {% elif position == 4 %}
-                                        <span class="badge bg-info text-dark fs-6 px-2 py-1" style="font-weight: bold;">{{ count }}</span>
+                                        <span class="badge bg-info text-dark fs-6 px-2 py-1" style="font-weight: bold;" title="{{ years_text }}">{{ count }}</span>
                                     {% elif position <= 8 %}
-                                        <span class="badge bg-success text-white fs-6 px-2 py-1" style="font-weight: bold;">{{ count }}</span>
+                                        <span class="badge bg-success text-white fs-6 px-2 py-1" style="font-weight: bold;" title="{{ years_text }}">{{ count }}</span>
                                     {% else %}
-                                        <span class="badge bg-light text-dark fs-6 px-2 py-1" style="font-weight: bold;">{{ count }}</span>
+                                        <span class="badge bg-light text-dark fs-6 px-2 py-1" style="font-weight: bold;" title="{{ years_text }}">{{ count }}</span>
                                     {% endif %}
                                 {% else %}
                                     <span class="text-muted fs-6">-</span>

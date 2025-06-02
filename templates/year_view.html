@@ -439,7 +439,7 @@
             <small class="form-text text-muted">
                 Punkte: Sieg=3, OT/Penalty-Sieg=2, OT/Penalty-Niederlage=1. Sortierung: Punkte, Tordifferenz, Erzielte Tore.<br>
                 <span class="badge badge-success">&nbsp;</span> Top 4: Viertelfinale. 
-                <span class="badge badge-danger">&nbsp;</span> Platz 8: Absteiger (Regelungen können je nach Turnier variieren).
+                <span class="badge badge-danger">&nbsp;</span> Platz 8: Absteiger (können von den realen Absteigern abweichen).
             </small>
         </div>
         {% endif %}
@@ -581,10 +581,14 @@
                                     {# Indikator für Torübereinstimmung - this might need to be re-evaluated or moved if goals are not directly editable in the main game row anymore #}
                                     <span id="scoreMatchIndicatorContainer-{{ game.id }}">
                                     {% if game.team1_score is not none or game.team2_score is not none %} {# Nur anzeigen, wenn mind. ein Score gesetzt ist #}
-                                        {% if game.scores_fully_match_goals %}
-                                            <span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>
+                                        {% if game.overrule %}
+                                            <span class="text-warning score-match-indicator overruled-indicator" data-game-id="{{ game.id }}" style="cursor: pointer;" title="Score-Matching überregelt: {{ game.overrule.reason }}">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                            </span>
+                                        {% elif game.scores_fully_match_goals %}
+                                            <span class="text-success score-match-indicator valid-indicator" data-game-id="{{ game.id }}" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>
                                         {% else %}
-                                            <span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1)">✗</span>
+                                            <span class="text-danger score-match-indicator invalid-indicator" data-game-id="{{ game.id }}" style="cursor: pointer;" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1). Klicken zum Überregeln.">✗</span>
                                         {% endif %}
                                     {% endif %}
                                     </span>
@@ -1327,10 +1331,51 @@
     </div>
 {% endif %}
 
+{# Overrule Modal #}
+<div class="modal fade" id="overruleModal" tabindex="-1" role="dialog" aria-labelledby="overruleModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="overruleModalLabel">Score-Matching Überregeln</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Schließen">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="overruleModalGameInfo" class="mb-3">
+                    <strong>Spiel:</strong> <span id="overruleGameDescription"></span>
+                </div>
+                <div id="overruleModalWarnings" class="mb-3">
+                    <h6>Aktuelle Probleme:</h6>
+                    <ul id="overruleWarningsList" class="text-danger">
+                        <!-- Warnings will be populated by JavaScript -->
+                    </ul>
+                </div>
+                <form id="overruleForm">
+                    <div class="form-group">
+                        <label for="overruleReason">Grund für die Überregelung:</label>
+                        <textarea class="form-control" id="overruleReason" name="reason" rows="4" 
+                                  placeholder="Bitte geben Sie an, warum die Score-Matching-Regeln für dieses Spiel nicht gelten (z.B. 'Penalty-Shoot-Out Tor nicht als reguläres Tor erfasst', 'SOG-Daten bewusst nicht erfasst', etc.)" required></textarea>
+                    </div>
+                    <div id="existingOverruleInfo" class="alert alert-info d-none">
+                        <strong>Bestehende Überregelung:</strong>
+                        <div id="existingOverruleReason"></div>
+                        <small class="text-muted">Erstellt: <span id="existingOverruleDate"></span></small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-danger" id="removeOverruleBtn" style="display: none;">Überregelung entfernen</button>
+                <button type="button" class="btn btn-warning" id="saveOverruleBtn">Überregelung speichern</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="mt-4">
     <a href="{{ url_for('main_bp.index') }}" class="btn btn-secondary">&laquo; Zurück zur Jahresübersicht</a>
 </div>
-
 {% endblock %}
 
 {% block scripts %}
@@ -1355,6 +1400,30 @@ $(document).ready(function(){
         var gameId = this.id.split('-')[1]; // Extract gameId from form id (e.g., "sogEditForm-123")
         handleSogSubmit(gameId); 
     });
+
+    // Helper function to update score match indicator while respecting overrules
+    function updateScoreMatchIndicatorSafe(gameId, scoresMatch) {
+        var indicatorContainer = $('#scoreMatchIndicatorContainer-' + gameId);
+        var gameRow = $('#game-' + gameId);
+        var scoreInput1 = gameRow.find('input[name="team1_score"]');
+        var scoreInput2 = gameRow.find('input[name="team2_score"]');
+        var team1ScoreIsSet = scoreInput1.val() !== '' && scoreInput1.val() !== null;
+        var team2ScoreIsSet = scoreInput2.val() !== '' && scoreInput2.val() !== null;
+
+        if (team1ScoreIsSet || team2ScoreIsSet) {
+            // Check if there's an existing overrule - if so, don't change the indicator
+            var existingOverrule = indicatorContainer.find('.overruled-indicator');
+            if (existingOverrule.length === 0) {
+                if (scoresMatch) {
+                    indicatorContainer.html('<span class="text-success score-match-indicator valid-indicator" data-game-id="' + gameId + '" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>');
+                } else {
+                    indicatorContainer.html('<span class="text-danger score-match-indicator invalid-indicator" data-game-id="' + gameId + '" style="cursor: pointer;" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1). Klicken zum Überregeln.">✗</span>');
+                }
+            }
+        } else { 
+            indicatorContainer.empty(); 
+        }
+    }
 
     function convertTimeToSeconds(timeStr) {
         if (!timeStr || timeStr.indexOf(':') === -1) return Infinity;
@@ -1747,15 +1816,7 @@ $(document).ready(function(){
                 $('#eventCountBadge-' + gameId).text(currentEventCount + 1);
 
                 // Update score match indicator as before
-                var indicatorContainer = $('#scoreMatchIndicatorContainer-' + gameId);
-                var scoreInput1 = form.closest('.game-details-row').prev('tr').find('input[name="team1_score"]');
-                var scoreInput2 = form.closest('.game-details-row').prev('tr').find('input[name="team2_score"]');
-                var team1ScoreIsSet = scoreInput1.val() !== '' && scoreInput1.val() !== null;
-                var team2ScoreIsSet = scoreInput2.val() !== '' && scoreInput2.val() !== null;
-                if (team1ScoreIsSet || team2ScoreIsSet) {
-                    if (data.scores_fully_match_goals) indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>');
-                    else indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1)">✗</span>');
-                } else { indicatorContainer.empty(); }
+                updateScoreMatchIndicatorSafe(gameId, data.scores_fully_match_goals);
             }
         })
         .catch(error => {
@@ -1929,22 +1990,7 @@ $(document).ready(function(){
                 
                 // Update score match indicator after SOG update
                 if (data.hasOwnProperty('scores_fully_match_goals')) {
-                    var indicatorContainer = $('#scoreMatchIndicatorContainer-' + gameId);
-                    var gameRow = $('#game-' + gameId);
-                    var scoreInput1 = gameRow.find('input[name="team1_score"]');
-                    var scoreInput2 = gameRow.find('input[name="team2_score"]');
-                    var team1ScoreIsSet = scoreInput1.val() !== '' && scoreInput1.val() !== null;
-                    var team2ScoreIsSet = scoreInput2.val() !== '' && scoreInput2.val() !== null;
-
-                    if (team1ScoreIsSet || team2ScoreIsSet) {
-                        if (data.scores_fully_match_goals) {
-                            indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>');
-                        } else {
-                            indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1)">✗</span>');
-                        }
-                    } else {
-                        indicatorContainer.empty();
-                    }
+                    updateScoreMatchIndicatorSafe(gameId, data.scores_fully_match_goals);
                 }
             } else {
                 // Error message is already displayed by the generic logic above
@@ -2010,23 +2056,9 @@ $(document).ready(function(){
 
                 // If a goal was deleted, update the score match indicator
                 if (eventType === 'goal' && data.hasOwnProperty('scores_fully_match_goals')) {
-                    var indicatorContainer = $('#scoreMatchIndicatorContainer-' + gameId);
-                    var scoreInput1 = $('#game-' + gameId).find('input[name="team1_score"]');
-                    var scoreInput2 = $('#game-' + gameId).find('input[name="team2_score"]');
-                    var team1ScoreIsSet = scoreInput1.val() !== '' && scoreInput1.val() !== null;
-                    var team2ScoreIsSet = scoreInput2.val() !== '' && scoreInput2.val() !== null;
-
-                    if (team1ScoreIsSet || team2ScoreIsSet) {
-                         if (data.scores_fully_match_goals) {
-                            indicatorContainer.html('<span class="text-success" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>');
-                        } else {
-                            indicatorContainer.html('<span class="text-danger" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1)">✗</span>');
-                        }
-                    } else {
-                        indicatorContainer.empty();
-                    }
+                    updateScoreMatchIndicatorSafe(gameId, data.scores_fully_match_goals);
                 }
-                 // Check if the list is empty and show the "no events" message
+                // Check if the list is empty and show the "no events" message
                 if ($('#gameEventsDisplayArea-' + gameId + ' ul.list-group li.event-item').length === 0) {
                     $('#noGameEventsMessage-' + gameId).removeClass('d-none');
                 }
@@ -2367,6 +2399,189 @@ $(document).ready(function(){
         initializeAndSortSmallTable('penalty-kill-table', 'pk_perc', true);     // Sort PK% Desc
     }
     // --- End of Sorting for Small Stats Tables ---
+
+    // --- Overrule Feature JavaScript ---
+    let currentGameIdForOverrule = null;
+    let currentGameDataForOverrule = null;
+
+    // Click handler for score match indicators
+    $(document).on('click', '.score-match-indicator', function() {
+        const gameId = $(this).data('game-id');
+        const isOverruled = $(this).hasClass('overruled-indicator');
+        const isInvalid = $(this).hasClass('invalid-indicator');
+        
+        if (isInvalid || isOverruled) {
+            openOverruleModal(gameId, isOverruled);
+        }
+    });
+
+    function openOverruleModal(gameId, hasExistingOverrule) {
+        currentGameIdForOverrule = gameId;
+        
+        // Get game info from the row
+        const gameRow = $('#game-' + gameId);
+        const gameNumber = gameRow.find('td:first').text();
+        const team1Cell = gameRow.find('td:nth-child(5)'); // Heim team cell 
+        const team2Cell = gameRow.find('td:nth-child(6)'); // Gast team cell
+        const team1Name = team1Cell.text().trim().split('(')[0].trim(); // Remove any (placeholder) text
+        const team2Name = team2Cell.text().trim().split('(')[0].trim();
+        const score1 = gameRow.find('input[name="team1_score"]').val() || '?';
+        const score2 = gameRow.find('input[name="team2_score"]').val() || '?';
+        
+        // Set game description
+        $('#overruleGameDescription').text(`Spiel ${gameNumber}: ${team1Name} vs ${team2Name} (${score1}:${score2})`);
+        
+        // Get warnings from current consistency check
+        getCurrentWarningsForGame(gameId).then(warnings => {
+            const warningsList = $('#overruleWarningsList');
+            warningsList.empty();
+            warnings.forEach(warning => {
+                warningsList.append(`<li>${warning}</li>`);
+            });
+        });
+        
+        // Handle existing overrule
+        if (hasExistingOverrule) {
+            const overruleIndicator = $('.overruled-indicator[data-game-id="' + gameId + '"]');
+            const existingReason = overruleIndicator.attr('title').replace('Score-Matching überregelt: ', '');
+            
+            $('#overruleReason').val(existingReason);
+            $('#existingOverruleInfo').removeClass('d-none');
+            $('#existingOverruleReason').text(existingReason);
+            $('#existingOverruleDate').text(''); // We could fetch this from backend if needed
+            $('#removeOverruleBtn').show();
+            $('#overruleModalLabel').text('Score-Matching Überregelung bearbeiten');
+        } else {
+            $('#overruleReason').val('');
+            $('#existingOverruleInfo').addClass('d-none');
+            $('#removeOverruleBtn').hide();
+            $('#overruleModalLabel').text('Score-Matching Überregeln');
+        }
+        
+        $('#overruleModal').modal('show');
+    }
+
+    // Mock function to get current warnings - in real implementation, this would call the backend
+    async function getCurrentWarningsForGame(gameId) {
+        // This is a simplified version - in reality you'd make an AJAX call to get current warnings
+        const indicators = $('.invalid-indicator[data-game-id="' + gameId + '"], .overruled-indicator[data-game-id="' + gameId + '"]');
+        if (indicators.length > 0) {
+            const title = indicators.first().attr('title');
+            if (title.includes('überregelt')) {
+                return ['Spiel ist derzeit überregelt'];
+            } else {
+                // Parse the existing warning from the title
+                return [title.split('.')[0]]; // Take first sentence
+            }
+        }
+        return ['Unbekanntes Problem mit Score-Matching'];
+    }
+
+    // Save overrule
+    $('#saveOverruleBtn').on('click', function() {
+        const reason = $('#overruleReason').val().trim();
+        if (!reason) {
+            alert('Bitte geben Sie einen Grund für die Überregelung an.');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('reason', reason);
+        
+        fetch(`{{ url_for('year_bp.add_overrule', year_id=year.id, game_id=0) }}`.replace('/0/overrule', '/' + currentGameIdForOverrule + '/overrule'), {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the indicator
+                updateScoreMatchIndicator(currentGameIdForOverrule, 'overruled', reason);
+                $('#overruleModal').modal('hide');
+                
+                // Show success message
+                showTemporaryMessage('success', data.message);
+            } else {
+                alert('Fehler: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error saving overrule:', error);
+            alert('Netzwerkfehler beim Speichern der Überregelung.');
+        });
+    });
+
+    // Remove overrule
+    $('#removeOverruleBtn').on('click', function() {
+        if (!confirm('Sind Sie sicher, dass Sie die Überregelung entfernen möchten?')) {
+            return;
+        }
+        
+        fetch(`{{ url_for('year_bp.remove_overrule', year_id=year.id, game_id=0) }}`.replace('/0/overrule', '/' + currentGameIdForOverrule + '/overrule'), {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the indicator to show normal validation state
+                updateScoreMatchIndicator(currentGameIdForOverrule, 'normal');
+                $('#overruleModal').modal('hide');
+                
+                // Show success message
+                showTemporaryMessage('success', data.message);
+            } else {
+                alert('Fehler: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error removing overrule:', error);
+            alert('Netzwerkfehler beim Entfernen der Überregelung.');
+        });
+    });
+
+    function updateScoreMatchIndicator(gameId, state, reason = '') {
+        const container = $('#scoreMatchIndicatorContainer-' + gameId);
+        let newHtml = '';
+        
+        if (state === 'overruled') {
+            newHtml = `<span class="text-warning score-match-indicator overruled-indicator" data-game-id="${gameId}" style="cursor: pointer;" title="Score-Matching überregelt: ${reason}">
+                        <i class="fas fa-exclamation-triangle"></i>
+                       </span>`;
+        } else {
+            // Check if the game would normally be valid or invalid
+            // This is simplified - in reality you'd check the actual validation state
+            const gameRow = $('#game-' + gameId);
+            const score1 = gameRow.find('input[name="team1_score"]').val();
+            const score2 = gameRow.find('input[name="team2_score"]').val();
+            
+            if (score1 !== '' && score2 !== '') {
+                // For now, assume it goes back to invalid state when overrule is removed
+                // In reality, you'd need to re-check the validation
+                newHtml = `<span class="text-danger score-match-indicator invalid-indicator" data-game-id="${gameId}" style="cursor: pointer;" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1). Klicken zum Überregeln.">✗</span>`;
+            } else {
+                newHtml = '';
+            }
+        }
+        
+        container.html(newHtml);
+    }
+
+    function showTemporaryMessage(type, message) {
+        const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+        const messageHtml = `<div class="alert ${alertClass} alert-dismissible fade show fixed-top" style="z-index: 9999; margin: 10px;" role="alert">
+                                ${message}
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                             </div>`;
+        $('body').prepend(messageHtml);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            $('.alert.fixed-top').alert('close');
+        }, 5000);
+    }
+    // --- End of Overrule Feature JavaScript ---
 
 });
 </script>

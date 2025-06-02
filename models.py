@@ -125,6 +125,14 @@ class ShotsOnGoal(db.Model):
     __table_args__ = (db.UniqueConstraint('game_id', 'team_code', 'period', name='_game_team_period_uc'),)
     def __repr__(self): return f'<ShotsOnGoal Game {self.game_id} Team {self.team_code} P{self.period}: {self.shots}>'
 
+class GameOverrule(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
+    reason = db.Column(db.String(500), nullable=False)  # User's reason for overruling
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp(), nullable=False)
+    game = db.relationship('Game', backref=db.backref('overrule', uselist=False, cascade="all, delete-orphan"))
+    def __repr__(self): return f'<GameOverrule for Game {self.game_id}: {self.reason[:50]}...>'
+
 # --- Dataclass for Game Display ---
 @dataclass
 class GameDisplay:
@@ -140,3 +148,4 @@ class GameDisplay:
     sorted_events: list = field(default_factory=list)
     sog_data: dict = field(default_factory=dict) # {team_code: {period: shots}}
     scores_fully_match_goals: bool = False # Placeholder 
+    overrule: object = None  # GameOverrule object if exists 

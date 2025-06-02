@@ -185,7 +185,7 @@
                             </tr>
                         </thead>
                         <tbody id="top-scorers-points-body">
-                            {% set scoring_players = player_stats | selectattr('scorer_points', 'greaterthan', 0) | sort(attribute='scorer_points', reverse=true) | list %}
+                            {% set scoring_players = player_stats | selectattr('scorer_points', 'greaterthan', 2) | sort(attribute='scorer_points', reverse=true) | list %}
                             {% for player in scoring_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
@@ -228,7 +228,7 @@
                             </tr>
                         </thead>
                         <tbody id="top-goal-scorers-body">
-                            {% set goal_players = player_stats | selectattr('goals', 'greaterthan', 0) | sort(attribute='goals', reverse=true) | list %}
+                            {% set goal_players = player_stats | selectattr('goals', 'greaterthan', 2) | sort(attribute='goals', reverse=true) | list %}
                             {% for player in goal_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
@@ -266,7 +266,7 @@
                             </tr>
                         </thead>
                         <tbody id="top-assist-providers-body">
-                            {% set assist_players = player_stats | selectattr('assists', 'greaterthan', 0) | sort(attribute='assists', reverse=true) | list %}
+                            {% set assist_players = player_stats | selectattr('assists', 'greaterthan', 2) | sort(attribute='assists', reverse=true) | list %}
                             {% for player in assist_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
@@ -306,7 +306,7 @@
                             </tr>
                         </thead>
                         <tbody id="top-penalty-players-body">
-                            {% set pim_players = player_stats | selectattr('pims', 'greaterthan', 0) | sort(attribute='pims', reverse=true) | list %}
+                            {% set pim_players = player_stats | selectattr('pims', 'greaterthan', 2) | sort(attribute='pims', reverse=true) | list %}
                             {% for player in pim_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>

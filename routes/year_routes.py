@@ -3,7 +3,7 @@ import os
 import re
 import traceback
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
-from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoal, TeamStats, TeamOverallStats, GameDisplay
+from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoal, TeamStats, TeamOverallStats, GameDisplay, GameOverrule
 from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, OPP_COUNT_MAP, GOAL_TYPE_DISPLAY_MAP
 from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final
 from routes.main_routes import resolve_fixture_path
@@ -441,6 +441,14 @@ def year_view(year_id):
         # It's important that check_game_data_consistency also uses resolved team codes if it accesses g_disp.sog_data
         consistency_check = check_game_data_consistency(g_disp, sog_src) # Pass sog_src which is keyed by resolved codes
         g_disp.scores_fully_match_goals = consistency_check['scores_fully_match_data']
+
+    # Load overrule data for all games
+    all_overrules = GameOverrule.query.join(Game).filter(Game.year_id == year_id).all()
+    overrule_by_game_id = {overrule.game_id: overrule for overrule in all_overrules}
+    
+    # Assign overrule data to game displays
+    for g_disp in games_processed:
+        g_disp.overrule = overrule_by_game_id.get(g_disp.id)
 
     games_by_round_display = {}
     for g_d in games_processed: games_by_round_display.setdefault(g_d.round or "Unk", []).append(g_d)
@@ -1338,3 +1346,68 @@ def game_stats_view(year_id, game_id):
                            pp_goals_scored=pp_goals_scored, pp_opportunities=final_pp_opportunities,
                            pp_percentage=pp_percentage, team1_scores_by_period=team1_scores_by_period,
                            team2_scores_by_period=team2_scores_by_period) 
+
+@year_bp.route('/<int:year_id>/game/<int:game_id>/overrule', methods=['POST'])
+def add_overrule(year_id, game_id):
+    """Add or update an overrule for a game's score matching issue"""
+    game = db.session.get(Game, game_id)
+    if not game or game.year_id != year_id:
+        return jsonify({'success': False, 'message': 'Spiel nicht gefunden oder gehört nicht zum Turnier.'}), 404
+    
+    try:
+        reason = request.form.get('reason', '').strip()
+        if not reason:
+            return jsonify({'success': False, 'message': 'Grund für Overrule muss angegeben werden.'}), 400
+        
+        # Check if overrule already exists
+        existing_overrule = GameOverrule.query.filter_by(game_id=game_id).first()
+        
+        if existing_overrule:
+            # Update existing overrule
+            existing_overrule.reason = reason
+            existing_overrule.created_at = db.func.current_timestamp()
+            message = 'Overrule-Grund erfolgreich aktualisiert!'
+        else:
+            # Create new overrule
+            new_overrule = GameOverrule(game_id=game_id, reason=reason)
+            db.session.add(new_overrule)
+            message = 'Overrule erfolgreich hinzugefügt!'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'message': message,
+            'overrule': {
+                'reason': reason,
+                'created_at': existing_overrule.created_at.isoformat() if existing_overrule else None
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error adding/updating overrule: {str(e)}")
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@year_bp.route('/<int:year_id>/game/<int:game_id>/overrule', methods=['DELETE'])
+def remove_overrule(year_id, game_id):
+    """Remove an overrule for a game"""
+    game = db.session.get(Game, game_id)
+    if not game or game.year_id != year_id:
+        return jsonify({'success': False, 'message': 'Spiel nicht gefunden oder gehört nicht zum Turnier.'}), 404
+    
+    try:
+        existing_overrule = GameOverrule.query.filter_by(game_id=game_id).first()
+        
+        if not existing_overrule:
+            return jsonify({'success': False, 'message': 'Kein Overrule für dieses Spiel gefunden.'}), 404
+        
+        db.session.delete(existing_overrule)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Overrule erfolgreich entfernt!'})
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error removing overrule: {str(e)}")
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
