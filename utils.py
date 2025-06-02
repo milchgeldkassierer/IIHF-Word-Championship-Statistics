@@ -81,7 +81,7 @@ def _calculate_basic_prelim_standings(prelim_games_for_year: List[Game]) -> Dict
                 team2_stats.sow += 1; team2_stats.pts += 2
                 team1_stats.sol += 1; team1_stats.pts += 1
     
-    # Calculate rank_in_group
+    # Calculate rank_in_group with head-to-head comparison
     grouped_standings_for_ranking: Dict[str, List[TeamStats]] = {}
     for ts_code, ts_obj in standings.items():
         # Ensure all objects have a group; default if necessary
@@ -91,14 +91,150 @@ def _calculate_basic_prelim_standings(prelim_games_for_year: List[Game]) -> Dict
         grouped_standings_for_ranking[group_key].append(ts_obj)
 
     for group_name, group_list in grouped_standings_for_ranking.items():
-        # Sort by pts (desc), gd (desc), gf (desc)
-        # TeamStats has a gd @property
+        # Sort by pts (desc), head-to-head comparison, gd (desc), gf (desc)
         group_list.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
+        
+        # Apply head-to-head tiebreaker for teams with equal points
+        group_list = _apply_head_to_head_tiebreaker(group_list, prelim_games_for_year)
+        
         for i, ts_in_group in enumerate(group_list):
             ts_in_group.rank_in_group = i + 1
             # The original standings dict values are the same objects, so rank is updated.
 
     return standings
+
+def _apply_head_to_head_tiebreaker(teams_list: List[TeamStats], all_games: List[Game]) -> List[TeamStats]:
+    """
+    Apply head-to-head tiebreaker for teams with equal points.
+    Returns the sorted list with head-to-head results considered.
+    """
+    if len(teams_list) <= 1:
+        return teams_list
+    
+    # Group teams by points
+    teams_by_points = {}
+    for team in teams_list:
+        points = team.pts
+        if points not in teams_by_points:
+            teams_by_points[points] = []
+        teams_by_points[points].append(team)
+    
+    result = []
+    
+    # Process each point group separately
+    for points in sorted(teams_by_points.keys(), reverse=True):
+        point_group = teams_by_points[points]
+        
+        if len(point_group) == 1:
+            result.extend(point_group)
+        else:
+            # Apply head-to-head tiebreaker within this point group
+            sorted_group = _sort_teams_by_head_to_head(point_group, all_games)
+            result.extend(sorted_group)
+    
+    return result
+
+def _sort_teams_by_head_to_head(tied_teams: List[TeamStats], all_games: List[Game]) -> List[TeamStats]:
+    """
+    Sort teams that are tied on points by head-to-head results following IIHF rules.
+    
+    IIHF Tie-breaking procedure:
+    - For 2 teams: Direct game between them is decisive
+    - For 3+ teams tied: 
+      Step 1: Points in direct games among tied teams
+      Step 2: Goal difference in direct games among tied teams  
+      Step 3: Goals scored in direct games among tied teams
+      Steps 4-5: Results vs teams outside sub-group (not implemented - rare edge case)
+    
+    Special case - If not all mutual games played:
+    1. Fewest games played
+    2. Overall goal difference 
+    3. Overall goals for
+    4. Tournament seeding (not available)
+    """
+    if len(tied_teams) <= 1:
+        return tied_teams
+    
+    # Get all head-to-head games between these teams
+    team_names = {team.name for team in tied_teams}
+    head_to_head_games = []
+    
+    for game in all_games:
+        if (game.team1_code in team_names and game.team2_code in team_names and 
+            game.team1_score is not None and game.team2_score is not None and
+            game.round in PRELIM_ROUNDS):
+            head_to_head_games.append(game)
+    
+    # Check if all mutual games have been played
+    expected_games = len(tied_teams) * (len(tied_teams) - 1) // 2  # n choose 2
+    actual_games = len(head_to_head_games)
+    all_mutual_games_played = (actual_games == expected_games)
+    
+    # Calculate head-to-head records and games played per team
+    h2h_stats = {}
+    for team in tied_teams:
+        h2h_stats[team.name] = {
+            'points': 0,
+            'gf': 0,
+            'ga': 0,
+            'games_played': 0,
+            'wins': 0,
+            'team_obj': team
+        }
+    
+    for game in head_to_head_games:
+        team1_h2h = h2h_stats[game.team1_code]
+        team2_h2h = h2h_stats[game.team2_code]
+        
+        # Update games played for both teams
+        team1_h2h['games_played'] += 1
+        team2_h2h['games_played'] += 1
+        
+        team1_h2h['gf'] += game.team1_score
+        team1_h2h['ga'] += game.team2_score
+        team2_h2h['gf'] += game.team2_score
+        team2_h2h['ga'] += game.team1_score
+        
+        # Award points based on result (IIHF 3-point system)
+        if game.result_type == 'REG':
+            if game.team1_score > game.team2_score:
+                team1_h2h['points'] += 3
+                team1_h2h['wins'] += 1
+            else:
+                team2_h2h['points'] += 3
+                team2_h2h['wins'] += 1
+        elif game.result_type in ['OT', 'SO']:
+            if game.team1_score > game.team2_score:
+                team1_h2h['points'] += 2  # Winner gets 2 points
+                team2_h2h['points'] += 1  # Loser gets 1 point
+                team1_h2h['wins'] += 1
+            else:
+                team2_h2h['points'] += 2  # Winner gets 2 points
+                team1_h2h['points'] += 1  # Loser gets 1 point
+                team2_h2h['wins'] += 1
+    
+    # Sort by appropriate criteria based on whether all mutual games were played
+    h2h_list = list(h2h_stats.values())
+    
+    if all_mutual_games_played:
+        # Standard IIHF procedure: Steps 1-3
+        h2h_list.sort(key=lambda x: (
+            x['points'],                # Step 1: Head-to-head points
+            x['gf'] - x['ga'],         # Step 2: Head-to-head goal difference
+            x['gf'],                   # Step 3: Head-to-head goals for
+            x['team_obj'].gd,          # Fallback: Overall goal difference
+            x['team_obj'].gf           # Fallback: Overall goals for
+        ), reverse=True)
+    else:
+        # IIHF incomplete games procedure
+        h2h_list.sort(key=lambda x: (
+            -x['games_played'],        # 1. Fewest games played (negative for ascending)
+            x['team_obj'].gd,          # 2. Overall goal difference
+            x['team_obj'].gf,          # 3. Overall goals for
+            x['team_obj'].pts          # 4. Overall points (as proxy for seeding)
+        ), reverse=True)
+    
+    return [h2h['team_obj'] for h2h in h2h_list]
 
 # --- Placeholder for _build_playoff_team_map_for_year ---
 def _build_playoff_team_map_for_year(

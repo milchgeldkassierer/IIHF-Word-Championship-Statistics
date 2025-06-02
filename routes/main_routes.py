@@ -4,7 +4,7 @@ from typing import Dict, List # Added typing imports
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from models import db, ChampionshipYear, Game, AllTimeTeamStats, TeamStats, Player, Goal, Penalty # Added Player, Goal, Penalty
 from constants import TEAM_ISO_CODES, PRELIM_ROUNDS, PLAYOFF_ROUNDS, QF_GAME_NUMBERS_BY_YEAR, SF_GAME_NUMBERS_BY_YEAR, FINAL_BRONZE_GAME_NUMBERS_BY_YEAR, PIM_MAP # Added more constants, PIM_MAP
-from utils import get_resolved_team_code, is_code_final, resolve_game_participants # Added utils imports
+from utils import get_resolved_team_code, is_code_final, resolve_game_participants, _apply_head_to_head_tiebreaker # Added utils imports
 from sqlalchemy import func, case # Added func, case for SQLAlchemy
 import traceback
 
@@ -152,6 +152,8 @@ def calculate_all_time_standings():
         
         for group_list in prelim_standings_by_group_this_year.values():
             group_list.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
+            # Apply head-to-head tiebreaker for teams with equal points
+            group_list = _apply_head_to_head_tiebreaker(group_list, prelim_games_for_standings_calc)
             for i, ts_in_group in enumerate(group_list):
                 ts_in_group.rank_in_group = i + 1
         
@@ -666,6 +668,8 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
     
     for group_list in standings_by_group.values():
         group_list.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
+        # Apply head-to-head tiebreaker for teams with equal points
+        group_list = _apply_head_to_head_tiebreaker(group_list, prelim_games)
         for i, ts in enumerate(group_list):
             ts.rank_in_group = i + 1
     
@@ -802,9 +806,12 @@ def get_medal_tally_data():
         
         for group_list in prelim_standings_by_group_this_year.values():
             group_list.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
+            # Apply head-to-head tiebreaker for teams with equal points
+            group_list = _apply_head_to_head_tiebreaker(group_list, prelim_games_for_standings_calc)
             for i, ts_in_group in enumerate(group_list):
                 ts_in_group.rank_in_group = i + 1
         
+        # b. Build Playoff Team Map for this year
         current_year_playoff_map: Dict[str, str] = {}
         all_games_this_year_map_by_number_local: Dict[int, Game] = {g.game_number: g for g in games_in_this_year if g.game_number is not None} # Renamed to avoid conflict
 

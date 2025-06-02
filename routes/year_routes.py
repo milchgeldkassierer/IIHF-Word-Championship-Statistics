@@ -5,7 +5,7 @@ import traceback
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoal, TeamStats, TeamOverallStats, GameDisplay, GameOverrule
 from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, OPP_COUNT_MAP, GOAL_TYPE_DISPLAY_MAP
-from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final
+from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final, _apply_head_to_head_tiebreaker
 from routes.main_routes import resolve_fixture_path
 
 year_bp = Blueprint('year_bp', __name__, url_prefix='/year')
@@ -91,6 +91,8 @@ def year_view(year_id):
                 key=lambda x: (x.pts, x.gd, x.gf),
                 reverse=True
             )
+            # Apply head-to-head tiebreaker for teams with equal points
+            current_group_teams = _apply_head_to_head_tiebreaker(current_group_teams, prelim_games)
             for i, team_stat_obj in enumerate(current_group_teams):
                 team_stat_obj.rank_in_group = i + 1 
             
@@ -917,6 +919,8 @@ def game_stats_view(year_id, game_id):
                 key=lambda x: (x.pts, x.gd, x.gf),
                 reverse=True
             )
+            # Apply head-to-head tiebreaker for teams with equal points
+            current_group_teams = _apply_head_to_head_tiebreaker(current_group_teams, prelim_games)
             for i, team_stat_obj in enumerate(current_group_teams):
                 team_stat_obj.rank_in_group = i + 1 
             
