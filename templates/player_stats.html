@@ -404,27 +404,31 @@ $(document).ready(function() {
     setupSorting('assistProvidersTable', 'assists');
     setupSorting('pimsStatsTable', 'pims');
     
-        // Team filtering functionality - load data dynamically
+    // Team filtering functionality - load data dynamically
     $('#teamFilter').change(function() {
         const selectedTeam = $(this).val();
         
         // Show loading indicator
         $('.stats-section').addClass('opacity-50');
         
-        // Make AJAX request to get filtered stats
+        // Make AJAX request to get filtered stats as JSON
         $.ajax({
-            url: '{{ url_for("main_bp.player_stats_view") }}',
+            url: '{{ url_for("main_bp.player_stats_data") }}',
             method: 'GET',
             data: { team_filter: selectedTeam },
-            success: function(response) {
-                // Update the page content with new data
-                const $newContent = $(response);
+            dataType: 'json',
+            success: function(data) {
+                // Update scoring players table
+                updateScoringTable('#top-scorers-points-body', data.scoring_players, data.team_iso_codes, 'scorer_points');
                 
-                // Update each table body
-                $('#top-scorers-points-body').html($newContent.find('#top-scorers-points-body').html());
-                $('#top-goal-scorers-body').html($newContent.find('#top-goal-scorers-body').html());
-                $('#top-assist-providers-body').html($newContent.find('#top-assist-providers-body').html());
-                $('#top-penalty-players-body').html($newContent.find('#top-penalty-players-body').html());
+                // Update goals table
+                updateGoalsTable('#top-goal-scorers-body', data.goal_players, data.team_iso_codes);
+                
+                // Update assists table
+                updateAssistsTable('#top-assist-providers-body', data.assist_players, data.team_iso_codes);
+                
+                // Update PIMs table
+                updatePimsTable('#top-penalty-players-body', data.pim_players, data.team_iso_codes);
                 
                 // Update toggle buttons visibility and text
                 $('.toggle-stats-visibility').each(function() {
@@ -483,6 +487,93 @@ $(document).ready(function() {
             }
         });
     });
+    
+    // Helper functions to update tables with JSON data
+    function updateScoringTable(bodySelector, players, teamIsoCodes, sortField) {
+        const tbody = $(bodySelector);
+        tbody.empty();
+        
+        players.forEach(function(player, index) {
+            const isExtra = index >= 20;
+            const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
+                `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
+            
+            const rowHtml = `
+                <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
+                    <td>${index + 1}</td>
+                    <td>${player.last_name.toUpperCase()} ${player.first_name}</td>
+                    <td>${flagHtml}${player.team_code || 'N/A'}</td>
+                    <td data-value="${player.goals}">${player.goals}</td>
+                    <td data-value="${player.assists}">${player.assists}</td>
+                    <td data-value="${player.scorer_points}"><strong>${player.scorer_points}</strong></td>
+                </tr>
+            `;
+            tbody.append(rowHtml);
+        });
+    }
+    
+    function updateGoalsTable(bodySelector, players, teamIsoCodes) {
+        const tbody = $(bodySelector);
+        tbody.empty();
+        
+        players.forEach(function(player, index) {
+            const isExtra = index >= 20;
+            const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
+                `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
+            
+            const rowHtml = `
+                <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
+                    <td>${index + 1}</td>
+                    <td>${player.last_name.toUpperCase()} ${player.first_name}</td>
+                    <td>${flagHtml}${player.team_code || 'N/A'}</td>
+                    <td data-value="${player.goals}"><strong>${player.goals}</strong></td>
+                </tr>
+            `;
+            tbody.append(rowHtml);
+        });
+    }
+    
+    function updateAssistsTable(bodySelector, players, teamIsoCodes) {
+        const tbody = $(bodySelector);
+        tbody.empty();
+        
+        players.forEach(function(player, index) {
+            const isExtra = index >= 20;
+            const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
+                `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
+            
+            const rowHtml = `
+                <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
+                    <td>${index + 1}</td>
+                    <td>${player.last_name.toUpperCase()} ${player.first_name}</td>
+                    <td>${flagHtml}${player.team_code || 'N/A'}</td>
+                    <td data-value="${player.assists}"><strong>${player.assists}</strong></td>
+                </tr>
+            `;
+            tbody.append(rowHtml);
+        });
+    }
+    
+    function updatePimsTable(bodySelector, players, teamIsoCodes) {
+        const tbody = $(bodySelector);
+        tbody.empty();
+        
+        players.forEach(function(player, index) {
+            const isExtra = index >= 20;
+            const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
+                `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
+            
+            const rowHtml = `
+                <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
+                    <td>${index + 1}</td>
+                    <td>${player.last_name.toUpperCase()} ${player.first_name}</td>
+                    <td>${flagHtml}${player.team_code || 'N/A'}</td>
+                    <td data-value="${player.pims}"><strong>${player.pims}</strong></td>
+                </tr>
+            `;
+            tbody.append(rowHtml);
+        });
+    }
     
     // Function to setup toggle functionality
     function setupToggleFunctionality() {

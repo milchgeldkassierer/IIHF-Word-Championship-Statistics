@@ -25,10 +25,10 @@ A Flask-based web application for managing ice hockey tournament data, including
 1. Clone the repository:
 ```bash
 git clone https://github.com/AKurthFT/IIHF-Word-Championship-Statistics.git
-cd table_calc
+cd IIHF-Word-Championship-Statistics
 ```
 
-2. Create and activate a virtual environment (recommended):
+2. Create and activate a virtual environment (optional but recommended):
 ```bash
 # Windows
 python -m venv venv
@@ -52,7 +52,7 @@ flask init-db
 
 ## Running the Application
 
-1. Ensure your fixture files (e.g., `2024.json`, `2025.json`) are present in the `fixtures/` directory at the root of the project, or in the `data/fixtures/` directory.
+1. Ensure your fixture files (e.g., `2024.json`, `2025.json`) are present in the `fixtures/` directory at the root of the project.
 2. Start the Flask development server:
 ```bash
 flask run
@@ -86,12 +86,12 @@ http://localhost:5000
 
 1.  **Prepare Fixture Files**:
     *   Create JSON files for each tournament year you want to manage (e.g., `2024.json`, `2025.json`).
-    *   Place these files in the `fixtures/` directory at the root of the project. Alternatively, they can be placed in `data/fixtures/`. The application will search these locations.
+    *   Place these files in the `fixtures/` directory at the root of the project.
     *   The format of these files is described in the "Data Format" section below.
 
 2.  **Adding/Updating a Tournament Year**:
     *   Navigate to the home page (`/`).
-    *   The "Jahr" (Year) dropdown will be populated with years for which `YYYY.json` files are found in the `fixtures/` or `data/fixtures/` directories.
+    *   The "Jahr" (Year) dropdown will be populated with years for which `YYYY.json` files are found in the `fixtures/` directory.
     *   Enter a "Name des Turniers" (Tournament Name).
     *   Select a "Jahr" (Year) from the dropdown.
     *   Click "Turnier anlegen / Aktualisieren".

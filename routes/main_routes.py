@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Dict, List # Added typing imports
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from models import db, ChampionshipYear, Game, AllTimeTeamStats, TeamStats, Player, Goal, Penalty # Added Player, Goal, Penalty
 from constants import TEAM_ISO_CODES, PRELIM_ROUNDS, PLAYOFF_ROUNDS, QF_GAME_NUMBERS_BY_YEAR, SF_GAME_NUMBERS_BY_YEAR, FINAL_BRONZE_GAME_NUMBERS_BY_YEAR, PIM_MAP # Added more constants, PIM_MAP
 from utils import get_resolved_team_code, is_code_final, resolve_game_participants # Added utils imports
@@ -544,7 +544,12 @@ def index():
     
     sorted_fixture_years = sorted(list(all_found_years), reverse=True)
 
-    return render_template('index.html', all_years=all_years_db, available_fixture_years=sorted_fixture_years, team_iso_codes=TEAM_ISO_CODES)
+    # Get medal tally data for accurate gold medal winners
+    medal_data = get_medal_tally_data()
+    # Create a lookup dict by year for quick access
+    medal_data_by_year = {medal_entry['year_obj'].year: medal_entry for medal_entry in medal_data}
+
+    return render_template('index.html', all_years=all_years_db, available_fixture_years=sorted_fixture_years, team_iso_codes=TEAM_ISO_CODES, medal_data_by_year=medal_data_by_year)
 
 @main_bp.route('/all-time-standings')
 def all_time_standings_view():
@@ -1038,6 +1043,30 @@ def player_stats_view():
     # TEAM_ISO_CODES is already imported in this file
     return render_template('player_stats.html', player_stats=player_stats_data, team_iso_codes=TEAM_ISO_CODES)
 
+@main_bp.route('/player-stats/data')
+def player_stats_data():
+    """
+    Returns JSON data for player statistics.
+    Supports team filtering via 'team_filter' query parameter.
+    """
+    team_filter = request.args.get('team_filter', '').strip()
+    if not team_filter:
+        team_filter = None
+    
+    current_app.logger.info(f"Accessing player statistics JSON data. Team filter: {team_filter}")
+    player_stats_data = get_all_player_stats(team_filter=team_filter)
+    
+    # Format data for JSON response
+    formatted_data = {
+        'scoring_players': [player for player in player_stats_data if player['scorer_points'] > 0],
+        'goal_players': [player for player in player_stats_data if player['goals'] > 0],
+        'assist_players': [player for player in player_stats_data if player['assists'] > 0],
+        'pim_players': [player for player in player_stats_data if player['pims'] > 0],
+        'team_iso_codes': TEAM_ISO_CODES
+    }
+    
+    return jsonify(formatted_data)
+
 @main_bp.route('/edit-players', methods=['GET', 'POST'])
 def edit_players():
     """
@@ -1051,13 +1080,22 @@ def edit_players():
         last_name = request.form.get('last_name')
         jersey_number_str = request.form.get('jersey_number')
         
+        # Check if this is an AJAX request
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        
         if not player_id or not first_name or not last_name:
-            flash('Spieler-ID, Vorname und Nachname sind erforderlich.', 'danger')
+            error_msg = 'Spieler-ID, Vorname und Nachname sind erforderlich.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': error_msg}), 400
+            flash(error_msg, 'danger')
         else:
             try:
                 player = db.session.get(Player, int(player_id))
                 if not player:
-                    flash('Spieler nicht gefunden.', 'danger')
+                    error_msg = 'Spieler nicht gefunden.'
+                    if is_ajax:
+                        return jsonify({'success': False, 'message': error_msg}), 404
+                    flash(error_msg, 'danger')
                 else:
                     # Update player information
                     player.first_name = first_name.strip()
@@ -1068,24 +1106,61 @@ def edit_players():
                         try:
                             player.jersey_number = int(jersey_number_str.strip())
                         except ValueError:
-                            flash('Ungültige Trikotnummer.', 'warning')
+                            error_msg = 'Ungültige Trikotnummer.'
+                            if is_ajax:
+                                return jsonify({'success': False, 'message': error_msg}), 400
+                            flash(error_msg, 'warning')
                             return redirect(url_for('main_bp.edit_players'))
                     else:
                         player.jersey_number = None
                     
                     db.session.commit()
-                    flash(f'Spieler {first_name} {last_name} erfolgreich aktualisiert!', 'success')
+                    success_msg = f'Spieler {first_name} {last_name} erfolgreich aktualisiert!'
+                    
+                    if is_ajax:
+                        return jsonify({
+                            'success': True, 
+                            'message': success_msg,
+                            'player': {
+                                'id': player.id,
+                                'first_name': player.first_name,
+                                'last_name': player.last_name,
+                                'jersey_number': player.jersey_number,
+                                'team_code': player.team_code
+                            }
+                        })
+                    flash(success_msg, 'success')
             except Exception as e:
                 db.session.rollback()
                 current_app.logger.error(f"Error updating player: {str(e)}")
-                flash(f'Fehler beim Aktualisieren des Spielers: {str(e)}', 'danger')
+                error_msg = f'Fehler beim Aktualisieren des Spielers: {str(e)}'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': error_msg}), 500
+                flash(error_msg, 'danger')
         
-        return redirect(url_for('main_bp.edit_players'))
+        if not is_ajax:
+            # Keep the selected country when redirecting
+            selected_country = request.args.get('country')
+            if selected_country:
+                return redirect(url_for('main_bp.edit_players', country=selected_country))
+            return redirect(url_for('main_bp.edit_players'))
     
     # GET request - show the edit page
-    # Get all countries/teams that have players
-    countries_with_players = db.session.query(Player.team_code).distinct().order_by(Player.team_code).all()
-    countries = [country[0] for country in countries_with_players if country[0] in TEAM_ISO_CODES and TEAM_ISO_CODES[country[0]] is not None]
+    # Get all countries/teams that have players and count players per country
+    countries_with_players_query = db.session.query(
+        Player.team_code, 
+        func.count(Player.id).label('player_count')
+    ).group_by(Player.team_code).order_by(Player.team_code).all()
+    
+    # Filter countries that exist in TEAM_ISO_CODES and create countries_data dict
+    countries_data = {}
+    total_players = 0
+    for country_code, player_count in countries_with_players_query:
+        if country_code in TEAM_ISO_CODES and TEAM_ISO_CODES[country_code] is not None:
+            countries_data[country_code] = player_count
+            total_players += player_count
+    
+    countries = list(countries_data.keys())
     
     # Get selected country from query parameter
     selected_country = request.args.get('country', countries[0] if countries else None)
@@ -1097,6 +1172,8 @@ def edit_players():
     
     return render_template('edit_players.html', 
                          countries=countries, 
+                         countries_data=countries_data,
+                         total_players=total_players,
                          selected_country=selected_country, 
                          players=players,
                          team_iso_codes=TEAM_ISO_CODES)

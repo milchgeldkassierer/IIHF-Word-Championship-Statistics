@@ -121,8 +121,8 @@
                                     <small class="text-warning">{{ y.stats.completed_games }}/{{ y.stats.total_games }} Spiele eingetraten</small>
                                 {% else %}
                                     <small class="text-danger">{{ y.stats.completed_games }}/{{ y.stats.total_games }} Spiele eingetragen</small>
-                                {% endif %}                                {% if y.stats.completed_games == y.stats.total_games and y.stats.winner %}
-                                    <small class="text-success">Sieger: {% if team_iso_codes.get(y.stats.winner) %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[y.stats.winner] }}.png" alt="{{ y.stats.winner }}" style="margin-right: 5px;">{% endif %}{{ y.stats.winner }}</small>
+                                {% endif %}                                {% if y.stats.completed_games == y.stats.total_games and medal_data_by_year.get(y.year) and medal_data_by_year[y.year].gold %}
+                                    <small class="text-success">Sieger: {% if team_iso_codes.get(medal_data_by_year[y.year].gold) %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[medal_data_by_year[y.year].gold] }}.png" alt="{{ medal_data_by_year[y.year].gold }}" style="margin-right: 5px;">{% endif %}{{ medal_data_by_year[y.year].gold }}</small>
                                 {% else %}
                                     <small class="text-muted">Sieger: ---</small>
                                 {% endif %}
