@@ -3,7 +3,9 @@ TEAM_ISO_CODES = {
     "SWE": "se", "SVK": "sk", "DEN": "dk", "USA": "us",
     "SLO": "si", "CAN": "ca", "NOR": "no", "KAZ": "kz",
     "GER": "de", "HUN": "hu", "FRA": "fr", "LAT": "lv",
-    "ITA": "it", "GBR": "gb", "POL": "pl",
+    "ITA": "it", "GBR": "gb", "POL": "pl", "RUS": "ru",
+    "BLR": "by", "KOR": "kr", "JAP": "jp", "UKR": "ua",
+    "ROM": "ro", "EST": "ee", "CHN": "cn",
     "QF": None, "SF": None, "L(SF)": None, "W(SF)": None
 }
 

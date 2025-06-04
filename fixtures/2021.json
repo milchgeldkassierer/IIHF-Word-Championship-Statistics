@@ -10,11 +10,11 @@
         "round": "Preliminary Round",
         "group": "Group A",
         "gameNumber": 1,
-        "team1": "ROC",
+        "team1": "RUS",
         "team2": "CZE",
         "location": "Riga",
         "venue": "Olympic Sports Centre",
-        "fullGameDescription": "Preliminary Round - Group A, Game 1 ROC vs CZE"
+        "fullGameDescription": "Preliminary Round - Group A, Game 1 RUS vs CZE"
       },
       {
         "date": "2021-05-21",
@@ -83,10 +83,10 @@
         "group": "Group A",
         "gameNumber": 7,
         "team1": "GBR",
-        "team2": "ROC",
+        "team2": "RUS",
         "location": "Riga",
         "venue": "Olympic Sports Centre",
-        "fullGameDescription": "Preliminary Round - Group A, Game 7 GBR vs ROC"
+        "fullGameDescription": "Preliminary Round - Group A, Game 7 GBR vs RUS"
       },
       {
         "date": "2021-05-22",
@@ -203,10 +203,10 @@
         "group": "Group A",
         "gameNumber": 17,
         "team1": "SVK",
-        "team2": "ROC",
+        "team2": "RUS",
         "location": "Riga",
         "venue": "Olympic Sports Centre",
-        "fullGameDescription": "Preliminary Round - Group A, Game 17 SVK vs ROC"
+        "fullGameDescription": "Preliminary Round - Group A, Game 17 SVK vs RUS"
       },
       {
         "date": "2021-05-24",
@@ -298,11 +298,11 @@
         "round": "Preliminary Round",
         "group": "Group A",
         "gameNumber": 25,
-        "team1": "ROC",
+        "team1": "RUS",
         "team2": "DEN",
         "location": "Riga",
         "venue": "Olympic Sports Centre",
-        "fullGameDescription": "Preliminary Round - Group A, Game 25 ROC vs DEN"
+        "fullGameDescription": "Preliminary Round - Group A, Game 25 RUS vs DEN"
       },
       {
         "date": "2021-05-26",
@@ -467,10 +467,10 @@
         "group": "Group A",
         "gameNumber": 39,
         "team1": "SUI",
-        "team2": "ROC",
+        "team2": "RUS",
         "location": "Riga",
         "venue": "Olympic Sports Centre",
-        "fullGameDescription": "Preliminary Round - Group A, Game 39 SUI vs ROC"
+        "fullGameDescription": "Preliminary Round - Group A, Game 39 SUI vs RUS"
       },
       {
         "date": "2021-05-29",
@@ -586,11 +586,11 @@
         "round": "Preliminary Round",
         "group": "Group A",
         "gameNumber": 49,
-        "team1": "ROC",
+        "team1": "RUS",
         "team2": "SWE",
         "location": "Riga",
         "venue": "Olympic Sports Centre",
-        "fullGameDescription": "Preliminary Round - Group A, Game 49 ROC vs SWE"
+        "fullGameDescription": "Preliminary Round - Group A, Game 49 RUS vs SWE"
       },
       {
         "date": "2021-05-31",
@@ -658,11 +658,11 @@
         "round": "Preliminary Round",
         "group": "Group A",
         "gameNumber": 55,
-        "team1": "ROC",
+        "team1": "RUS",
         "team2": "BLR",
         "location": "Riga",
         "venue": "Olympic Sports Centre",
-        "fullGameDescription": "Preliminary Round - Group A, Game 55 ROC vs BLR"
+        "fullGameDescription": "Preliminary Round - Group A, Game 55 RUS vs BLR"
       },
       {
         "date": "2021-06-01",
