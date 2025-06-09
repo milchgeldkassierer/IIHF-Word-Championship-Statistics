@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple, Set, Optional
 
 # Assuming models.py and constants.py are accessible in the Python path
 from models import Game, ChampionshipYear, TeamStats
-from constants import PRELIM_ROUNDS, PLAYOFF_ROUNDS, QF_GAME_NUMBERS_BY_YEAR, SF_GAME_NUMBERS_BY_YEAR, FINAL_BRONZE_GAME_NUMBERS_BY_YEAR, TEAM_ISO_CODES
+from constants import PRELIM_ROUNDS, PLAYOFF_ROUNDS, TEAM_ISO_CODES
 
 # Helper to check if a team code is a final, resolved code (e.g., "USA", "SWE")
 def is_code_final(team_code: Optional[str]) -> bool:
@@ -262,16 +262,16 @@ def _build_playoff_team_map_for_year(
                 with open(absolute_fixture_path, 'r', encoding='utf-8') as f:
                     fixture_data = json.load(f)
                 # Use .get for game numbers list, falling back to constants if key missing or empty
-                qf_game_numbers = fixture_data.get("qf_game_numbers") or QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
-                sf_game_numbers = fixture_data.get("sf_game_numbers") or SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+                qf_game_numbers = fixture_data.get("qf_game_numbers") or [57, 58, 59, 60]
+                sf_game_numbers = fixture_data.get("sf_game_numbers") or [61, 62]
                 host_team_codes = fixture_data.get("host_teams", []) 
             except (json.JSONDecodeError, OSError) as e:
                 # print(f"Warning: Could not load or parse fixture {year_obj.fixture_path}: {e}") # Consider logging
-                qf_game_numbers = QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
-                sf_game_numbers = SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+                qf_game_numbers = [57, 58, 59, 60]
+                sf_game_numbers = [61, 62]
     else:
-        qf_game_numbers = QF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
-        sf_game_numbers = SF_GAME_NUMBERS_BY_YEAR.get(year_obj.year, [])
+        qf_game_numbers = [57, 58, 59, 60]
+        sf_game_numbers = [61, 62]
 
     # 1. Initial population from prelim standings (A1, B2, etc.)
     # prelim_standings_by_group is Dict[str (group_name), List[TeamStats (sorted by rank)]
