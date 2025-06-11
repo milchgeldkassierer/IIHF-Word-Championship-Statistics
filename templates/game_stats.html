@@ -528,15 +528,17 @@
                         {% if total_val == 0 %}{% set total_val = 1 %}{% endif %}
                         {% set team1_perc = (team1_val / total_val) * 100 %}
                         {% set team2_perc = (team2_val / total_val) * 100 %}
-                        <div class="stat-row">
-                            <div class="stat-value-left">{{ team1_val }}</div>
-                            <div class="stat-bar-container">
-                                <div class="stat-bar-left" style="width: {{ team1_perc }}%;"></div>
-                                <div class="stat-bar-right" style="width: {{ team2_perc }}%;"></div>
-                            </div>
-                            <div class="stat-value-right">{{ team2_val }}</div>
-                        </div>
                         <div class="stat-label">{{ label }}</div>
+                        <div class="stat-row">
+                            <div class="stat-bar-container">
+                                <div class="stat-bar-left" style="width: {{ team1_perc }}%;">
+                                    {% if team1_val > 0 %}{{ team1_val }}{% endif %}
+                                </div>
+                                <div class="stat-bar-right" style="width: {{ team2_perc }}%;">
+                                    {% if team2_val > 0 %}{{ team2_val }}{% endif %}
+                                </div>
+                            </div>
+                        </div>
                     {% endmacro %}
 
                     <!-- Total Stats -->

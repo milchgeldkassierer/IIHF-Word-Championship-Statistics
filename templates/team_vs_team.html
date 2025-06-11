@@ -1,0 +1,453 @@
+{% extends 'base.html' %}
+
+{% block title %}Direktvergleich: {{ team1 }} vs {{ team2 }} - {{ year.name }}{% endblock %}
+
+{% block navbar %}
+{% endblock navbar %}
+
+{% block head_scripts %}
+{{ super() }}
+<style>
+    body {
+        background-color: #f8f9fa;
+    }
+    
+    body.dark-mode {
+        background-color: #1a202c;
+    }
+    
+    .team-header {
+        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        border-radius: 12px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .team-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+        opacity: 0.3;
+    }
+    
+    .team-header .container {
+        position: relative;
+        z-index: 1;
+    }
+    
+    .team-section {
+        text-align: center;
+    }
+    
+    .team-name {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+    
+    .team-flag {
+        width: 48px;
+        height: 32px;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    
+    .duel-count {
+        font-size: 2.5rem;
+        font-weight: 900;
+        color: #ffd700;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        margin: 0;
+    }
+    
+    .duel-info {
+        background: rgba(255,255,255,0.1);
+        padding: 0.75rem 1.5rem;
+        border-radius: 25px;
+        backdrop-filter: blur(10px);
+        margin-top: 1rem;
+        display: inline-block;
+    }
+    
+    .stats-container {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    body.dark-mode .stats-container {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    .stat-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    
+    body.dark-mode .stat-row {
+        background: #4a5568;
+    }
+    
+    .stat-row:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .stat-value-left {
+        width: 60px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #4299e1;
+    }
+    
+    .stat-value-right {
+        width: 60px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #e53e3e;
+    }
+    
+    .stat-bar-container {
+        flex: 1;
+        height: 24px;
+        display: flex;
+        margin: 0 1rem;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #e2e8f0;
+    }
+    
+    body.dark-mode .stat-bar-container {
+        background: #2d3748;
+    }
+    
+    .stat-bar-left {
+        background: linear-gradient(90deg, #4299e1 0%, #63b3ed 100%);
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 8px;
+        color: white;
+        font-weight: 600;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+    }
+    
+    .stat-bar-right {
+        background: linear-gradient(90deg, #f56565 0%, #fc8181 100%);
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding-left: 8px;
+        color: white;
+        font-weight: 600;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+    }
+    
+    .stat-label {
+        font-weight: 600;
+        color: #4a5568;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.5rem;
+        text-align: center;
+    }
+    
+    body.dark-mode .stat-label {
+        color: #a0aec0;
+    }
+    
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #2d3748;
+        margin-bottom: 1.5rem;
+        text-align: center;
+    }
+    
+    body.dark-mode .section-title {
+        color: #e2e8f0;
+    }
+    
+    .details-table {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    body.dark-mode .details-table {
+        background: #2d3748;
+    }
+    
+    .details-table .table {
+        margin-bottom: 0;
+    }
+    
+    .details-table .table th {
+        background: #4a5568;
+        color: white;
+        border: none;
+        padding: 1rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        text-align: center;
+    }
+    
+    .details-table .table td {
+        padding: 1rem;
+        border-color: #e2e8f0;
+        font-weight: 600;
+        text-align: center;
+    }
+    
+    body.dark-mode .details-table .table td {
+        border-color: #4a5568;
+        color: #e2e8f0;
+    }
+    
+    .breakdown-stats {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    body.dark-mode .breakdown-stats {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    .breakdown-table th, .breakdown-table td {
+        text-align: center;
+        padding: 0.75rem;
+    }
+    
+    .breakdown-table th {
+        background: #f8f9fa;
+        color: #4a5568;
+        font-weight: 600;
+        border-color: #e2e8f0;
+    }
+    
+    body.dark-mode .breakdown-table th {
+        background: #4a5568;
+        color: #e2e8f0;
+        border-color: #4a5568;
+    }
+    
+    .breakdown-table td {
+        border-color: #e2e8f0;
+    }
+    
+    body.dark-mode .breakdown-table td {
+        border-color: #4a5568;
+        color: #e2e8f0;
+    }
+    
+    /* Responsive table styling */
+    .table-responsive {
+        border-radius: 0 0 12px 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .table-responsive .table {
+        min-width: 800px;
+        margin-bottom: 0;
+    }
+    
+    @media (max-width: 768px) {
+        .table-responsive .table {
+            font-size: 0.875rem;
+        }
+        
+        .table-responsive .table th,
+        .table-responsive .table td {
+            padding: 0.5rem 0.75rem;
+            white-space: nowrap;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Team Header -->
+    <div class="team-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-4 team-section">
+                    {% set t1_iso = team_iso_codes.get(team1) %}
+                    {% if t1_iso %}<img src="https://flagcdn.com/w80/{{ t1_iso }}.png" alt="{{ team1 }}" class="team-flag mb-3">{% endif %}
+                    <div class="team-name">{{ team1 }}</div>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="duel-count">{{ stats[team1]['spiele'] }}</div>
+                    <div class="duel-info">
+                        <div><strong>DIREKTE DUELLE</strong></div>
+                        <div>Alle Jahre</div>
+                    </div>
+                </div>
+                <div class="col-md-4 team-section">
+                    {% set t2_iso = team_iso_codes.get(team2) %}
+                    {% if t2_iso %}<img src="https://flagcdn.com/w80/{{ t2_iso }}.png" alt="{{ team2 }}" class="team-flag mb-3">{% endif %}
+                    <div class="team-name">{{ team2 }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Left Column: Detailed Breakdown -->
+        <div class="col-lg-5">
+            <!-- Siege-Aufschluesselung -->
+            <div class="breakdown-stats">
+                <h4 class="section-title">Siege-Aufschluesselung</h4>
+                <div class="row">
+                    <div class="col-6">
+                        <h6 class="text-center mb-3">{{ team1 }}</h6>
+                        <table class="table table-sm breakdown-table">
+                            <tr><th>Regulaer</th><td>{{ stats[team1]['siege'] }}</td></tr>
+                            <tr><th>Verlaengerung</th><td>{{ stats[team1]['ot_siege'] }}</td></tr>
+                            <tr><th>Penaltyschießen</th><td>{{ stats[team1]['so_siege'] }}</td></tr>
+                            <tr style="border-top: 2px solid #4a5568;"><th><strong>Gesamt</strong></th><td><strong>{{ stats[team1]['siege_gesamt'] }}</strong></td></tr>
+                        </table>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-center mb-3">{{ team2 }}</h6>
+                        <table class="table table-sm breakdown-table">
+                            <tr><th>Regulaer</th><td>{{ stats[team2]['siege'] }}</td></tr>
+                            <tr><th>Verlaengerung</th><td>{{ stats[team2]['ot_siege'] }}</td></tr>
+                            <tr><th>Penaltyschießen</th><td>{{ stats[team2]['so_siege'] }}</td></tr>
+                            <tr style="border-top: 2px solid #4a5568;"><th><strong>Gesamt</strong></th><td><strong>{{ stats[team2]['siege_gesamt'] }}</strong></td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Durchschnittswerte -->
+            <div class="breakdown-stats">
+                <h4 class="section-title">Durchschnitt pro Spiel</h4>
+                <table class="table breakdown-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>{{ team1 }}</th>
+                            <th>{{ team2 }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><th>Tore/Spiel</th><td>{{ stats[team1]['tore_avg'] }}</td><td>{{ stats[team2]['tore_avg'] }}</td></tr>
+                        <tr><th>PIM/Spiel</th><td>{{ stats[team1]['pim_avg'] }}</td><td>{{ stats[team2]['pim_avg'] }}</td></tr>
+                        <tr><th>SOG/Spiel</th><td>{{ stats[team1]['sog_avg'] }}</td><td>{{ stats[team2]['sog_avg'] }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Right Column: Statistics -->
+        <div class="col-lg-7">
+            <div class="stats-container">
+                <h4 class="section-title">STATISTIKEN</h4>
+                
+                {% macro render_stat_bar(team1_val, team2_val, label) %}
+                    {% set total_val = team1_val + team2_val %}
+                    {% if total_val == 0 %}{% set total_val = 1 %}{% endif %}
+                    {% set team1_perc = (team1_val / total_val) * 100 %}
+                    {% set team2_perc = (team2_val / total_val) * 100 %}
+                    <div class="stat-label">{{ label }}</div>
+                    <div class="stat-row">
+                        <div class="stat-bar-container">
+                            <div class="stat-bar-left" style="width: {{ team1_perc }}%;">
+                                {% if team1_val > 0 %}{{ team1_val }}{% endif %}
+                            </div>
+                            <div class="stat-bar-right" style="width: {{ team2_perc }}%;">
+                                {% if team2_val > 0 %}{{ team2_val }}{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endmacro %}
+
+                {{ render_stat_bar(stats[team1]['siege_gesamt'], stats[team2]['siege_gesamt'], 'SIEGE GESAMT') }}
+                {{ render_stat_bar(stats[team1]['tore'], stats[team2]['tore'], 'TORE') }}
+                {{ render_stat_bar(stats[team1]['sog'], stats[team2]['sog'], 'SCHUESSE AUFS TOR') }}
+                {{ render_stat_bar(stats[team1]['pim'], stats[team2]['pim'], 'STRAFMINUTEN') }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Alle bisherigen Duelle -->
+    <div class="details-table">
+        <h4 class="section-title" style="padding: 1rem; margin-bottom: 0;">Alle bisherigen Duelle</h4>
+        {% if duel_details %}
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th style="min-width: 60px;">Jahr</th>
+                        <th style="min-width: 90px;">Datum</th>
+                        <th style="min-width: 100px;">Runde</th>
+                        <th style="min-width: 120px;">Ort</th>
+                        <th style="min-width: 80px; text-align: center;">
+                            {% set t1_iso = team_iso_codes.get(team1) %}
+                            {% if t1_iso %}<img src="https://flagcdn.com/w20/{{ t1_iso }}.png" alt="{{ team1 }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                            {{ team1 }}
+                        </th>
+                        <th style="min-width: 80px; text-align: center;">
+                            {% set t2_iso = team_iso_codes.get(team2) %}
+                            {% if t2_iso %}<img src="https://flagcdn.com/w20/{{ t2_iso }}.png" alt="{{ team2 }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                            {{ team2 }}
+                        </th>
+                        <th style="min-width: 90px;">Ergebnis</th>
+                        <th style="min-width: 80px;">Typ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in duel_details %}
+                    <tr>
+                        <td>{{ d.year_display }}</td>
+                        <td>{{ d.date.split('-') | reverse | join('.') if d.date else '-' }}</td>
+                        <td>{{ d.round_display }}</td>
+                        <td>{{ d.location }}</td>
+                        <td style="text-align: center; font-weight: bold;">{{ d.t1_score if d.t1_score is not none else '-' }}</td>
+                        <td style="text-align: center; font-weight: bold;">{{ d.t2_score if d.t2_score is not none else '-' }}</td>
+                        <td style="text-align: center; font-weight: bold;">
+                            {% if d.t1_score is not none and d.t2_score is not none %}
+                                {{ d.t1_score }} : {{ d.t2_score }}
+                            {% else %}-{% endif %}
+                        </td>
+                        <td>{{ d.result_display or '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <p class="text-muted text-center p-4">Keine direkten Duelle in der Datenbank gefunden.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
