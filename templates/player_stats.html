@@ -185,9 +185,17 @@
                             </tr>
                         </thead>
                         <tbody id="top-scorers-points-body">
-                            {% set scoring_players = player_stats | selectattr('scorer_points', 'greaterthan', 2) | sort(attribute='scorer_points', reverse=true) | list %}
+                            {% set all_scoring_players = player_stats | sort(attribute='scorer_points', reverse=true) | list %}
+                            {% set max_points = all_scoring_players[0].scorer_points if all_scoring_players else 0 %}
+                            {% set min_threshold = max_points * 0.2 %}
+                            {% set scoring_players = [] %}
+                            {% for player in all_scoring_players %}
+                                {% if player.scorer_points >= min_threshold %}
+                                    {% set _ = scoring_players.append(player) %}
+                                {% endif %}
+                            {% endfor %}
                             {% for player in scoring_players %}
-                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
@@ -203,8 +211,8 @@
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% if scoring_players | length > 20 %}
-                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-scorers-points-body">Alle anzeigen</button>
+                    {% if scoring_players | length > 25 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-scorers-points-body">mehr</button>
                     {% endif %}
                 </div>
             </div>
@@ -228,9 +236,17 @@
                             </tr>
                         </thead>
                         <tbody id="top-goal-scorers-body">
-                            {% set goal_players = player_stats | selectattr('goals', 'greaterthan', 2) | sort(attribute='goals', reverse=true) | list %}
+                            {% set all_goal_players = player_stats | sort(attribute='goals', reverse=true) | list %}
+                            {% set max_goals = all_goal_players[0].goals if all_goal_players else 0 %}
+                            {% set min_threshold = max_goals * 0.2 %}
+                            {% set goal_players = [] %}
+                            {% for player in all_goal_players %}
+                                {% if player.goals >= min_threshold %}
+                                    {% set _ = goal_players.append(player) %}
+                                {% endif %}
+                            {% endfor %}
                             {% for player in goal_players %}
-                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
@@ -244,8 +260,8 @@
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% if goal_players | length > 20 %}
-                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-goal-scorers-body">Alle anzeigen</button>
+                    {% if goal_players | length > 25 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-goal-scorers-body">mehr</button>
                     {% endif %}
                 </div>
             </div>
@@ -266,9 +282,17 @@
                             </tr>
                         </thead>
                         <tbody id="top-assist-providers-body">
-                            {% set assist_players = player_stats | selectattr('assists', 'greaterthan', 2) | sort(attribute='assists', reverse=true) | list %}
+                            {% set all_assist_players = player_stats | sort(attribute='assists', reverse=true) | list %}
+                            {% set max_assists = all_assist_players[0].assists if all_assist_players else 0 %}
+                            {% set min_threshold = max_assists * 0.2 %}
+                            {% set assist_players = [] %}
+                            {% for player in all_assist_players %}
+                                {% if player.assists >= min_threshold %}
+                                    {% set _ = assist_players.append(player) %}
+                                {% endif %}
+                            {% endfor %}
                             {% for player in assist_players %}
-                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
@@ -282,8 +306,8 @@
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% if assist_players | length > 20 %}
-                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-assist-providers-body">Alle anzeigen</button>
+                    {% if assist_players | length > 25 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-assist-providers-body">mehr</button>
                     {% endif %}
                 </div>
             </div>
@@ -306,9 +330,17 @@
                             </tr>
                         </thead>
                         <tbody id="top-penalty-players-body">
-                            {% set pim_players = player_stats | selectattr('pims', 'greaterthan', 2) | sort(attribute='pims', reverse=true) | list %}
+                            {% set all_pim_players = player_stats | sort(attribute='pims', reverse=true) | list %}
+                            {% set max_pims = all_pim_players[0].pims if all_pim_players else 0 %}
+                            {% set min_threshold = max_pims * 0.2 %}
+                            {% set pim_players = [] %}
+                            {% for player in all_pim_players %}
+                                {% if player.pims >= min_threshold %}
+                                    {% set _ = pim_players.append(player) %}
+                                {% endif %}
+                            {% endfor %}
                             {% for player in pim_players %}
-                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 20 %}class="extra-stats-row d-none"{% endif %}>
+                                <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
                                     <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
                                     <td>
@@ -322,8 +354,8 @@
                             {% endfor %}
                         </tbody>
                     </table>
-                    {% if pim_players | length > 20 %}
-                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-penalty-players-body">Alle anzeigen</button>
+                    {% if pim_players | length > 25 %}
+                    <button class="btn btn-sm btn-outline-secondary toggle-stats-visibility" data-target-body="#top-penalty-players-body">mehr</button>
                     {% endif %}
                 </div>
             </div>
@@ -439,7 +471,7 @@ $(document).ready(function() {
                     
                     if (extraRows.length > 0) {
                         $button.show();
-                        $button.text('Alle anzeigen'); // Reset button text
+                        $button.text('mehr'); // Reset button text
                         // Make sure extra rows are hidden initially
                         extraRows.addClass('d-none').hide();
                     } else {
@@ -494,7 +526,7 @@ $(document).ready(function() {
         tbody.empty();
         
         players.forEach(function(player, index) {
-            const isExtra = index >= 20;
+            const isExtra = index >= 25;
             const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
                 `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
             
@@ -517,7 +549,7 @@ $(document).ready(function() {
         tbody.empty();
         
         players.forEach(function(player, index) {
-            const isExtra = index >= 20;
+            const isExtra = index >= 25;
             const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
                 `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
             
@@ -538,7 +570,7 @@ $(document).ready(function() {
         tbody.empty();
         
         players.forEach(function(player, index) {
-            const isExtra = index >= 20;
+            const isExtra = index >= 25;
             const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
                 `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
             
@@ -559,7 +591,7 @@ $(document).ready(function() {
         tbody.empty();
         
         players.forEach(function(player, index) {
-            const isExtra = index >= 20;
+            const isExtra = index >= 25;
             const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
                 `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
             
@@ -586,12 +618,12 @@ $(document).ready(function() {
             var targetBodySelector = $button.data('target-body');
             var $tableBody = $(targetBodySelector);
             
-            if ($button.text() === 'Alle anzeigen') {
+            if ($button.text() === 'mehr') {
                 $tableBody.find('tr.extra-stats-row').removeClass('d-none').show();
-                $button.text('Weniger anzeigen');
+                $button.text('weniger');
             } else {
                 $tableBody.find('tr.extra-stats-row').addClass('d-none').hide();
-                $button.text('Alle anzeigen');
+                $button.text('mehr');
             }
             
             // Update ranking numbers after toggle

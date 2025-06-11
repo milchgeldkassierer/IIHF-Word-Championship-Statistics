@@ -388,6 +388,28 @@
         body.dark-mode small {
             color: #a0aec0;
         }
+        
+        /* Extra small button support */
+        .btn-xs {
+            padding: 0.125rem 0.25rem;
+            font-size: 0.75rem;
+            line-height: 1.2;
+            border-radius: 0.15rem;
+        }
+        
+        /* Dark mode for the time format help alerts */
+        body.dark-mode .alert-info {
+            background-color: rgba(66, 153, 225, 0.2);
+            border-color: #4299e1;
+            color: #4299e1;
+        }
+        
+        body.dark-mode .alert-info code {
+            background-color: rgba(0, 0, 0, 0.3);
+            color: #e2e8f0;
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+        }
     </style>
     <script>
         var all_players_by_team_json_str = '{{ all_players_by_team_json|tojson|safe }}';
@@ -411,7 +433,7 @@
     <ul class="nav nav-tabs mb-3" id="yearTabs" role="tablist">
         {% if standings %}
             <li class="nav-item" role="presentation">
-                <a class="nav-link active" id="standings-tab" data-toggle="tab" href="#standings" role="tab" aria-controls="standings" aria-selected="true">Tabellen Vorrunde</a>
+                <a class="nav-link active" id="standings-tab" data-toggle="tab" href="#standings" role="tab" aria-controls="standings" aria-selected="true">Tabelle Gruppen</a>
             </li>
         {% endif %}
         {% for round_name, games_in_round in games_by_round.items() %}
@@ -434,10 +456,10 @@
     </ul>
 
     <div class="tab-content" id="yearTabsContent">
-        {# Tabellen Vorrunde #}
+        {# Tabellen Hauptrunde #}
         {% if standings %}
         <div class="tab-pane fade show active" id="standings" role="tabpanel" aria-labelledby="standings-tab">
-            <h2>Tabellen der Vorrunde</h2>
+            <h2>Tabellen der Hauptrunde</h2>
             <div class="row">
                 {% for group_name, group_standings in standings.items() %}
                 <div class="col-md-6 mb-4">
@@ -734,15 +756,31 @@
                                         {# Goal and Penalty Entry Forms within the same card section #}
                                         <hr>
                                         <div id="goalMessageArea-{{ game.id }}" class="mt-2"></div>
-                                        <h6>Neues Tor hinzufügen</h6>
+                                        <h6>Neues Tor hinzufügen 
+                                            <small>
+                                                <button type="button" class="btn btn-outline-info btn-xs ml-2" data-toggle="collapse" data-target="#timeFormatHelp-{{game.id}}" aria-expanded="false">
+                                                    <i class="fas fa-question-circle"></i> Zeitformate
+                                                </button>
+                                            </small>
+                                        </h6>
+                                        <div class="collapse" id="timeFormatHelp-{{game.id}}">
+                                            <div class="alert alert-info small mb-3">
+                                                <strong>Eingabeformate für Spielzeit:</strong><br>
+                                                • <code>01:23</code> - Standard mm:ss (1:23 im Spiel)<br>
+                                                • <code>1-5:13</code> - 1. Drittel, 5:13 verbleibend (= 14:47)<br>
+                                                • <code>2+10:35</code> - 2. Drittel, 10:35 vergangen (= 30:35)<br>
+                                                • <code>O5-1:23</code> - 5min OT, 1:23 verbleibend (= 63:37)<br>
+                                                • <code>O10+3:45</code> - 10min OT, 3:45 vergangen (= 63:45)
+                                            </div>
+                                        </div>
                                         <form method="POST" action="{{ url_for('year_bp.add_goal', year_id=year.id, game_id=game.id) }}" id="addGoalForm-{{ game.id }}" class="mb-4">
                                             {# ... Goal form fields ... (content is the same, just ensure IDs are unique if needed) ... #}
                                             <input type="hidden" name="game_id" value="{{ game.id }}">
                                             <div class="form-row">
-                                                <div class="form-group col-md-2">
-                                                    <label for="goal_minute-{{game.id}}">Minute (mm:ss)</label>
-                                                    <input type="text" class="form-control form-control-sm" name="minute" id="goal_minute-{{game.id}}" pattern="\d{1,2}:[0-5]\d" placeholder="01:23" required>
-                                                </div>
+                                                                                <div class="form-group col-md-2">
+                                    <label for="goal_minute-{{game.id}}">Minute</label>
+                                    <input type="text" class="form-control form-control-sm" name="minute" id="goal_minute-{{game.id}}" placeholder="01:23 oder 1-5:13" required title="Eingabeformate: mm:ss (01:23), Drittel verbleibend (1-5:13), Drittel vergangen (2+10:35), OT verbleibend (O5-1:23), OT vergangen (O10+3:45)">
+                                </div>
                                                 <div class="form-group col-md-2">
                                                     <label for="goal_team-{{game.id}}">Team</label>
                                                     <select name="team_code_goal" id="goal_team-{{game.id}}" class="form-control form-control-sm goal-team-select" required>
@@ -791,15 +829,31 @@
 
                                         <hr>
                                         <div id="penaltyMessageArea-{{ game.id }}" class="mt-2"></div>
-                                        <h6>Neue Strafe hinzufügen</h6>
+                                        <h6>Neue Strafe hinzufügen 
+                                            <small>
+                                                <button type="button" class="btn btn-outline-info btn-xs ml-2" data-toggle="collapse" data-target="#timeFormatHelpPenalty-{{game.id}}" aria-expanded="false">
+                                                    <i class="fas fa-question-circle"></i> Zeitformate
+                                                </button>
+                                            </small>
+                                        </h6>
+                                        <div class="collapse" id="timeFormatHelpPenalty-{{game.id}}">
+                                            <div class="alert alert-info small mb-3">
+                                                <strong>Eingabeformate für Spielzeit:</strong><br>
+                                                • <code>01:23</code> - Standard mm:ss (1:23 im Spiel)<br>
+                                                • <code>1-5:13</code> - 1. Drittel, 5:13 verbleibend (= 14:47)<br>
+                                                • <code>2+10:35</code> - 2. Drittel, 10:35 vergangen (= 30:35)<br>
+                                                • <code>O5-1:23</code> - 5min OT, 1:23 verbleibend (= 63:37)<br>
+                                                • <code>O10+3:45</code> - 10min OT, 3:45 vergangen (= 63:45)
+                                            </div>
+                                        </div>
                                         <form method="POST" action="{{ url_for('year_bp.add_penalty', year_id=year.id, game_id=game.id) }}" id="addPenaltyForm-{{ game.id }}" class="mb-4">
                                             {# ... Penalty form fields ... (content is the same) ... #}
                                             <input type="hidden" name="game_id" value="{{ game.id }}">
                                             <div class="form-row">
-                                                <div class="form-group col-md-2">
-                                                    <label for="penalty_minute-{{game.id}}">Minute (mm:ss)</label>
-                                                    <input type="text" class="form-control form-control-sm" name="minute_of_game" id="penalty_minute-{{game.id}}" pattern="\d{1,2}:[0-5]\d" placeholder="01:23" required>
-                                                </div>
+                                                                                <div class="form-group col-md-2">
+                                    <label for="penalty_minute-{{game.id}}">Minute</label>
+                                    <input type="text" class="form-control form-control-sm" name="minute_of_game" id="penalty_minute-{{game.id}}" placeholder="01:23 oder 2+10:35" required title="Eingabeformate: mm:ss (01:23), Drittel verbleibend (1-5:13), Drittel vergangen (2+10:35), OT verbleibend (O5-1:23), OT vergangen (O10+3:45)">
+                                </div>
                                                 <div class="form-group col-md-3">
                                                     <label for="penalty_team-{{game.id}}">Team</label>
                                                     <select name="team_code_penalty" id="penalty_team-{{game.id}}" class="form-control form-control-sm penalty-team-select" required>
@@ -1573,29 +1627,171 @@ $(document).ready(function(){
         }
     }
 
-    // Auto-colon for minute input
-    $(document).on('keyup', 'input[id^="goal_minute-"]', function(event) {
+    // Enhanced time input handler for goals and penalties
+    function parseTimeInput(inputValue) {
+        if (!inputValue) return { valid: false, error: 'Keine Zeit eingegeben' };
+        
+        var value = inputValue.trim();
+        
+        // Standard mm:ss format (0:00-99:59)
+        if (/^\d{1,2}:\d{2}$/.test(value)) {
+            var parts = value.split(':');
+            var minutes = parseInt(parts[0]);
+            var seconds = parseInt(parts[1]);
+            
+            if (seconds >= 60) {
+                return { valid: false, error: 'Sekunden müssen < 60 sein' };
+            }
+            
+            // Add leading zero if needed
+            var formattedTime = (minutes < 10 ? '0' + minutes : minutes) + ':' + (seconds < 10 ? '0' + seconds : seconds);
+            return { valid: true, time: formattedTime };
+        }
+        
+        // Period time - remaining (e.g., "1-5:13" = 1st period, 5:13 remaining)
+        if (/^[1-3]-\d{1,2}:\d{2}$/.test(value)) {
+            var match = value.match(/^([1-3])-(\d{1,2}):(\d{2})$/);
+            var period = parseInt(match[1]);
+            var remainingMin = parseInt(match[2]);
+            var remainingSec = parseInt(match[3]);
+            
+            if (remainingSec >= 60) {
+                return { valid: false, error: 'Sekunden müssen < 60 sein' };
+            }
+            if (remainingMin >= 20) {
+                return { valid: false, error: 'Verbleibende Zeit kann nicht >= 20 Min sein' };
+            }
+            
+            // Calculate elapsed time in period
+            var totalRemainingSeconds = remainingMin * 60 + remainingSec;
+            var periodSeconds = 20 * 60; // 20 minutes per period
+            var elapsedInPeriod = periodSeconds - totalRemainingSeconds;
+            
+            // Add time from previous periods
+            var totalElapsed = (period - 1) * periodSeconds + elapsedInPeriod;
+            var finalMin = Math.floor(totalElapsed / 60);
+            var finalSec = totalElapsed % 60;
+            
+            var formattedTime = (finalMin < 10 ? '0' + finalMin : finalMin) + ':' + (finalSec < 10 ? '0' + finalSec : finalSec);
+            return { valid: true, time: formattedTime };
+        }
+        
+        // Period time - elapsed (e.g., "2+10:35" = 2nd period, 10:35 elapsed)
+        if (/^[1-3]\+\d{1,2}:\d{2}$/.test(value)) {
+            var match = value.match(/^([1-3])\+(\d{1,2}):(\d{2})$/);
+            var period = parseInt(match[1]);
+            var elapsedMin = parseInt(match[2]);
+            var elapsedSec = parseInt(match[3]);
+            
+            if (elapsedSec >= 60) {
+                return { valid: false, error: 'Sekunden müssen < 60 sein' };
+            }
+            if (elapsedMin >= 20) {
+                return { valid: false, error: 'Verstrichene Zeit kann nicht >= 20 Min sein' };
+            }
+            
+            // Calculate total elapsed time
+            var periodSeconds = 20 * 60; // 20 minutes per period
+            var elapsedInPeriod = elapsedMin * 60 + elapsedSec;
+            var totalElapsed = (period - 1) * periodSeconds + elapsedInPeriod;
+            
+            var finalMin = Math.floor(totalElapsed / 60);
+            var finalSec = totalElapsed % 60;
+            
+            var formattedTime = (finalMin < 10 ? '0' + finalMin : finalMin) + ':' + (finalSec < 10 ? '0' + finalSec : finalSec);
+            return { valid: true, time: formattedTime };
+        }
+        
+        // Overtime - remaining (e.g., "O5-1:23" = 5min OT, 1:23 remaining)
+        if (/^O\d{1,2}-\d{1,2}:\d{2}$/.test(value)) {
+            var match = value.match(/^O(\d{1,2})-(\d{1,2}):(\d{2})$/);
+            var otLength = parseInt(match[1]);
+            var remainingMin = parseInt(match[2]);
+            var remainingSec = parseInt(match[3]);
+            
+            if (remainingSec >= 60) {
+                return { valid: false, error: 'Sekunden müssen < 60 sein' };
+            }
+            if (remainingMin >= otLength) {
+                return { valid: false, error: 'Verbleibende Zeit kann nicht >= OT-Länge sein' };
+            }
+            
+            var totalRemainingSeconds = remainingMin * 60 + remainingSec;
+            var otSeconds = otLength * 60;
+            var elapsedInOt = otSeconds - totalRemainingSeconds;
+            
+            // Add regulation time (60 minutes) + elapsed OT time
+            var totalElapsed = 60 * 60 + elapsedInOt;
+            var finalMin = Math.floor(totalElapsed / 60);
+            var finalSec = totalElapsed % 60;
+            
+            var formattedTime = (finalMin < 10 ? '0' + finalMin : finalMin) + ':' + (finalSec < 10 ? '0' + finalSec : finalSec);
+            return { valid: true, time: formattedTime };
+        }
+        
+        // Overtime - elapsed (e.g., "O5+3:45" = 5min OT, 3:45 elapsed)
+        if (/^O\d{1,2}\+\d{1,2}:\d{2}$/.test(value)) {
+            var match = value.match(/^O(\d{1,2})\+(\d{1,2}):(\d{2})$/);
+            var otLength = parseInt(match[1]);
+            var elapsedMin = parseInt(match[2]);
+            var elapsedSec = parseInt(match[3]);
+            
+            if (elapsedSec >= 60) {
+                return { valid: false, error: 'Sekunden müssen < 60 sein' };
+            }
+            if (elapsedMin >= otLength) {
+                return { valid: false, error: 'Verstrichene Zeit kann nicht >= OT-Länge sein' };
+            }
+            
+            var elapsedInOt = elapsedMin * 60 + elapsedSec;
+            
+            // Add regulation time (60 minutes) + elapsed OT time
+            var totalElapsed = 60 * 60 + elapsedInOt;
+            var finalMin = Math.floor(totalElapsed / 60);
+            var finalSec = totalElapsed % 60;
+            
+            var formattedTime = (finalMin < 10 ? '0' + finalMin : finalMin) + ':' + (finalSec < 10 ? '0' + finalSec : finalSec);
+            return { valid: true, time: formattedTime };
+        }
+        
+        return { valid: false, error: 'Ungültiges Zeitformat' };
+    }
+
+    // Auto-format and validate time input for goals
+    $(document).on('blur', 'input[id^="goal_minute-"]', function() {
         var input = $(this);
         var value = input.val();
-
-        // Allow backspace, delete, arrow keys, tab, enter to function normally
-        if (event.keyCode === 8 || event.keyCode === 46 || (event.keyCode >= 37 && event.keyCode <= 40) || event.keyCode === 9 || event.keyCode === 13) {
-            return;
+        
+        if (!value) return;
+        
+        var result = parseTimeInput(value);
+        if (result.valid) {
+            input.val(result.time);
+            input.removeClass('is-invalid');
+            input.next('.invalid-feedback').remove();
+        } else {
+            input.addClass('is-invalid');
+            input.next('.invalid-feedback').remove();
+            input.after('<div class="invalid-feedback">' + result.error + '</div>');
         }
+    });
 
-        // If value is 2 digits long, and they are both numbers (e.g., "12")
-        if (value.length === 2 && /^\\d\\d$/.test(value)) {
-            input.val(value + ':');
-        } 
-        // If value is 3 digits long and no colon (e.g. user typed "123" fast), format to "12:3"
-        else if (value.length === 3 && /^\\d\\d\\d$/.test(value) && value.indexOf(':') === -1) {
-            input.val(value.substring(0, 2) + ':' + value.substring(2));
-        }
-
-        // Enforce max length of 5 (mm:ss) after potential modification
-        var finalValue = input.val();
-        if (finalValue.length > 5) {
-            input.val(finalValue.substring(0, 5));
+    // Auto-format and validate time input for penalties
+    $(document).on('blur', 'input[id^="penalty_minute-"]', function() {
+        var input = $(this);
+        var value = input.val();
+        
+        if (!value) return;
+        
+        var result = parseTimeInput(value);
+        if (result.valid) {
+            input.val(result.time);
+            input.removeClass('is-invalid');
+            input.next('.invalid-feedback').remove();
+        } else {
+            input.addClass('is-invalid');
+            input.next('.invalid-feedback').remove();
+            input.after('<div class="invalid-feedback">' + result.error + '</div>');
         }
     });
 
@@ -2143,7 +2339,7 @@ $(document).ready(function(){
         event.preventDefault();
         var url = $(this).attr('href');
         var windowName = 'gameStatsWindow'; // Gives the new window a name
-        var windowFeatures = 'width=1000,height=800,scrollbars=yes,resizable=yes';
+        var windowFeatures = 'width=1200,height=800,scrollbars=yes,resizable=yes';
         window.open(url, windowName, windowFeatures);
     });
 
@@ -2152,7 +2348,7 @@ $(document).ready(function(){
         event.preventDefault();
         var url = $(this).data('url');
         var windowName = $(this).data('window-name');
-        var windowFeatures = 'width=1000,height=800,scrollbars=yes,resizable=yes,menubar=no,toolbar=no';
+        var windowFeatures = 'width=1200,height=800,scrollbars=yes,resizable=yes,menubar=no,toolbar=no';
         window.open(url, windowName, windowFeatures);
     });
 

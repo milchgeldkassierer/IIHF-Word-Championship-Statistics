@@ -267,6 +267,39 @@
         color: #e2e8f0;
     }
     
+    .powerplay-stats {
+        display: flex;
+        justify-content: space-around;
+        margin-top: 2rem;
+        padding: 1.5rem;
+        background: #f8f9fa;
+        border-radius: 12px;
+    }
+    
+    body.dark-mode .powerplay-stats {
+        background: #4a5568;
+    }
+    
+    .pp-stat {
+        text-align: center;
+    }
+    
+    .pp-percentage {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #4299e1;
+    }
+    
+    .pp-details {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+    
+    body.dark-mode .pp-details {
+        color: #a0aec0;
+    }
+    
     /* Responsive table styling */
     .table-responsive {
         border-radius: 0 0 12px 12px;
@@ -395,6 +428,60 @@
                 {{ render_stat_bar(stats[team1]['tore'], stats[team2]['tore'], 'TORE') }}
                 {{ render_stat_bar(stats[team1]['sog'], stats[team2]['sog'], 'SCHUESSE AUFS TOR') }}
                 {{ render_stat_bar(stats[team1]['pim'], stats[team2]['pim'], 'STRAFMINUTEN') }}
+                
+                <!-- Power Play Stats -->
+                {% set team1_pp_goals = stats[team1].get('pp_goals', 0) %}
+                {% set team1_pp_opps = stats[team1].get('pp_opportunities', 0) %}
+                {% set team2_pp_goals = stats[team2].get('pp_goals', 0) %}
+                {% set team2_pp_opps = stats[team2].get('pp_opportunities', 0) %}
+                
+                {% if (team1_pp_goals > 0 or team1_pp_opps > 0 or team2_pp_goals > 0 or team2_pp_opps > 0) %}
+                <div class="powerplay-stats">
+                    <div class="pp-stat">
+                        <div class="pp-percentage">
+                            {% if team1_pp_opps > 0 %}
+                                {{ "%.1f"|format(team1_pp_goals * 100 / team1_pp_opps) }}%
+                            {% else %}
+                                0.0%
+                            {% endif %}
+                        </div>
+                        <div class="pp-details">
+                            POWERPLAY<br>
+                            ({{ team1_pp_goals }}/{{ team1_pp_opps }})
+                        </div>
+                    </div>
+                    <div class="pp-stat">
+                        <div class="pp-percentage">
+                            {% if team2_pp_opps > 0 %}
+                                {{ "%.1f"|format(team2_pp_goals * 100 / team2_pp_opps) }}%
+                            {% else %}
+                                0.0%
+                            {% endif %}
+                        </div>
+                        <div class="pp-details">
+                            POWERPLAY<br>
+                            ({{ team2_pp_goals }}/{{ team2_pp_opps }})
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="powerplay-stats">
+                    <div class="pp-stat">
+                        <div class="pp-percentage">N/A</div>
+                        <div class="pp-details">
+                            POWERPLAY<br>
+                            Daten nicht verfügbar
+                        </div>
+                    </div>
+                    <div class="pp-stat">
+                        <div class="pp-percentage">N/A</div>
+                        <div class="pp-details">
+                            POWERPLAY<br>
+                            Daten nicht verfügbar
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -423,6 +510,7 @@
                         </th>
                         <th style="min-width: 90px;">Ergebnis</th>
                         <th style="min-width: 80px;">Typ</th>
+                        <th style="min-width: 80px;">STATS</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -440,6 +528,15 @@
                             {% else %}-{% endif %}
                         </td>
                         <td>{{ d.result_display or '-' }}</td>
+                        <td style="text-align: center;">
+                            {% if d.t1_score is not none and d.t2_score is not none and d.game %}
+                                <a href="{{ url_for('year_bp.game_stats_view', year_id=d.game.year_id, game_id=d.game.id) }}" class="btn btn-warning btn-sm game-stats-link" title="Spielstatistik anzeigen">
+                                    <i class="fas fa-chart-bar"></i> Stats
+                                </a>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -450,4 +547,20 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+$(document).ready(function() {
+    // Open game stats in a new window
+    $(document).on('click', 'a.game-stats-link', function(event) {
+        event.preventDefault();
+        var url = $(this).attr('href');
+        var windowName = 'gameStatsWindow'; // Gives the new window a name
+        var windowFeatures = 'width=1200,height=800,scrollbars=yes,resizable=yes';
+        window.open(url, windowName, windowFeatures);
+    });
+});
+</script>
 {% endblock %}

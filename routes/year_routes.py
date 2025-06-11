@@ -1679,8 +1679,8 @@ def team_vs_team_view(year_id, team1, team2):
 
     # Statistiken initialisieren
     stats = {
-        t1: {'tore': 0, 'pim': 0, 'sog': 0, 'siege': 0, 'spiele': 0, 'ot_siege': 0, 'so_siege': 0, 'niederlagen': 0, 'ot_niederlagen': 0, 'so_niederlagen': 0},
-        t2: {'tore': 0, 'pim': 0, 'sog': 0, 'siege': 0, 'spiele': 0, 'ot_siege': 0, 'so_siege': 0, 'niederlagen': 0, 'ot_niederlagen': 0, 'so_niederlagen': 0}
+        t1: {'tore': 0, 'pim': 0, 'sog': 0, 'siege': 0, 'spiele': 0, 'ot_siege': 0, 'so_siege': 0, 'niederlagen': 0, 'ot_niederlagen': 0, 'so_niederlagen': 0, 'pp_goals': 0, 'pp_opportunities': 0},
+        t2: {'tore': 0, 'pim': 0, 'sog': 0, 'siege': 0, 'spiele': 0, 'ot_siege': 0, 'so_siege': 0, 'niederlagen': 0, 'ot_niederlagen': 0, 'so_niederlagen': 0, 'pp_goals': 0, 'pp_opportunities': 0}
     }
 
     duel_details = []
@@ -1698,6 +1698,25 @@ def team_vs_team_view(year_id, team1, team2):
         penalties_t2 = sum(PIM_MAP.get(p.penalty_type, 0) for p in penalty_entries if p.team_code.upper() == t2)
         stats[t1]['pim'] += penalties_t1
         stats[t2]['pim'] += penalties_t2
+
+        # Powerplay-Gelegenheiten zählen (basierend auf Strafen des Gegners)
+        # Jede Strafe des Gegners ist eine Powerplay-Gelegenheit für das Team
+        for penalty in penalty_entries:
+            if penalty.team_code.upper() == t1:
+                # t1 bekommt Strafe -> t2 bekommt Powerplay-Gelegenheit
+                stats[t2]['pp_opportunities'] += 1
+            elif penalty.team_code.upper() == t2:
+                # t2 bekommt Strafe -> t1 bekommt Powerplay-Gelegenheit
+                stats[t1]['pp_opportunities'] += 1
+
+        # Powerplay-Tore sammeln
+        goal_entries = Goal.query.filter_by(game_id=g.id).all()
+        for goal in goal_entries:
+            if goal.goal_type == 'PP':  # Powerplay-Tor
+                if goal.team_code.upper() == t1:
+                    stats[t1]['pp_goals'] += 1
+                elif goal.team_code.upper() == t2:
+                    stats[t2]['pp_goals'] += 1
 
         # Schüsse sammeln
         sog_entries = ShotsOnGoal.query.filter_by(game_id=g.id).all()
@@ -1740,7 +1759,7 @@ def team_vs_team_view(year_id, team1, team2):
         # Runden-Namen für bessere Anzeige
         round_display = g.round
         if round_display == 'Preliminary Round':
-            round_display = 'Vorrunde'
+            round_display = 'Hauptrunde'
         elif 'Quarter' in round_display:
             round_display = 'Viertelfinale'
         elif 'Semi' in round_display:
