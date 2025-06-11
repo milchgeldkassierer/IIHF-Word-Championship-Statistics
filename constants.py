@@ -46,11 +46,10 @@ PIM_MAP = {
     "Spieldauer Disziplinar": 20 # This is a common equivalent for a game misconduct
 }
 
-OPP_COUNT_MAP = {
-    "2 Min": 1, 
-    "2+2 Min": 2, 
-    "5 Min + Spieldauer": 1
-}
+# Penalty types that result in powerplay opportunities
+POWERPLAY_PENALTY_TYPES = ["2 Min", "2+2 Min", "5 Min + Spieldauer"]
+
+
 
 GOAL_TYPE_DISPLAY_MAP = {
     "REG": "EQ", 

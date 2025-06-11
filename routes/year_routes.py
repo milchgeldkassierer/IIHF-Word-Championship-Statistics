@@ -4,7 +4,7 @@ import re
 import traceback
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoal, TeamStats, TeamOverallStats, GameDisplay, GameOverrule
-from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, OPP_COUNT_MAP, GOAL_TYPE_DISPLAY_MAP
+from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, GOAL_TYPE_DISPLAY_MAP, POWERPLAY_PENALTY_TYPES
 from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final, _apply_head_to_head_tiebreaker
 from routes.main_routes import resolve_fixture_path
 
@@ -485,8 +485,7 @@ def year_view(year_id):
             team_total_sog = game_sog.get(sog_entry.team_code, 0)
             game_sog[sog_entry.team_code] = team_total_sog + sog_entry.shots
         
-        TEAM_PIM_MAP = {"2 Min": 2, "2+2 Min": 4, "5 Min + Spieldauer": 5, "10 Min Disziplinar": 0, "Spieldauer Disziplinar": 0 }
-        POWERPLAY_PENALTY_TYPES = ["2 Min", "2+2 Min", "5 Min + Spieldauer"]
+
 
         for team_code_upper in unique_teams_in_year:
             actual_team_code_from_games = None
@@ -579,7 +578,7 @@ def year_view(year_id):
                 # Check if this penalty was against the current team or their opponent
                 if penalty_event.team_code == current_team_code:
                     # Current team received this penalty
-                    stats.pim += TEAM_PIM_MAP.get(penalty_event.penalty_type, 0)
+                    stats.pim += PIM_MAP.get(penalty_event.penalty_type, 0)
                     if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES: stats.ppa += 1 
                 elif (resolved_game_of_penalty.team1_code == current_team_code and penalty_event.team_code == resolved_game_of_penalty.team2_code) or \
                      (resolved_game_of_penalty.team2_code == current_team_code and penalty_event.team_code == resolved_game_of_penalty.team1_code):
@@ -1256,8 +1255,8 @@ def game_stats_view(year_id, game_id):
 
     potential_pp_slots = []
     for p in penalties_raw: # p.team_code is resolved name of penalized team
-        if p.penalty_type in OPP_COUNT_MAP:
-            num_opps = OPP_COUNT_MAP[p.penalty_type]
+        if p.penalty_type in POWERPLAY_PENALTY_TYPES:
+            # Each penalty gives exactly one powerplay opportunity, regardless of duration
             beneficiary_resolved_name = None
             if p.team_code == resolved_team1_name: # If team1 was penalized
                 beneficiary_resolved_name = resolved_team2_name # Team2 gets PP
@@ -1265,8 +1264,7 @@ def game_stats_view(year_id, game_id):
                 beneficiary_resolved_name = resolved_team1_name # Team1 gets PP
             
             if beneficiary_resolved_name:
-                for _ in range(num_opps): 
-                    potential_pp_slots.append({'time': p.minute_of_game, 'beneficiary': beneficiary_resolved_name})
+                potential_pp_slots.append({'time': p.minute_of_game, 'beneficiary': beneficiary_resolved_name})
     
     grouped_slots_by_time = {}
     for slot in potential_pp_slots: grouped_slots_by_time.setdefault(slot['time'], []).append(slot)
