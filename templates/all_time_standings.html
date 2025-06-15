@@ -236,11 +236,30 @@ $(document).ready(function() {
                 return 0;
             }
             
+            // Primary sorting criterion
+            let result;
             if (currentSort.direction === 'asc') {
-                return aVal - bVal;
+                result = aVal - bVal;
             } else {
-                return bVal - aVal;
+                result = bVal - aVal;
             }
+            
+            // Tiebreaker logic for PTS column
+            if (result === 0 && column === 'pts') {
+                // First tiebreaker: Goal Difference (GD) - higher is better
+                const aGD = parseFloat($(a).find('td').eq(columnMap['gd']).data('value')) || 0;
+                const bGD = parseFloat($(b).find('td').eq(columnMap['gd']).data('value')) || 0;
+                result = bGD - aGD; // Descending (higher GD is better)
+                
+                // Second tiebreaker: Goals For (GF) - higher is better
+                if (result === 0) {
+                    const aGF = parseFloat($(a).find('td').eq(columnMap['gf']).data('value')) || 0;
+                    const bGF = parseFloat($(b).find('td').eq(columnMap['gf']).data('value')) || 0;
+                    result = bGF - aGF; // Descending (higher GF is better)
+                }
+            }
+            
+            return result;
         });
         
         // Re-append sorted rows and update ranking numbers

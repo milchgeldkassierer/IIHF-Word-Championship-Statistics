@@ -472,6 +472,22 @@ def year_view(year_id):
         if p_obj.team_code and TEAM_ISO_CODES.get(p_obj.team_code.upper()) is not None: potential_teams.add(p_obj.team_code.upper())
     unique_teams_in_year = sorted(list(potential_teams))
 
+    # Build team_combinations_with_games dictionary for VS button logic (across ALL years)
+    team_combinations_with_games = {}
+    # Get all games from ALL years, not just the current year
+    all_games_across_years = Game.query.filter(
+        Game.team1_score.isnot(None), 
+        Game.team2_score.isnot(None)
+    ).all()
+    
+    for game in all_games_across_years:
+        # Only consider real team names (not placeholders)
+        if (TEAM_ISO_CODES.get(game.team1_code.upper()) and TEAM_ISO_CODES.get(game.team2_code.upper())):
+            # Create sorted team pair key
+            team_pair_sorted = sorted([game.team1_code, game.team2_code])
+            team_pair_key = f"{team_pair_sorted[0]}_vs_{team_pair_sorted[1]}"
+            team_combinations_with_games[team_pair_key] = True
+
     team_stats_data_list = []
     if unique_teams_in_year: 
         all_games_for_year = Game.query.filter_by(year_id=year_id).all()
@@ -595,7 +611,8 @@ def year_view(year_id):
                            top_assist_providers=top_assist_providers, top_penalty_players=top_penalty_players,
                            playoff_team_map=playoff_team_map, all_players_by_team_json=all_players_by_team_json,
                            team_codes=TEAM_ISO_CODES, penalty_types=PENALTY_TYPES_CHOICES,
-                           penalty_reasons=PENALTY_REASONS_CHOICES, team_stats_data=team_stats_data_list)
+                           penalty_reasons=PENALTY_REASONS_CHOICES, team_stats_data=team_stats_data_list,
+                           team_combinations_with_games=team_combinations_with_games)
 
 @year_bp.route('/<int:year_id>/stats_data')
 def get_stats_data(year_id):

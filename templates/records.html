@@ -1,0 +1,612 @@
+{% extends "base.html" %}
+
+{% block title %}Rekorde - IIHF Statistics{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mb-4">
+        <i class="fas fa-trophy text-warning"></i>
+        Rekorde
+    </h1>
+
+    <!-- Alle Zeit Rekorde -->
+    <div class="stats-section mb-5">
+        <h2 class="stats-title">
+            <i class="fas fa-history"></i>
+            Rekorde (über alle Turniere hinweg)
+        </h2>
+
+        <div class="row">
+            <!-- Längste Siegesserie -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-fire text-success"></i> Längste Siegesserie</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if longest_win_streak %}
+                            {% for streak in longest_win_streak %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[streak.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[streak.team] }}.png" alt="{{ streak.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Siege in Folge<br>
+                                    {% if streak.start_date and streak.end_date %}
+                                        <small class="text-muted">{{ streak.start_date }}{% if streak.start_date != streak.end_date %} - {{ streak.end_date }}{% endif %}</small>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Längste Niederlagenserie -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-fire text-danger"></i> Längste Niederlagenserie</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if longest_loss_streak %}
+                            {% for streak in longest_loss_streak %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[streak.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[streak.team] }}.png" alt="{{ streak.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Niederlagen in Folge<br>
+                                    {% if streak.start_date and streak.end_date %}
+                                        <small class="text-muted">{{ streak.start_date }}{% if streak.start_date != streak.end_date %} - {{ streak.end_date }}{% endif %}</small>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Längste Serie mit mind. 1 Tor -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-hockey-puck text-primary"></i> Längste Serie mit mind. 1 Tor</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if longest_scoring_streak %}
+                            {% for streak in longest_scoring_streak %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[streak.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[streak.team] }}.png" alt="{{ streak.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Spiele mit Tor<br>
+                                    {% if streak.start_date and streak.end_date %}
+                                        <small class="text-muted">{{ streak.start_date }}{% if streak.start_date != streak.end_date %} - {{ streak.end_date }}{% endif %}</small>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Längste Serie ohne Gegentor -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-shield-alt text-info"></i> Längste Serie ohne Gegentor</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if longest_shutout_streak %}
+                            {% for streak in longest_shutout_streak %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[streak.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[streak.team] }}.png" alt="{{ streak.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Spiele ohne Gegentor<br>
+                                    {% if streak.start_date and streak.end_date %}
+                                        <small class="text-muted">{{ streak.start_date }}{% if streak.start_date != streak.end_date %} - {{ streak.end_date }}{% endif %}</small>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Längste Serie ohne eigenes Tor -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-ban text-secondary"></i> Längste Serie ohne eigenes Tor</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if longest_goalless_streak %}
+                            {% for streak in longest_goalless_streak %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[streak.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[streak.team] }}.png" alt="{{ streak.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Spiele ohne Tor<br>
+                                    {% if streak.start_date and streak.end_date %}
+                                        <small class="text-muted">{{ streak.start_date }}{% if streak.start_date != streak.end_date %} - {{ streak.end_date }}{% endif %}</small>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Höchster Sieg -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-trophy text-warning"></i> Höchster Sieg</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if highest_victory %}
+                            {% for victory in highest_victory %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[victory.winner] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[victory.winner] }}.png" alt="{{ victory.winner }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ victory.winner }}</strong> {{ victory.winner_score }}:{{ victory.loser_score }} 
+                                    {% if team_iso_codes[victory.loser] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[victory.loser] }}.png" alt="{{ victory.loser }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ victory.loser }}</strong><br>
+                                    <small class="text-muted">{{ victory.tournament }} {{ victory.year }} (+{{ victory.difference }})</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spiel mit den meisten Toren -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-line text-success"></i> Spiel mit den meisten Toren</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_goals_game %}
+                            {% for game in most_goals_game %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[game.team1] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[game.team1] }}.png" alt="{{ game.team1 }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ game.team1 }}</strong> {{ game.team1_score }}:{{ game.team2_score }} 
+                                    {% if team_iso_codes[game.team2] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[game.team2] }}.png" alt="{{ game.team2 }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ game.team2 }}</strong><br>
+                                    <small class="text-muted">{{ game.tournament }} {{ game.year }} ({{ game.total_goals }} Tore)</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- TOP 3 Schnellste Tore -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-bolt text-warning"></i> TOP 3 Schnellste Tore</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if fastest_goal %}
+                            {% for goal in fastest_goal %}
+                                <div class="record-item">
+                                    <span class="badge badge-primary me-2">{{ goal.rank }}.</span>
+                                    <strong>{{ goal.player }}</strong> 
+                                    {% if team_iso_codes[goal.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[goal.team] }}.png" alt="{{ goal.team }}" style="margin-left: 5px; margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    ({{ goal.team }})<br>
+                                    <small class="text-muted">{{ goal.minute }} vs 
+                                    {% if team_iso_codes[goal.vs_team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[goal.vs_team] }}.png" alt="{{ goal.vs_team }}" style="margin-right: 3px; vertical-align: middle;">{% endif %}{{ goal.vs_team }} - {{ goal.tournament }} {{ goal.year }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- TOP 3 Schnellste Hattricks -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-rocket text-danger"></i> TOP 3 Schnellste Hattricks</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if fastest_hattrick %}
+                            {% for hattrick in fastest_hattrick %}
+                                <div class="record-item">
+                                    <span class="badge badge-primary me-2">{{ hattrick.rank }}.</span>
+                                    <strong>{{ hattrick.player }}</strong> 
+                                    {% if team_iso_codes[hattrick.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[hattrick.team] }}.png" alt="{{ hattrick.team }}" style="margin-left: 5px; margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    ({{ hattrick.team }})<br>
+                                    <small class="text-muted">Tore in: {{ hattrick.first_goal }}, {{ hattrick.second_goal }}, {{ hattrick.third_goal }} (Dauer: {{ hattrick.duration_formatted }})<br>
+                                    vs {% if team_iso_codes[hattrick.vs_team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[hattrick.vs_team] }}.png" alt="{{ hattrick.vs_team }}" style="margin-right: 3px; vertical-align: middle;">{% endif %}{{ hattrick.vs_team }} - {{ hattrick.tournament }} {{ hattrick.year }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Meiste Turniersiege in Folge -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-crown text-primary"></i> Meiste Turniersiege in Folge</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_consecutive_tournament_wins %}
+                            {% for wins in most_consecutive_tournament_wins %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[wins.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[wins.team] }}.png" alt="{{ wins.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ wins.team }}</strong>: {{ wins.streak }} Turniersiege in Folge<br>
+                                    {% if wins.years %}
+                                        <small class="text-muted">Jahre: {{ wins.years|join(', ') }}</small>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rekordsieger -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-crown text-warning"></i> Rekordsieger</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if record_champion %}
+                            {% for champion in record_champion %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[champion.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[champion.team] }}.png" alt="{{ champion.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ champion.team }}</strong>: {{ champion.championships }} Turniersiege<br>
+                                    {% if champion.years %}
+                                        <small class="text-muted">Jahre: {{ champion.years|join(', ') }}</small>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Meiste Finalteilnahmen -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-medal text-info"></i> Meiste Finalteilnahmen</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_final_appearances %}
+                            {% for appearance in most_final_appearances %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[appearance.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[appearance.team] }}.png" alt="{{ appearance.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ appearance.team }}</strong>: {{ appearance.appearances }} Finalteilnahmen<br>
+                                    {% if appearance.years %}
+                                        <small class="text-muted">Jahre: {{ appearance.years|join(', ') }}</small>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pro Turnier Rekorde - Allgemein -->
+    <div class="stats-section mb-5">
+        <h2 class="stats-title">
+            <i class="fas fa-calendar-alt"></i>
+            Pro Turnier Rekorde - Allgemein
+        </h2>
+
+        <div class="row">
+            <!-- Turnier mit den meisten Toren -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-arrow-up text-success"></i> Turnier mit den meisten Toren</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if tournament_most_goals %}
+                            {% for tournament in tournament_most_goals %}
+                                <div class="record-item">
+                                    <strong>{{ tournament.tournament }} {{ tournament.year }}</strong><br>
+                                    {{ tournament.total_goals }} Tore in {{ tournament.games }} Spielen 
+                                    ({{ tournament.goals_per_game }} Tore/Spiel)
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Turnier mit den wenigsten Toren -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-arrow-down text-danger"></i> Turnier mit den wenigsten Toren</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if tournament_least_goals %}
+                            {% for tournament in tournament_least_goals %}
+                                <div class="record-item">
+                                    <strong>{{ tournament.tournament }} {{ tournament.year }}</strong><br>
+                                    {{ tournament.total_goals }} Tore in {{ tournament.games }} Spielen 
+                                    ({{ tournament.goals_per_game }} Tore/Spiel)
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pro Turnier Rekorde - Team -->
+    <div class="stats-section mb-5">
+        <h2 class="stats-title">
+            <i class="fas fa-users"></i>
+            Pro Turnier Rekorde - Team
+        </h2>
+
+        <div class="row">
+            <!-- Meiste Tore in einem Turnier -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-hockey-puck text-primary"></i> Meiste Tore in einem Turnier</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_goals_team_tournament %}
+                            {% for record in most_goals_team_tournament %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[record.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[record.team] }}.png" alt="{{ record.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ record.team }}</strong>: {{ record.goals }} Tore<br>
+                                    <small class="text-muted">{{ record.tournament }} {{ record.year }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Wenigste Gegentore in einem Turnier -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-shield-alt text-info"></i> Wenigste Gegentore in einem Turnier</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if fewest_goals_against_tournament %}
+                            {% for record in fewest_goals_against_tournament %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[record.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[record.team] }}.png" alt="{{ record.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ record.team }}</strong>: {{ record.goals_against }} Gegentore<br>
+                                    <small class="text-muted">{{ record.tournament }} {{ record.year }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Meiste Shutouts in einem Turnier -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-ban text-secondary"></i> Meiste Shutouts in einem Turnier</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_shutouts_tournament %}
+                            {% for record in most_shutouts_tournament %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[record.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[record.team] }}.png" alt="{{ record.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ record.team }}</strong>: {{ record.shutouts }} Shutouts<br>
+                                    <small class="text-muted">{{ record.tournament }} {{ record.year }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pro Turnier Rekorde - Spieler -->
+    <div class="stats-section mb-5">
+        <h2 class="stats-title">
+            <i class="fas fa-user"></i>
+            Pro Turnier Rekorde - Spieler
+        </h2>
+
+        <div class="row">
+            <!-- Meiste Scorer in einem Turnier -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-star text-warning"></i> Meiste Scorer in einem Turnier</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_scorers_tournament %}
+                            {% for record in most_scorers_tournament %}
+                                <div class="record-item">
+                                    <strong>{{ record.player }}</strong> 
+                                    {% if team_iso_codes[record.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[record.team] }}.png" alt="{{ record.team }}" style="margin-left: 5px; margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    ({{ record.team }}): {{ record.points }} Punkte<br>
+                                    <small class="text-muted">{{ record.tournament }} {{ record.year }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Meiste Tore in einem Turnier -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-hockey-puck text-success"></i> Meiste Tore in einem Turnier</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_goals_player_tournament %}
+                            {% for record in most_goals_player_tournament %}
+                                <div class="record-item">
+                                    <strong>{{ record.player }}</strong> 
+                                    {% if team_iso_codes[record.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[record.team] }}.png" alt="{{ record.team }}" style="margin-left: 5px; margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    ({{ record.team }}): {{ record.goals }} Tore<br>
+                                    <small class="text-muted">{{ record.tournament }} {{ record.year }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Meiste Assists in einem Turnier -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-hands-helping text-primary"></i> Meiste Assists in einem Turnier</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_assists_player_tournament %}
+                            {% for record in most_assists_player_tournament %}
+                                <div class="record-item">
+                                    <strong>{{ record.player }}</strong> 
+                                    {% if team_iso_codes[record.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[record.team] }}.png" alt="{{ record.team }}" style="margin-left: 5px; margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    ({{ record.team }}): {{ record.assists }} Assists<br>
+                                    <small class="text-muted">{{ record.tournament }} {{ record.year }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Meiste Strafminuten in einem Turnier -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-exclamation-triangle text-danger"></i> Meiste Strafminuten in einem Turnier</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_penalty_minutes_tournament %}
+                            {% for record in most_penalty_minutes_tournament %}
+                                <div class="record-item">
+                                    <strong>{{ record.player }}</strong> 
+                                    {% if team_iso_codes[record.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[record.team] }}.png" alt="{{ record.team }}" style="margin-left: 5px; margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    ({{ record.team }}): {{ record.pim }} PIM<br>
+                                    <small class="text-muted">{{ record.tournament }} {{ record.year }}</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.record-item {
+    margin-bottom: 10px;
+    padding: 5px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.record-item:last-child {
+    border-bottom: none;
+}
+
+.card {
+    height: 100%;
+}
+
+.card-header h5 {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.stats-section {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.stats-title {
+    color: #495057;
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #007bff;
+}
+
+body.dark-mode .stats-section {
+    background-color: #2d3748;
+    border-color: #4a5568;
+    color: #e2e8f0;
+}
+
+body.dark-mode .stats-title {
+    color: #e2e8f0;
+    border-bottom-color: #4299e1;
+}
+
+body.dark-mode .card {
+    background-color: #2d3748;
+    border-color: #4a5568;
+    color: #e2e8f0;
+}
+
+body.dark-mode .card-header {
+    background-color: #1a202c;
+    border-color: #4a5568;
+    color: #e2e8f0;
+}
+
+body.dark-mode .record-item {
+    border-bottom-color: #4a5568;
+}
+
+body.dark-mode .text-muted {
+    color: #a0aec0 !important;
+}
+</style>
+{% endblock %}

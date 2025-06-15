@@ -349,6 +349,11 @@
             color: #1a202c;
         }
         
+        body.dark-mode .btn:disabled {
+            opacity: 0.3 !important;
+            cursor: not-allowed !important;
+        }
+        
         body.dark-mode .collapse .card {
             background-color: #1a202c;
         }
@@ -611,9 +616,18 @@
                             <td class="text-center">
                                 {# Direktvergleich Button - nur für echte Teams (nicht Platzhalter) #}
                                 {% if team_iso_codes.get(p1_display_name.upper()) and team_iso_codes.get(p2_display_name.upper()) %}
-                                <button type="button" data-url="{{ url_for('year_bp.team_vs_team_view', year_id=year.id, team1=p1_display_name, team2=p2_display_name) }}" data-window-name="direktvergleich_{{ p1_display_name }}_{{ p2_display_name }}" class="btn btn-secondary btn-sm team-vs-team-link" title="Direktvergleich anzeigen">
-                                    <i class="fas fa-balance-scale"></i>
-                                </button>
+                                    {# Prüfung ob es bereits Duelle zwischen den Teams gab #}
+                                    {% set team_pair_key = [p1_display_name, p2_display_name]|sort|join('_vs_') %}
+                                    {% set has_previous_games = team_combinations_with_games.get(team_pair_key, False) %}
+                                    {% if has_previous_games %}
+                                        <button type="button" data-url="{{ url_for('year_bp.team_vs_team_view', year_id=year.id, team1=p1_display_name, team2=p2_display_name) }}" data-window-name="direktvergleich_{{ p1_display_name }}_{{ p2_display_name }}" class="btn btn-secondary btn-sm team-vs-team-link" title="Direktvergleich anzeigen">
+                                            <i class="fas fa-balance-scale"></i>
+                                        </button>
+                                    {% else %}
+                                        <button type="button" class="btn btn-secondary btn-sm" disabled style="opacity: 0.3; cursor: not-allowed;" title="Noch keine direkten Duelle zwischen diesen Teams">
+                                            <i class="fas fa-balance-scale"></i>
+                                        </button>
+                                    {% endif %}
                                 {% endif %}
                             </td>
                             <td>

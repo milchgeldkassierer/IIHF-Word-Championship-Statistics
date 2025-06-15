@@ -6,6 +6,7 @@ from models import db
 # Import blueprints
 from routes.main_routes import main_bp
 from routes.year_routes import year_bp
+from routes.record_routes import record_bp
 
 # --- Configuration ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -25,6 +26,7 @@ def create_app():
     # Register Blueprints
     app.register_blueprint(main_bp)
     app.register_blueprint(year_bp)
+    app.register_blueprint(record_bp)
 
     # --- CLI commands for DB ---
     @app.cli.command("init-db")
