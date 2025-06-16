@@ -141,7 +141,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-trophy text-warning"></i> Höchster Sieg</h5>
+                        <h5><i class="fas fa-trophy text-warning"></i> Höchste Siege</h5>
                     </div>
                     <div class="card-body">
                         {% if highest_victory %}
@@ -165,7 +165,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-chart-line text-success"></i> Spiel mit den meisten Toren</h5>
+                        <h5><i class="fas fa-chart-line text-success"></i> Spiele mit den meisten Toren</h5>
                     </div>
                     <div class="card-body">
                         {% if most_goals_game %}
@@ -189,13 +189,12 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-bolt text-warning"></i> TOP 3 Schnellste Tore</h5>
+                        <h5><i class="fas fa-bolt text-warning"></i> Schnellste Tore</h5>
                     </div>
                     <div class="card-body">
                         {% if fastest_goal %}
                             {% for goal in fastest_goal %}
                                 <div class="record-item">
-                                    <span class="badge badge-primary me-2">{{ goal.rank }}.</span>
                                     <strong>{{ goal.player }}</strong> 
                                     {% if team_iso_codes[goal.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[goal.team] }}.png" alt="{{ goal.team }}" style="margin-left: 5px; margin-right: 5px; vertical-align: middle;">{% endif %}
                                     ({{ goal.team }})<br>
@@ -214,13 +213,12 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-rocket text-danger"></i> TOP 3 Schnellste Hattricks</h5>
+                        <h5><i class="fas fa-rocket text-danger"></i> Schnellste Hattricks</h5>
                     </div>
                     <div class="card-body">
                         {% if fastest_hattrick %}
                             {% for hattrick in fastest_hattrick %}
                                 <div class="record-item">
-                                    <span class="badge badge-primary me-2">{{ hattrick.rank }}.</span>
                                     <strong>{{ hattrick.player }}</strong> 
                                     {% if team_iso_codes[hattrick.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[hattrick.team] }}.png" alt="{{ hattrick.team }}" style="margin-left: 5px; margin-right: 5px; vertical-align: middle;">{% endif %}
                                     ({{ hattrick.team }})<br>

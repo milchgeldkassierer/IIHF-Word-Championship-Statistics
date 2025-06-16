@@ -15,11 +15,10 @@ def year_view(year_id):
     
     year_obj = db.session.get(ChampionshipYear, year_id)
     if not year_obj:
-        flash('Tournament year not found.', 'danger'); return redirect(url_for('main_bp.index'))
+        flash('Tournament year not found.', 'danger')
+        return redirect(url_for('main_bp.index'))
 
     games_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
-    
-    # Create a map of raw games by ID for efficient lookup later
     games_raw_map = {g.id: g for g in games_raw}
 
     sog_by_game_flat = {} 
@@ -28,34 +27,44 @@ def year_view(year_id):
         team_period_sog_data = game_sog_data.setdefault(sog_entry.team_code, {})
         team_period_sog_data[sog_entry.period] = sog_entry.shots
 
-    if request.method == 'POST' and 'sog_team1_code_resolved' not in request.form: # Prevents SOG form from triggering this
+    if request.method == 'POST' and 'sog_team1_code_resolved' not in request.form:
         game_id_form = request.form.get('game_id')
         game_to_update = db.session.get(Game, game_id_form)
         if game_to_update:
             try:
-                t1s = request.form.get('team1_score'); t2s = request.form.get('team2_score')
+                t1s = request.form.get('team1_score')
+                t2s = request.form.get('team2_score')
                 game_to_update.team1_score = int(t1s) if t1s and t1s.strip() else None
                 game_to_update.team2_score = int(t2s) if t2s and t2s.strip() else None
                 res_type = request.form.get('result_type')
                 
                 if game_to_update.team1_score is None or game_to_update.team2_score is None:
-                    game_to_update.result_type = None; game_to_update.team1_points = 0; game_to_update.team2_points = 0
+                    game_to_update.result_type = None
+                    game_to_update.team1_points = 0
+                    game_to_update.team2_points = 0
                 else:
                     game_to_update.result_type = res_type
                     if res_type == 'REG':
-                        if game_to_update.team1_score > game_to_update.team2_score: pts1, pts2 = 3,0
-                        elif game_to_update.team2_score > game_to_update.team1_score: pts1, pts2 = 0,3
-                        else: pts1, pts2 = 1,1 
+                        if game_to_update.team1_score > game_to_update.team2_score:
+                            pts1, pts2 = 3, 0
+                        elif game_to_update.team2_score > game_to_update.team1_score:
+                            pts1, pts2 = 0, 3
+                        else:
+                            pts1, pts2 = 1, 1 
                         game_to_update.team1_points, game_to_update.team2_points = pts1, pts2
                     elif res_type in ['OT', 'SO']:
-                        if game_to_update.team1_score > game_to_update.team2_score: game_to_update.team1_points, game_to_update.team2_points = 2,1
-                        else: game_to_update.team1_points, game_to_update.team2_points = 1,2
+                        if game_to_update.team1_score > game_to_update.team2_score:
+                            game_to_update.team1_points, game_to_update.team2_points = 2, 1
+                        else:
+                            game_to_update.team1_points, game_to_update.team2_points = 1, 2
                 db.session.commit()
                 flash('Game result updated!', 'success')
                 return redirect(url_for('year_bp.year_view', year_id=year_id, _anchor=f"game-{game_id_form}"))
             except Exception as e:
-                db.session.rollback(); flash(f'Error updating result: {str(e)}', 'danger')
-        else: flash('Game not found for update.', 'warning')
+                db.session.rollback()
+                flash(f'Error updating result: {str(e)}', 'danger')
+        else:
+            flash('Game not found for update.', 'warning')
 
     teams_stats = {}
     prelim_games = [g for g in games_raw if g.round == 'Preliminary Round' and g.group]
@@ -77,10 +86,19 @@ def year_view(year_id):
             stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
             
             if stats.group == grp: 
-                 stats.gp+=1; stats.gf+=gf; stats.ga+=ga; stats.pts+=pts
-                 if res=='REG': stats.w+=1 if gf>ga else 0; stats.l+=1 if ga>gf else 0 
-                 elif res=='OT': stats.otw+=1 if gf>ga else 0; stats.otl+=1 if ga>gf else 0
-                 elif res=='SO': stats.sow+=1 if gf>ga else 0; stats.sol+=1 if ga>gf else 0
+                stats.gp += 1
+                stats.gf += gf
+                stats.ga += ga
+                stats.pts += pts
+                if res == 'REG':
+                    stats.w += 1 if gf > ga else 0
+                    stats.l += 1 if ga > gf else 0 
+                elif res == 'OT':
+                    stats.otw += 1 if gf > ga else 0
+                    stats.otl += 1 if ga > gf else 0
+                elif res == 'SO':
+                    stats.sow += 1 if gf > ga else 0
+                    stats.sol += 1 if ga > gf else 0
     
     standings_by_group = {}
     if teams_stats:
@@ -91,7 +109,6 @@ def year_view(year_id):
                 key=lambda x: (x.pts, x.gd, x.gf),
                 reverse=True
             )
-            # Apply head-to-head tiebreaker for teams with equal points
             current_group_teams = _apply_head_to_head_tiebreaker(current_group_teams, prelim_games)
             for i, team_stat_obj in enumerate(current_group_teams):
                 team_stat_obj.rank_in_group = i + 1 
@@ -106,7 +123,6 @@ def year_view(year_id):
             for i, s_team_obj in enumerate(group_standings_list): 
                 playoff_team_map[f'{group_letter}{i+1}'] = s_team_obj.name 
     
-
     games_dict_by_num = {g.game_number: g for g in games_raw}
     
     qf_game_numbers = []
@@ -115,12 +131,10 @@ def year_view(year_id):
     gold_game_number = None
     tournament_hosts = []
 
-    fixture_path_exists = False # Default to false
+    fixture_path_exists = False
     if year_obj.fixture_path:
         absolute_fixture_path = resolve_fixture_path(year_obj.fixture_path)
         fixture_path_exists = absolute_fixture_path and os.path.exists(absolute_fixture_path)
-    else:
-        pass # year_obj.fixture_path is None or empty.
 
     if year_obj.fixture_path and fixture_path_exists:
         try:
@@ -129,8 +143,7 @@ def year_view(year_id):
             tournament_hosts = loaded_fixture_data.get("hosts", [])
             
             schedule_data = loaded_fixture_data.get("schedule", [])
-
-            for i, game_data in enumerate(schedule_data):
+            for game_data in schedule_data:
                 round_name = game_data.get("round", "").lower()
                 game_num = game_data.get("gameNumber")
                 
@@ -151,12 +164,6 @@ def year_view(year_id):
                 bronze_game_number = 63
                 gold_game_number = 64
                 tournament_hosts = ["SWE", "DEN"]
-            else:
-                qf_game_numbers = []
-                sf_game_numbers = []
-                bronze_game_number = None
-                gold_game_number = None
-                tournament_hosts = []
 
     if sf_game_numbers and len(sf_game_numbers) >= 2 and all(isinstance(item, int) for item in sf_game_numbers):
         playoff_team_map['SF1'] = str(sf_game_numbers[0])
@@ -168,7 +175,8 @@ def year_view(year_id):
         for _ in range(max_depth):
             if current_code in current_map:
                 next_code = current_map[current_code]
-                if next_code == current_code: return current_code 
+                if next_code == current_code:
+                    return current_code 
                 current_code = next_code
             elif (current_code.startswith('W(') or current_code.startswith('L(')) and current_code.endswith(')'):
                 match = re.search(r'\(([^()]+)\)', current_code) 
@@ -182,22 +190,24 @@ def year_view(year_id):
                             raw_loser = game.team2_code if game.team1_score > game.team2_score else game.team1_code
                             outcome_based_code = raw_winner if current_code.startswith('W(') else raw_loser
                             next_code = current_map.get(outcome_based_code, outcome_based_code)
-                            if next_code == current_code: return next_code 
+                            if next_code == current_code:
+                                return next_code 
                             current_code = next_code 
-                        else: return current_code 
+                        else:
+                            return current_code 
                     else: 
                         resolved_inner = current_map.get(inner_placeholder, inner_placeholder)
-                        if resolved_inner == inner_placeholder: return current_code 
+                        if resolved_inner == inner_placeholder:
+                            return current_code 
                         if resolved_inner.isdigit():
-                             current_code = f"{'W' if current_code.startswith('W(') else 'L'}({resolved_inner})"
+                            current_code = f"{'W' if current_code.startswith('W(') else 'L'}({resolved_inner})"
                         else: 
-                             return resolved_inner 
-                else: return current_code 
+                            return resolved_inner 
+                else:
+                    return current_code 
             else: 
                 return current_code
         return current_code
-
-
 
     games_processed = [GameDisplay(id=g.id, year_id=g.year_id, date=g.date, start_time=g.start_time, round=g.round, group=g.group, game_number=g.game_number, location=g.location, venue=g.venue, team1_code=g.team1_code, team2_code=g.team2_code, original_team1_code=g.team1_code, original_team2_code=g.team2_code, team1_score=g.team1_score, team2_score=g.team2_score, result_type=g.result_type, team1_points=g.team1_points, team2_points=g.team2_points) for g in games_raw]
 
@@ -214,28 +224,28 @@ def year_view(year_id):
                 g_disp.team2_code = resolved_t2
                 changes_in_pass += 1
 
-            if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:                # Revised is_tX_final logic
+            if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:
                 is_t1_final = is_code_final(g_disp.team1_code)
                 is_t2_final = is_code_final(g_disp.team2_code)
 
                 if is_t1_final and is_t2_final:
                     actual_winner = g_disp.team1_code if g_disp.team1_score > g_disp.team2_score else g_disp.team2_code
-                    actual_loser  = g_disp.team2_code if g_disp.team1_score > g_disp.team2_score else g_disp.team1_code
+                    actual_loser = g_disp.team2_code if g_disp.team1_score > g_disp.team2_score else g_disp.team1_code
                     
-                    win_key = f'W({g_disp.game_number})'; lose_key = f'L({g_disp.game_number})'
+                    win_key = f'W({g_disp.game_number})'
+                    lose_key = f'L({g_disp.game_number})'
                     if playoff_team_map.get(win_key) != actual_winner: 
-                        playoff_team_map[win_key] = actual_winner; changes_in_pass +=1
+                        playoff_team_map[win_key] = actual_winner
+                        changes_in_pass += 1
                     if playoff_team_map.get(lose_key) != actual_loser: 
-                        playoff_team_map[lose_key] = actual_loser; changes_in_pass +=1
+                        playoff_team_map[lose_key] = actual_loser
+                        changes_in_pass += 1
         
         if changes_in_pass == 0 and _pass_num > 0: 
             break 
 
-    # --- SEMIFINAL AND FINALS PAIRING LOGIC --- 
-    # This block is now OUTSIDE the main processing loop and runs once.
-
+    # Semifinal and finals pairing logic
     if qf_game_numbers and sf_game_numbers and len(sf_game_numbers) == 2:
-        
         qf_winners_teams = []
         all_qf_winners_resolved = True
         for qf_game_num in qf_game_numbers:
@@ -245,8 +255,8 @@ def year_view(year_id):
             if is_code_final(resolved_qf_winner):
                 qf_winners_teams.append(resolved_qf_winner)
             else:
-                all_qf_winners_resolved = False; break
-        
+                all_qf_winners_resolved = False
+                break
         
         if all_qf_winners_resolved and len(qf_winners_teams) == 4:
             qf_winners_stats = []
@@ -254,36 +264,45 @@ def year_view(year_id):
                 if team_name in teams_stats: 
                     qf_winners_stats.append(teams_stats[team_name])
                 else: 
-                    all_qf_winners_resolved = False; break 
+                    all_qf_winners_resolved = False
+                    break 
             
             if all_qf_winners_resolved and len(qf_winners_stats) == 4:
                 qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
                 R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats] 
 
-                matchup1 = (R1, R4); matchup2 = (R2, R3)
-                sf_game1_teams = None; sf_game2_teams = None
+                matchup1 = (R1, R4)
+                matchup2 = (R2, R3)
+                sf_game1_teams = None
+                sf_game2_teams = None
                 primary_host_plays_sf1 = False
 
                 if tournament_hosts:
-                    if tournament_hosts[0] in [R1,R2,R3,R4]: 
-                         primary_host_plays_sf1 = True
-                         if R1 == tournament_hosts[0] or R4 == tournament_hosts[0]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
-                         else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
-                    elif len(tournament_hosts) > 1 and tournament_hosts[1] in [R1,R2,R3,R4]: 
-                         primary_host_plays_sf1 = True 
-                         if R1 == tournament_hosts[1] or R4 == tournament_hosts[1]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
-                         else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
+                    if tournament_hosts[0] in [R1, R2, R3, R4]: 
+                        primary_host_plays_sf1 = True
+                        if R1 == tournament_hosts[0] or R4 == tournament_hosts[0]:
+                            sf_game1_teams = matchup1
+                            sf_game2_teams = matchup2
+                        else:
+                            sf_game1_teams = matchup2
+                            sf_game2_teams = matchup1
+                    elif len(tournament_hosts) > 1 and tournament_hosts[1] in [R1, R2, R3, R4]: 
+                        primary_host_plays_sf1 = True 
+                        if R1 == tournament_hosts[1] or R4 == tournament_hosts[1]:
+                            sf_game1_teams = matchup1
+                            sf_game2_teams = matchup2
+                        else:
+                            sf_game1_teams = matchup2
+                            sf_game2_teams = matchup1
                 
                 if not primary_host_plays_sf1: 
-                    sf_game1_teams = matchup1; sf_game2_teams = matchup2
-
+                    sf_game1_teams = matchup1
+                    sf_game2_teams = matchup2
 
                 sf_game_obj_1 = games_dict_by_num.get(sf_game_numbers[0])
                 sf_game_obj_2 = games_dict_by_num.get(sf_game_numbers[1])
 
                 if sf_game_obj_1 and sf_game_obj_2 and sf_game1_teams and sf_game2_teams:
-                    # Note: changes_in_pass is no longer relevant here as we are outside that loop.
-                    # We directly update playoff_team_map.
                     if playoff_team_map.get(sf_game_obj_1.team1_code) != sf_game1_teams[0]:
                         playoff_team_map[sf_game_obj_1.team1_code] = sf_game1_teams[0]
                     if playoff_team_map.get(sf_game_obj_1.team2_code) != sf_game1_teams[1]:
@@ -294,82 +313,50 @@ def year_view(year_id):
                         playoff_team_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
                     
                     # Add Q1-Q4 mappings based on the semifinal assignments
-                    # Q1 and Q2 are the teams in the first semifinal game
-                    # Q3 and Q4 are the teams in the second semifinal game
-                    playoff_team_map['Q1'] = sf_game1_teams[0]  # First team in SF1
-                    playoff_team_map['Q2'] = sf_game1_teams[1]  # Second team in SF1
-                    playoff_team_map['Q3'] = sf_game2_teams[0]  # First team in SF2
-                    playoff_team_map['Q4'] = sf_game2_teams[1]  # Second team in SF2
-                    
-                else:
-                    pass  # Empty else block
-            else:
-                pass  # Empty else block
-        else:
-            pass  # Empty else block
-    else:
-        pass  # Empty else block
+                    playoff_team_map['Q1'] = sf_game1_teams[0]
+                    playoff_team_map['Q2'] = sf_game1_teams[1]
+                    playoff_team_map['Q3'] = sf_game2_teams[0]
+                    playoff_team_map['Q4'] = sf_game2_teams[1]
 
-    # --- FALLBACK Q1-Q4 MAPPING ---
-    # If the full semifinal logic didn't run, try to map Q1-Q4 to available QF winners
+    # Fallback Q1-Q4 mapping
     if qf_game_numbers and len(qf_game_numbers) == 4 and 'Q1' not in playoff_team_map:
         for i, qf_game_num in enumerate(qf_game_numbers):
             winner_placeholder = f'W({qf_game_num})'
             resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
             
-            
             if is_code_final(resolved_qf_winner):
-                q_code = f'Q{i+1}'  # Q1, Q2, Q3, Q4
+                q_code = f'Q{i+1}'
                 playoff_team_map[q_code] = resolved_qf_winner
-            else:
-                pass  # Empty else block
-    else:
-        pass  # Empty else block
 
-    # --- BRONZE AND GOLD MEDAL GAME LOGIC ---
-    # Handle Bronze Medal Game (losers of semifinals) and Gold Medal Game (winners of semifinals)
+    # Bronze and gold medal game logic
     if sf_game_numbers and len(sf_game_numbers) == 2 and bronze_game_number and gold_game_number:
         bronze_game_obj = games_dict_by_num.get(bronze_game_number)
         gold_game_obj = games_dict_by_num.get(gold_game_number)
         
         if bronze_game_obj and gold_game_obj:
-            # Map SF1 and SF2 to actual game numbers
-            sf1_game_number = sf_game_numbers[0]  # First semifinal game
-            sf2_game_number = sf_game_numbers[1]  # Second semifinal game
+            sf1_game_number = sf_game_numbers[0]
+            sf2_game_number = sf_game_numbers[1]
             
-            # Add mappings for SF1 and SF2 placeholders
             playoff_team_map['SF1'] = str(sf1_game_number)
             playoff_team_map['SF2'] = str(sf2_game_number)
             
-            # Bronze Medal Game: L(SF1) vs L(SF2) -> L(61) vs L(62)
             sf1_loser_placeholder = f'L({sf1_game_number})'
             sf2_loser_placeholder = f'L({sf2_game_number})'
-            
-            # Gold Medal Game: W(SF1) vs W(SF2) -> W(61) vs W(62)
             sf1_winner_placeholder = f'W({sf1_game_number})'
             sf2_winner_placeholder = f'W({sf2_game_number})'
             
-            # Update Bronze Medal Game teams (map L(SF1) -> L(61), L(SF2) -> L(62))
             if playoff_team_map.get(bronze_game_obj.team1_code) != sf1_loser_placeholder:
                 playoff_team_map[bronze_game_obj.team1_code] = sf1_loser_placeholder
             if playoff_team_map.get(bronze_game_obj.team2_code) != sf2_loser_placeholder:
                 playoff_team_map[bronze_game_obj.team2_code] = sf2_loser_placeholder
                 
-            # Update Gold Medal Game teams (map W(SF1) -> W(61), W(SF2) -> W(62))
             if playoff_team_map.get(gold_game_obj.team1_code) != sf1_winner_placeholder:
                 playoff_team_map[gold_game_obj.team1_code] = sf1_winner_placeholder
             if playoff_team_map.get(gold_game_obj.team2_code) != sf2_winner_placeholder:
                 playoff_team_map[gold_game_obj.team2_code] = sf2_winner_placeholder
-        else:
-            pass  # Empty else block
-    else:
-        pass  # Empty else block
 
-    # Perform a final resolution pass using the updated playoff_team_map
+    # Final resolution pass
     for g_disp_final_pass in games_processed:
-        # Resolve from original placeholder if current is still a placeholder, 
-        # or re-resolve current if it might have been an intermediate placeholder.
-        # Prioritizing original_teamX_code ensures we pick up changes from playoff_team_map like Q1->CAN directly.
         code_to_resolve_t1 = g_disp_final_pass.original_team1_code 
         resolved_t1_final = get_resolved_code(code_to_resolve_t1, playoff_team_map)
         if g_disp_final_pass.team1_code != resolved_t1_final:
@@ -381,16 +368,20 @@ def year_view(year_id):
             g_disp_final_pass.team2_code = resolved_t2_final
 
     all_players_list = Player.query.order_by(Player.team_code, Player.last_name).all()
-
-    all_players_list = Player.query.order_by(Player.team_code, Player.last_name).all()
     player_cache = {p.id: p for p in all_players_list}
     selected_team_filter = request.args.get('stats_team_filter')
     
-    player_stats_agg = {p.id: {'g':0,'a':0,'p':0,'obj':p} for p in all_players_list if not selected_team_filter or p.team_code == selected_team_filter}
+    player_stats_agg = {p.id: {'g': 0, 'a': 0, 'p': 0, 'obj': p} for p in all_players_list if not selected_team_filter or p.team_code == selected_team_filter}
     for goal in Goal.query.filter(Goal.game_id.in_([g.id for g in games_raw])).all():
-        if goal.scorer_id in player_stats_agg: player_stats_agg[goal.scorer_id]['g']+=1; player_stats_agg[goal.scorer_id]['p']+=1
-        if goal.assist1_id and goal.assist1_id in player_stats_agg: player_stats_agg[goal.assist1_id]['a']+=1; player_stats_agg[goal.assist1_id]['p']+=1
-        if goal.assist2_id and goal.assist2_id in player_stats_agg: player_stats_agg[goal.assist2_id]['a']+=1; player_stats_agg[goal.assist2_id]['p']+=1
+        if goal.scorer_id in player_stats_agg:
+            player_stats_agg[goal.scorer_id]['g'] += 1
+            player_stats_agg[goal.scorer_id]['p'] += 1
+        if goal.assist1_id and goal.assist1_id in player_stats_agg:
+            player_stats_agg[goal.assist1_id]['a'] += 1
+            player_stats_agg[goal.assist1_id]['p'] += 1
+        if goal.assist2_id and goal.assist2_id in player_stats_agg:
+            player_stats_agg[goal.assist2_id]['a'] += 1
+            player_stats_agg[goal.assist2_id]['p'] += 1
     
     all_player_stats_list = [{'goals': v['g'], 'assists': v['a'], 'points': v['p'], 'player_obj': v['obj']} for v in player_stats_agg.values()]
     top_scorers_points = sorted([s for s in all_player_stats_list if s['points'] > 0], key=lambda x: (-x['points'], -x['goals'], x['player_obj'].last_name.lower()))
@@ -403,11 +394,11 @@ def year_view(year_id):
         if penalty_entry.player_id and penalty_entry.player_id in player_pim_agg:
             pim_value = PIM_MAP.get(penalty_entry.penalty_type, 0)
             player_pim_agg[penalty_entry.player_id]['pim'] += pim_value
-    top_penalty_players = sorted([{ 'player_obj': v['obj'], 'pim': v['pim'] } for v in player_pim_agg.values() if v['pim'] > 0], key=lambda x: (-x['pim'], x['player_obj'].last_name.lower()))
+    top_penalty_players = sorted([{'player_obj': v['obj'], 'pim': v['pim']} for v in player_pim_agg.values() if v['pim'] > 0], key=lambda x: (-x['pim'], x['player_obj'].last_name.lower()))
 
-    game_nat_teams = set(g.team1_code for g in games_processed if not (g.team1_code.startswith(('A','B','W','L','Q','S')) and g.team1_code[1:].isdigit()))
-    game_nat_teams.update(g.team2_code for g in games_processed if not (g.team2_code.startswith(('A','B','W','L','Q','S')) and g.team2_code[1:].isdigit()))
-    player_nat_teams = set(p.team_code for p in all_players_list if p.team_code and not (p.team_code.startswith(('A','B','W','L','Q','S')) and p.team_code[1:].isdigit()))
+    game_nat_teams = set(g.team1_code for g in games_processed if not (g.team1_code.startswith(('A', 'B', 'W', 'L', 'Q', 'S')) and g.team1_code[1:].isdigit()))
+    game_nat_teams.update(g.team2_code for g in games_processed if not (g.team2_code.startswith(('A', 'B', 'W', 'L', 'Q', 'S')) and g.team2_code[1:].isdigit()))
+    player_nat_teams = set(p.team_code for p in all_players_list if p.team_code and not (p.team_code.startswith(('A', 'B', 'W', 'L', 'Q', 'S')) and p.team_code[1:].isdigit()))
     unique_teams_filter = sorted(list(game_nat_teams.union(player_nat_teams)))
     
     def get_pname(pid): 
@@ -415,23 +406,42 @@ def year_view(year_id):
         return f"{p.first_name} {p.last_name}" if p else "N/A"
 
     for g_disp in games_processed:
-        # Clear existing events if any were added prematurely (shouldn't be the case with current structure but safe)
         g_disp.sorted_events = [] 
         for goal in Goal.query.filter_by(game_id=g_disp.id).all():
-            # Ensure team_code on goal object is the one used for display/filtering if it matters,
-            # or use g_disp.team1_code/team2_code to determine which team scored if goal.team_code is a placeholder.
-            # For now, assuming goal.team_code is sufficiently resolved or directly usable.
-            g_disp.sorted_events.append({'type':'goal','time_str':goal.minute,'time_for_sort':convert_time_to_seconds(goal.minute), 'data':{'id':goal.id,'team_code':goal.team_code,'minute':goal.minute,'goal_type_display':goal.goal_type,'is_empty_net':goal.is_empty_net,'scorer':get_pname(goal.scorer_id),'assist1':get_pname(goal.assist1_id) if goal.assist1_id else None,'assist2':get_pname(goal.assist2_id) if goal.assist2_id else None,'team_iso':TEAM_ISO_CODES.get(goal.team_code.upper())}})
+            g_disp.sorted_events.append({
+                'type': 'goal',
+                'time_str': goal.minute,
+                'time_for_sort': convert_time_to_seconds(goal.minute),
+                'data': {
+                    'id': goal.id,
+                    'team_code': goal.team_code,
+                    'minute': goal.minute,
+                    'goal_type_display': goal.goal_type,
+                    'is_empty_net': goal.is_empty_net,
+                    'scorer': get_pname(goal.scorer_id),
+                    'assist1': get_pname(goal.assist1_id) if goal.assist1_id else None,
+                    'assist2': get_pname(goal.assist2_id) if goal.assist2_id else None,
+                    'team_iso': TEAM_ISO_CODES.get(goal.team_code.upper())
+                }
+            })
         for pnlty in Penalty.query.filter_by(game_id=g_disp.id).all():
-            g_disp.sorted_events.append({'type':'penalty','time_str':pnlty.minute_of_game,'time_for_sort':convert_time_to_seconds(pnlty.minute_of_game), 'data':{'id':pnlty.id,'team_code':pnlty.team_code,'player_name':get_pname(pnlty.player_id) if pnlty.player_id else "Bank",'minute_of_game':pnlty.minute_of_game,'penalty_type':pnlty.penalty_type,'reason':pnlty.reason,'team_iso':TEAM_ISO_CODES.get(pnlty.team_code.upper())}})
+            g_disp.sorted_events.append({
+                'type': 'penalty',
+                'time_str': pnlty.minute_of_game,
+                'time_for_sort': convert_time_to_seconds(pnlty.minute_of_game),
+                'data': {
+                    'id': pnlty.id,
+                    'team_code': pnlty.team_code,
+                    'player_name': get_pname(pnlty.player_id) if pnlty.player_id else "Bank",
+                    'minute_of_game': pnlty.minute_of_game,
+                    'penalty_type': pnlty.penalty_type,
+                    'reason': pnlty.reason,
+                    'team_iso': TEAM_ISO_CODES.get(pnlty.team_code.upper())
+                }
+            })
         g_disp.sorted_events.sort(key=lambda x: x['time_for_sort'])
         
-        sog_data_for_this_game_from_flat = sog_by_game_flat.get(g_disp.id, {})
-        
-        sog_src = sog_by_game_flat.get(g_disp.id, {}) # sog_by_game_flat should be keyed by resolved codes from DB
-        
-        # Now, g_disp.team1_code and g_disp.team2_code are the fully resolved codes.
-        # We use these to construct g_disp.sog_data and to fetch from sog_src.
+        sog_src = sog_by_game_flat.get(g_disp.id, {})
         team1_sog_values = sog_src.get(g_disp.team1_code, {})
         team2_sog_values = sog_src.get(g_disp.team2_code, {})
 
@@ -440,22 +450,20 @@ def year_view(year_id):
             g_disp.team2_code: {p: team2_sog_values.get(p, 0) for p in range(1, 5)}
         }
         
-        # It's important that check_game_data_consistency also uses resolved team codes if it accesses g_disp.sog_data
-        consistency_check = check_game_data_consistency(g_disp, sog_src) # Pass sog_src which is keyed by resolved codes
+        consistency_check = check_game_data_consistency(g_disp, sog_src)
         g_disp.scores_fully_match_goals = consistency_check['scores_fully_match_data']
 
     # Load overrule data for all games
     all_overrules = GameOverrule.query.join(Game).filter(Game.year_id == year_id).all()
     overrule_by_game_id = {overrule.game_id: overrule for overrule in all_overrules}
     
-    # Assign overrule data to game displays
     for g_disp in games_processed:
         g_disp.overrule = overrule_by_game_id.get(g_disp.id)
 
     games_by_round_display = {}
-    for g_d in games_processed: games_by_round_display.setdefault(g_d.round or "Unk", []).append(g_d)
+    for g_d in games_processed:
+        games_by_round_display.setdefault(g_d.round or "Unk", []).append(g_d)
 
-    # Create a map for easier lookup of processed games by ID
     games_processed_map = {g.id: g for g in games_processed}
 
     all_players_by_team_json = {
@@ -466,24 +474,24 @@ def year_view(year_id):
 
     potential_teams = set()
     for g_disp in games_processed:
-        if g_disp.team1_code and TEAM_ISO_CODES.get(g_disp.team1_code.upper()) is not None: potential_teams.add(g_disp.team1_code.upper())
-        if g_disp.team2_code and TEAM_ISO_CODES.get(g_disp.team2_code.upper()) is not None: potential_teams.add(g_disp.team2_code.upper())
+        if g_disp.team1_code and TEAM_ISO_CODES.get(g_disp.team1_code.upper()) is not None:
+            potential_teams.add(g_disp.team1_code.upper())
+        if g_disp.team2_code and TEAM_ISO_CODES.get(g_disp.team2_code.upper()) is not None:
+            potential_teams.add(g_disp.team2_code.upper())
     for p_obj in all_players_list:
-        if p_obj.team_code and TEAM_ISO_CODES.get(p_obj.team_code.upper()) is not None: potential_teams.add(p_obj.team_code.upper())
+        if p_obj.team_code and TEAM_ISO_CODES.get(p_obj.team_code.upper()) is not None:
+            potential_teams.add(p_obj.team_code.upper())
     unique_teams_in_year = sorted(list(potential_teams))
 
-    # Build team_combinations_with_games dictionary for VS button logic (across ALL years)
+    # Build team_combinations_with_games dictionary for VS button logic
     team_combinations_with_games = {}
-    # Get all games from ALL years, not just the current year
     all_games_across_years = Game.query.filter(
         Game.team1_score.isnot(None), 
         Game.team2_score.isnot(None)
     ).all()
     
     for game in all_games_across_years:
-        # Only consider real team names (not placeholders)
         if (TEAM_ISO_CODES.get(game.team1_code.upper()) and TEAM_ISO_CODES.get(game.team2_code.upper())):
-            # Create sorted team pair key
             team_pair_sorted = sorted([game.team1_code, game.team2_code])
             team_pair_key = f"{team_pair_sorted[0]}_vs_{team_pair_sorted[1]}"
             team_combinations_with_games[team_pair_key] = True
@@ -500,106 +508,101 @@ def year_view(year_id):
             game_sog = sog_by_game_team.setdefault(sog_entry.game_id, {})
             team_total_sog = game_sog.get(sog_entry.team_code, 0)
             game_sog[sog_entry.team_code] = team_total_sog + sog_entry.shots
-        
-
 
         for team_code_upper in unique_teams_in_year:
             actual_team_code_from_games = None
             for g_disp_for_code in games_processed:
-                if g_disp_for_code.team1_code.upper() == team_code_upper: actual_team_code_from_games = g_disp_for_code.team1_code; break
-                if g_disp_for_code.team2_code.upper() == team_code_upper: actual_team_code_from_games = g_disp_for_code.team2_code; break
+                if g_disp_for_code.team1_code.upper() == team_code_upper:
+                    actual_team_code_from_games = g_disp_for_code.team1_code
+                    break
+                if g_disp_for_code.team2_code.upper() == team_code_upper:
+                    actual_team_code_from_games = g_disp_for_code.team2_code
+                    break
             
             if not actual_team_code_from_games:
-                 found_in_players = any(p.team_code.upper() == team_code_upper for p in all_players_list)
-                 if found_in_players:
-                     # Find the exact casing from player list if possible
-                     player_team_match = next((p.team_code for p in all_players_list if p.team_code.upper() == team_code_upper), team_code_upper)
-                     actual_team_code_from_games = player_team_match
-                 else: 
-                     for g_raw_for_code_id, g_raw_for_code_obj in games_raw_map.items(): # Iterate map
-                         if g_raw_for_code_obj.team1_code.upper() == team_code_upper: actual_team_code_from_games = g_raw_for_code_obj.team1_code; break
-                         if g_raw_for_code_obj.team2_code.upper() == team_code_upper: actual_team_code_from_games = g_raw_for_code_obj.team2_code; break
-                 if not actual_team_code_from_games: actual_team_code_from_games = team_code_upper 
+                found_in_players = any(p.team_code.upper() == team_code_upper for p in all_players_list)
+                if found_in_players:
+                    player_team_match = next((p.team_code for p in all_players_list if p.team_code.upper() == team_code_upper), team_code_upper)
+                    actual_team_code_from_games = player_team_match
+                else: 
+                    for g_raw_for_code_obj in games_raw_map.values():
+                        if g_raw_for_code_obj.team1_code.upper() == team_code_upper:
+                            actual_team_code_from_games = g_raw_for_code_obj.team1_code
+                            break
+                        if g_raw_for_code_obj.team2_code.upper() == team_code_upper:
+                            actual_team_code_from_games = g_raw_for_code_obj.team2_code
+                            break
+                if not actual_team_code_from_games:
+                    actual_team_code_from_games = team_code_upper 
 
             current_team_code = actual_team_code_from_games
             stats = TeamOverallStats(team_name=current_team_code, team_iso_code=TEAM_ISO_CODES.get(current_team_code.upper()))
 
-            # Iterate through all game IDs that current_team_code participated in (based on resolved names)
             for game_id, resolved_game_this_iter in games_processed_map.items():
                 raw_game_obj_this_iter = games_raw_map.get(game_id)
-                if not raw_game_obj_this_iter: continue # Should not happen if maps are synced
+                if not raw_game_obj_this_iter:
+                    continue
 
-                current_team_original_fixture_code_for_game = None
-                opponent_original_fixture_code_for_game = None
                 is_current_team_t1_in_raw_game = False
 
                 if resolved_game_this_iter.team1_code == current_team_code:
-                    current_team_original_fixture_code_for_game = raw_game_obj_this_iter.team1_code
-                    opponent_original_fixture_code_for_game = raw_game_obj_this_iter.team2_code
                     is_current_team_t1_in_raw_game = True
                 elif resolved_game_this_iter.team2_code == current_team_code:
-                    current_team_original_fixture_code_for_game = raw_game_obj_this_iter.team2_code
-                    opponent_original_fixture_code_for_game = raw_game_obj_this_iter.team1_code
                     is_current_team_t1_in_raw_game = False 
                 else:
-                    continue # current_team_code did not participate in this game
+                    continue
 
-                # Basic game participation stats
                 if raw_game_obj_this_iter.team1_score is not None and raw_game_obj_this_iter.team2_score is not None: 
                     stats.gp += 1
                     current_team_score = raw_game_obj_this_iter.team1_score if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team2_score
                     opponent_score = raw_game_obj_this_iter.team2_score if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team1_score
                     stats.gf += current_team_score
                     stats.ga += opponent_score
-                    if opponent_score == 0 and current_team_score > 0 : stats.so += 1
+                    if opponent_score == 0 and current_team_score > 0:
+                        stats.so += 1
                 
-                # SOG stats
                 game_sog_info = sog_by_game_team.get(raw_game_obj_this_iter.id, {})
-                # Use resolved team codes to match SOG data from database (SOG is stored with resolved team names)
                 if resolved_game_this_iter.team1_code == current_team_code:
-                    # Current team is team1 in resolved game
-                    stats.sog += game_sog_info.get(current_team_code, 0)  # Use resolved team code
-                    stats.soga += game_sog_info.get(resolved_game_this_iter.team2_code, 0)  # Use opponent's resolved code
+                    stats.sog += game_sog_info.get(current_team_code, 0)
+                    stats.soga += game_sog_info.get(resolved_game_this_iter.team2_code, 0)
                 elif resolved_game_this_iter.team2_code == current_team_code:
-                    # Current team is team2 in resolved game  
-                    stats.sog += game_sog_info.get(current_team_code, 0)  # Use resolved team code
-                    stats.soga += game_sog_info.get(resolved_game_this_iter.team1_code, 0)  # Use opponent's resolved code
+                    stats.sog += game_sog_info.get(current_team_code, 0)
+                    stats.soga += game_sog_info.get(resolved_game_this_iter.team1_code, 0)
             
-            # Goals and Powerplay related stats
             for goal_event in all_goals_for_year:
-                if goal_event.game_id not in games_processed_map: continue
+                if goal_event.game_id not in games_processed_map:
+                    continue
                 
                 resolved_game_of_goal = games_processed_map.get(goal_event.game_id)
-                if not resolved_game_of_goal: continue
+                if not resolved_game_of_goal:
+                    continue
 
-                # goal_event.team_code is the resolved team name (stored when goal was added)
-                # Check if this goal was scored by the current team or against them
                 if goal_event.team_code == current_team_code:
-                    # Current team scored this goal
-                    if goal_event.is_empty_net: stats.eng += 1
-                    if goal_event.goal_type == 'PP': stats.ppgf += 1
+                    if goal_event.is_empty_net:
+                        stats.eng += 1
+                    if goal_event.goal_type == 'PP':
+                        stats.ppgf += 1
                 elif (resolved_game_of_goal.team1_code == current_team_code and goal_event.team_code == resolved_game_of_goal.team2_code) or \
                      (resolved_game_of_goal.team2_code == current_team_code and goal_event.team_code == resolved_game_of_goal.team1_code):
-                    # Opponent scored this goal against current team
-                    if goal_event.goal_type == 'PP': stats.ppga += 1
+                    if goal_event.goal_type == 'PP':
+                        stats.ppga += 1
 
-            # Penalties and PIM/Opportunity related stats
             for penalty_event in all_penalties_for_year_detailed:
-                if penalty_event.game_id not in games_processed_map: continue
+                if penalty_event.game_id not in games_processed_map:
+                    continue
 
                 resolved_game_of_penalty = games_processed_map.get(penalty_event.game_id)
-                if not resolved_game_of_penalty: continue
+                if not resolved_game_of_penalty:
+                    continue
                 
-                # penalty_event.team_code is the resolved team name (stored when penalty was added)
-                # Check if this penalty was against the current team or their opponent
                 if penalty_event.team_code == current_team_code:
-                    # Current team received this penalty
                     stats.pim += PIM_MAP.get(penalty_event.penalty_type, 0)
-                    if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES: stats.ppa += 1 
+                    if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES:
+                        stats.ppa += 1 
                 elif (resolved_game_of_penalty.team1_code == current_team_code and penalty_event.team_code == resolved_game_of_penalty.team2_code) or \
                      (resolved_game_of_penalty.team2_code == current_team_code and penalty_event.team_code == resolved_game_of_penalty.team1_code):
-                    # Opponent received this penalty (current team gets powerplay opportunity)
-                    if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES: stats.ppf += 1
+                    if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES:
+                        stats.ppf += 1
             team_stats_data_list.append(stats)
 
     return render_template('year_view.html', 
@@ -618,16 +621,23 @@ def year_view(year_id):
 def get_stats_data(year_id):
     selected_team_filter = request.args.get('stats_team_filter')
     year_obj = db.session.get(ChampionshipYear, year_id)
-    if not year_obj: return jsonify({'error': 'Tournament year not found'}), 404
+    if not year_obj:
+        return jsonify({'error': 'Tournament year not found'}), 404
 
     all_players_list = Player.query.order_by(Player.team_code, Player.last_name).all()
-    player_stats_agg = {p.id: {'g':0,'a':0,'p':0,'obj':p} for p in all_players_list if not selected_team_filter or p.team_code == selected_team_filter}
+    player_stats_agg = {p.id: {'g': 0, 'a': 0, 'p': 0, 'obj': p} for p in all_players_list if not selected_team_filter or p.team_code == selected_team_filter}
     all_goals_for_year = Goal.query.join(Game).filter(Game.year_id == year_id).all()
 
     for goal in all_goals_for_year:
-        if goal.scorer_id in player_stats_agg: player_stats_agg[goal.scorer_id]['g'] += 1; player_stats_agg[goal.scorer_id]['p'] += 1
-        if goal.assist1_id and goal.assist1_id in player_stats_agg: player_stats_agg[goal.assist1_id]['a'] += 1; player_stats_agg[goal.assist1_id]['p'] += 1
-        if goal.assist2_id and goal.assist2_id in player_stats_agg: player_stats_agg[goal.assist2_id]['a'] += 1; player_stats_agg[goal.assist2_id]['p'] += 1
+        if goal.scorer_id in player_stats_agg:
+            player_stats_agg[goal.scorer_id]['g'] += 1
+            player_stats_agg[goal.scorer_id]['p'] += 1
+        if goal.assist1_id and goal.assist1_id in player_stats_agg:
+            player_stats_agg[goal.assist1_id]['a'] += 1
+            player_stats_agg[goal.assist1_id]['p'] += 1
+        if goal.assist2_id and goal.assist2_id in player_stats_agg:
+            player_stats_agg[goal.assist2_id]['a'] += 1
+            player_stats_agg[goal.assist2_id]['p'] += 1
 
     all_player_stats_list_for_json = [
         {'goals': v['g'], 'assists': v['a'], 'points': v['p'], 
@@ -645,7 +655,7 @@ def get_stats_data(year_id):
         if penalty_entry.player_id and penalty_entry.player_id in player_pim_agg:
             pim_value = PIM_MAP.get(penalty_entry.penalty_type, 0)
             player_pim_agg[penalty_entry.player_id]['pim'] += pim_value
-    top_penalty_players = sorted([{ 'player_obj': v['obj'], 'pim': v['pim'] } for v in player_pim_agg.values() if v['pim'] > 0], key=lambda x: (-x['pim'], x['player_obj']['last_name'].lower()))
+    top_penalty_players = sorted([{'player_obj': v['obj'], 'pim': v['pim']} for v in player_pim_agg.values() if v['pim'] > 0], key=lambda x: (-x['pim'], x['player_obj']['last_name'].lower()))
 
     return jsonify({
         'top_scorers_points': top_scorers_points, 'top_goal_scorers': top_goal_scorers,
@@ -653,10 +663,7 @@ def get_stats_data(year_id):
         'selected_team': selected_team_filter or ""
     })
 
-# The /add_player route is better placed in a more general blueprint if it's not strictly year-dependent
-# For now, keeping it here as it was in original app.py and uses year_id_redirect
-# Consider creating an 'api_bp' or 'player_bp' if app grows
-@year_bp.route('/add_player_global', methods=['POST']) # Renamed to avoid conflict if main_bp has /add_player
+@year_bp.route('/add_player_global', methods=['POST'])
 def add_player():
     team_code = request.form.get('team_code')
     first_name = request.form.get('first_name')
@@ -670,23 +677,28 @@ def add_player():
             return jsonify({'success': False, 'message': 'Team, First Name, and Last Name are required.'}), 400
         flash('Team, First Name, and Last Name are required to add a player.', 'danger')
     else:
-        try: jersey_number = int(jersey_number_str) if jersey_number_str and jersey_number_str.isdigit() else None
+        try:
+            jersey_number = int(jersey_number_str) if jersey_number_str and jersey_number_str.isdigit() else None
         except ValueError: 
-            jersey_number = None # Ensure jersey_number is set to None here
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest': return jsonify({'success': False, 'message': 'Invalid Jersey Number format.'}), 400
+            jersey_number = None
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'message': 'Invalid Jersey Number format.'}), 400
             flash('Invalid Jersey Number format.', 'danger')
             anchor_to_use = f"game-details-{game_id_anchor}" if game_id_anchor and game_id_anchor != 'None' else "addPlayerForm-global"
-            if year_id_redirect and year_id_redirect != 'None': return redirect(url_for('year_bp.year_view', year_id=int(year_id_redirect), _anchor=anchor_to_use))
+            if year_id_redirect and year_id_redirect != 'None':
+                return redirect(url_for('year_bp.year_view', year_id=int(year_id_redirect), _anchor=anchor_to_use))
             return redirect(url_for('main_bp.index'))
 
         existing_player = Player.query.filter_by(team_code=team_code, first_name=first_name, last_name=last_name).first()
         if existing_player:
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest': return jsonify({'success': False, 'message': f'Player {first_name} {last_name} ({team_code}) already exists.'}), 400
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'message': f'Player {first_name} {last_name} ({team_code}) already exists.'}), 400
             flash(f'Player {first_name} {last_name} ({team_code}) already exists.', 'warning')
         else:
             try:
                 new_player = Player(team_code=team_code, first_name=first_name, last_name=last_name, jersey_number=jersey_number)
-                db.session.add(new_player); db.session.commit()
+                db.session.add(new_player)
+                db.session.commit()
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return jsonify({
                         'success': True, 'message': f'Player {first_name} {last_name} added!',
@@ -694,18 +706,22 @@ def add_player():
                     })
                 flash(f'Player {first_name} {last_name} added!', 'success')
             except Exception as e:
-                db.session.rollback(); current_app.logger.error(f"Error adding player: {str(e)}")
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest': return jsonify({'success': False, 'message': f'Error adding player: {str(e)}'}), 500
+                db.session.rollback()
+                current_app.logger.error(f"Error adding player: {str(e)}")
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'success': False, 'message': f'Error adding player: {str(e)}'}), 500
                 flash(f'Error adding player: {str(e)}', 'danger')
     
     anchor_to_use = f"game-details-{game_id_anchor}" if game_id_anchor and game_id_anchor != 'None' else "addPlayerForm-global"
-    if year_id_redirect and year_id_redirect != 'None': return redirect(url_for('year_bp.year_view', year_id=int(year_id_redirect), _anchor=anchor_to_use))
+    if year_id_redirect and year_id_redirect != 'None':
+        return redirect(url_for('year_bp.year_view', year_id=int(year_id_redirect), _anchor=anchor_to_use))
     return redirect(url_for('main_bp.index')) 
 
 @year_bp.route('/<int:year_id>/game/<int:game_id>/add_goal', methods=['POST'])
 def add_goal(year_id, game_id):
     game = db.session.get(Game, game_id)
-    if not game or game.year_id != year_id : return jsonify({'success': False, 'message': 'Spiel nicht gefunden oder gehört nicht zum Turnier.'}), 404
+    if not game or game.year_id != year_id:
+        return jsonify({'success': False, 'message': 'Spiel nicht gefunden oder gehört nicht zum Turnier.'}), 404
     try:
         data = request.form
         new_goal = Goal(
@@ -717,21 +733,25 @@ def add_goal(year_id, game_id):
         )
         if not all([new_goal.team_code, new_goal.minute, new_goal.goal_type, new_goal.scorer_id]):
             return jsonify({'success': False, 'message': 'Fehlende Daten für Toreingabe.'}), 400
-        db.session.add(new_goal); db.session.commit()
+        db.session.add(new_goal)
+        db.session.commit()
 
         player_cache = {p.id: p for p in Player.query.all()} 
-        def get_pname_local(pid): p=player_cache.get(pid); return f"{p.first_name} {p.last_name}" if p else "N/A"
+        def get_pname_local(pid):
+            p = player_cache.get(pid)
+            return f"{p.first_name} {p.last_name}" if p else "N/A"
         
-        # Prepare SOG data for the consistency check
         sog_entries_for_game = ShotsOnGoal.query.filter_by(game_id=game_id).all()
         sog_data_for_check = {}
         for sog_e in sog_entries_for_game:
             sog_data_for_check.setdefault(sog_e.team_code, {})[sog_e.period] = sog_e.shots
-        # Ensure both teams have entries, even if empty, for consistency with how year_view prepares it
-        if game.team1_code not in sog_data_for_check: sog_data_for_check[game.team1_code] = {}
-        if game.team2_code not in sog_data_for_check: sog_data_for_check[game.team2_code] = {}
+        if game.team1_code not in sog_data_for_check:
+            sog_data_for_check[game.team1_code] = {}
+        if game.team2_code not in sog_data_for_check:
+            sog_data_for_check[game.team2_code] = {}
         for team_code_key in [game.team1_code, game.team2_code]:
-            for p_key in range(1, 5): sog_data_for_check[team_code_key].setdefault(p_key, 0)
+            for p_key in range(1, 5):
+                sog_data_for_check[team_code_key].setdefault(p_key, 0)
 
         consistency_result = check_game_data_consistency(game, sog_data_for_check)
         scores_match = consistency_result['scores_fully_match_data']
@@ -748,45 +768,55 @@ def add_goal(year_id, game_id):
         }
         return jsonify({'success': True, 'message': 'Tor erfolgreich hinzugefügt!', 'goal': goal_data_for_js, 'game_id': game_id})
     except Exception as e:
-        db.session.rollback(); current_app.logger.error(f"Error adding goal: {str(e)}")
+        db.session.rollback()
+        current_app.logger.error(f"Error adding goal: {str(e)}")
         return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
 
 @year_bp.route('/<int:year_id>/goal/<int:goal_id>/delete', methods=['POST'])
 def delete_goal(year_id, goal_id):
     goal = db.session.get(Goal, goal_id)
     if not goal: 
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest': return jsonify({'success': False, 'message': 'Goal not found.'}), 404
-        flash('Goal not found.', 'warning'); return redirect(url_for('year_bp.year_view', year_id=year_id))
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Goal not found.'}), 404
+        flash('Goal not found.', 'warning')
+        return redirect(url_for('year_bp.year_view', year_id=year_id))
 
     game = db.session.get(Game, goal.game_id)
     if not game or game.year_id != year_id:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest': return jsonify({'success': False, 'message': 'Invalid association.'}), 400
-        flash('Invalid goal for year.', 'danger'); return redirect(url_for('year_bp.year_view', year_id=year_id))
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Invalid association.'}), 400
+        flash('Invalid goal for year.', 'danger')
+        return redirect(url_for('year_bp.year_view', year_id=year_id))
     
-    game_id_resp = game.id; db.session.delete(goal); db.session.commit()
+    game_id_resp = game.id
+    db.session.delete(goal)
+    db.session.commit()
 
-    # Prepare SOG data for the consistency check
     sog_entries_for_game = ShotsOnGoal.query.filter_by(game_id=game_id_resp).all()
     sog_data_for_check = {}
     for sog_e in sog_entries_for_game:
         sog_data_for_check.setdefault(sog_e.team_code, {})[sog_e.period] = sog_e.shots
-    # Ensure both teams have entries, even if empty
-    if game.team1_code not in sog_data_for_check: sog_data_for_check[game.team1_code] = {}
-    if game.team2_code not in sog_data_for_check: sog_data_for_check[game.team2_code] = {}
+    if game.team1_code not in sog_data_for_check:
+        sog_data_for_check[game.team1_code] = {}
+    if game.team2_code not in sog_data_for_check:
+        sog_data_for_check[game.team2_code] = {}
     for team_code_key in [game.team1_code, game.team2_code]:
-        for p_key in range(1, 5): sog_data_for_check[team_code_key].setdefault(p_key, 0)
+        for p_key in range(1, 5):
+            sog_data_for_check[team_code_key].setdefault(p_key, 0)
 
     consistency_result = check_game_data_consistency(game, sog_data_for_check)
     scores_match = consistency_result['scores_fully_match_data']
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'success': True, 'message': 'Goal deleted.', 'goal_id': goal_id, 'game_id': game_id_resp, 'scores_fully_match_goals': scores_match})
-    flash('Goal deleted.', 'success'); return redirect(url_for('year_bp.year_view', year_id=year_id, _anchor=f"game-details-{game_id_resp}"))
+    flash('Goal deleted.', 'success')
+    return redirect(url_for('year_bp.year_view', year_id=year_id, _anchor=f"game-details-{game_id_resp}"))
 
 @year_bp.route('/<int:year_id>/game/<int:game_id>/add_penalty', methods=['POST'])
 def add_penalty(year_id, game_id):
     game = db.session.get(Game, game_id)
-    if not game or game.year_id != year_id: return jsonify({'success': False, 'message': 'Spiel nicht gefunden oder gehört nicht zum Turnier.'}), 404
+    if not game or game.year_id != year_id:
+        return jsonify({'success': False, 'message': 'Spiel nicht gefunden oder gehört nicht zum Turnier.'}), 404
     try:
         data = request.form
         pid_str = data.get('player_id_penalty')
@@ -797,12 +827,15 @@ def add_penalty(year_id, game_id):
         )
         if not all([new_penalty.team_code, new_penalty.minute_of_game, new_penalty.penalty_type, new_penalty.reason]):
             return jsonify({'success': False, 'message': 'Fehlende Daten für Strafeneingabe.'}), 400
-        db.session.add(new_penalty); db.session.commit()
+        db.session.add(new_penalty)
+        db.session.commit()
         
         player_cache = {p.id: p for p in Player.query.all()}
         def get_pname_local(pid): 
-            if pid is None: return "Teamstrafe"
-            p=player_cache.get(pid); return f"{p.first_name} {p.last_name}" if p else "Bankstrafe"
+            if pid is None:
+                return "Teamstrafe"
+            p = player_cache.get(pid)
+            return f"{p.first_name} {p.last_name}" if p else "Bankstrafe"
 
         penalty_data_for_js = {
             'id': new_penalty.id, 'team_code': new_penalty.team_code,
@@ -814,50 +847,68 @@ def add_penalty(year_id, game_id):
         }
         return jsonify({'success': True, 'message': 'Strafe erfolgreich hinzugefügt!', 'penalty': penalty_data_for_js, 'game_id': game_id})
     except Exception as e:
-        db.session.rollback(); current_app.logger.error(f"Error adding penalty: {str(e)}")
+        db.session.rollback()
+        current_app.logger.error(f"Error adding penalty: {str(e)}")
         return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
 
 @year_bp.route('/<int:year_id>/penalty/<int:penalty_id>/delete', methods=['POST'])
 def delete_penalty(year_id, penalty_id):
     penalty = db.session.get(Penalty, penalty_id)
     if not penalty:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest': return jsonify({'success': False, 'message': 'Penalty not found.'}), 404
-        flash('Penalty not found.', 'warning'); return redirect(url_for('year_bp.year_view', year_id=year_id))
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Penalty not found.'}), 404
+        flash('Penalty not found.', 'warning')
+        return redirect(url_for('year_bp.year_view', year_id=year_id))
 
     game = db.session.get(Game, penalty.game_id)
     if not game or game.year_id != year_id:
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest': return jsonify({'success': False, 'message': 'Invalid association.'}), 400
-        flash('Invalid penalty for year.', 'danger'); return redirect(url_for('year_bp.year_view', year_id=year_id))
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Invalid association.'}), 400
+        flash('Invalid penalty for year.', 'danger')
+        return redirect(url_for('year_bp.year_view', year_id=year_id))
     
-    game_id_resp = game.id; db.session.delete(penalty); db.session.commit()
+    game_id_resp = game.id
+    db.session.delete(penalty)
+    db.session.commit()
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'success': True, 'message': 'Penalty deleted.', 'penalty_id': penalty_id, 'game_id': game_id_resp})
-    flash('Penalty deleted.', 'success'); return redirect(url_for('year_bp.year_view', year_id=year_id, _anchor=f"game-details-{game_id_resp}"))
+    flash('Penalty deleted.', 'success')
+    return redirect(url_for('year_bp.year_view', year_id=year_id, _anchor=f"game-details-{game_id_resp}"))
 
-@year_bp.route('/add_sog_global/<int:game_id>', methods=['POST']) # Renamed to avoid conflict
-def add_sog(game_id): # year_id is not strictly needed if game_id is globally unique and DB ensures game belongs to a year
+@year_bp.route('/add_sog_global/<int:game_id>', methods=['POST'])
+def add_sog(game_id):
     game = db.session.get(Game, game_id)
-    if not game: return jsonify({'success': False, 'message': 'Spiel nicht gefunden.'}), 404
+    if not game:
+        return jsonify({'success': False, 'message': 'Spiel nicht gefunden.'}), 404
     data = request.form
     try:
         resolved_t1_code = data.get('sog_team1_code_resolved') 
         resolved_t2_code = data.get('sog_team2_code_resolved')
-        teams_processed_count = 0; made_changes = False
+        teams_processed_count = 0
+        made_changes = False
 
         def process_sog_for_team(team_code, form_prefix):
             nonlocal teams_processed_count, made_changes
-            if team_code and not (team_code.startswith(('A','B','W','L','Q','S')) and len(team_code) > 1 and team_code[1:].isdigit()):
+            if team_code and not (team_code.startswith(('A', 'B', 'W', 'L', 'Q', 'S')) and len(team_code) > 1 and team_code[1:].isdigit()):
                 teams_processed_count += 1
                 for period in range(1, 5):
                     shots_str = data.get(f'{form_prefix}_p{period}_shots')
-                    if shots_str is None: continue
-                    try: shots = int(shots_str.strip()) if shots_str.strip() else 0
-                    except ValueError: shots = 0
+                    if shots_str is None:
+                        continue
+                    try:
+                        shots = int(shots_str.strip()) if shots_str.strip() else 0
+                    except ValueError:
+                        shots = 0
                     
                     sog_entry = ShotsOnGoal.query.filter_by(game_id=game_id, team_code=team_code, period=period).first()
                     if sog_entry:
-                        if sog_entry.shots != shots: sog_entry.shots = shots; db.session.add(sog_entry); made_changes = True
-                    elif shots != 0: db.session.add(ShotsOnGoal(game_id=game_id, team_code=team_code, period=period, shots=shots)); made_changes = True
+                        if sog_entry.shots != shots:
+                            sog_entry.shots = shots
+                            db.session.add(sog_entry)
+                            made_changes = True
+                    elif shots != 0:
+                        db.session.add(ShotsOnGoal(game_id=game_id, team_code=team_code, period=period, shots=shots))
+                        made_changes = True
         
         process_sog_for_team(resolved_t1_code, 'team1')
         process_sog_for_team(resolved_t2_code, 'team2')
@@ -865,24 +916,27 @@ def add_sog(game_id): # year_id is not strictly needed if game_id is globally un
         if made_changes: 
             db.session.commit()
             message = 'Shots on Goal successfully saved.'
-        elif teams_processed_count > 0 and not made_changes: message = 'SOG values were same or all zeros for new; no changes.'
-        else: message = 'No valid teams for SOG update.'
+        elif teams_processed_count > 0 and not made_changes:
+            message = 'SOG values were same or all zeros for new; no changes.'
+        else:
+            message = 'No valid teams for SOG update.'
         
         current_sog_response = {}
         for entry in ShotsOnGoal.query.filter_by(game_id=game_id).all():
             current_sog_response.setdefault(entry.team_code, {})[entry.period] = entry.shots
         for tc_resp in [resolved_t1_code, resolved_t2_code]:
-            if tc_resp and not (tc_resp.startswith(('A','B','W','L','Q','S')) and len(tc_resp)>1 and tc_resp[1:].isdigit()):
-                 current_sog_response.setdefault(tc_resp, {}) 
-                 for p_resp in range(1,5): current_sog_response[tc_resp].setdefault(p_resp, 0)
+            if tc_resp and not (tc_resp.startswith(('A', 'B', 'W', 'L', 'Q', 'S')) and len(tc_resp) > 1 and tc_resp[1:].isdigit()):
+                current_sog_response.setdefault(tc_resp, {}) 
+                for p_resp in range(1, 5):
+                    current_sog_response[tc_resp].setdefault(p_resp, 0)
         
-        # Check game data consistency after SOG update
         consistency_result = check_game_data_consistency(game, current_sog_response)
         scores_match = consistency_result['scores_fully_match_data']
         
         return jsonify({'success': True, 'message': message, 'game_id': game_id, 'sog_data': current_sog_response, 'scores_fully_match_goals': scores_match})
     except Exception as e:
-        db.session.rollback(); current_app.logger.error(f"Error in add_sog: {str(e)}\n{traceback.format_exc()}")
+        db.session.rollback()
+        current_app.logger.error(f"Error in add_sog: {str(e)}\n{traceback.format_exc()}")
         return jsonify({'success': False, 'message': f'Server error: {str(e)}'}), 500
 
 @year_bp.route('/<int:year_id>/game/<int:game_id>/stats')
@@ -971,7 +1025,7 @@ def game_stats_view(year_id, game_id):
             tournament_hosts = loaded_fixture_data.get("hosts", [])
             
             schedule_data = loaded_fixture_data.get("schedule", [])
-            for i, game_data in enumerate(schedule_data):
+            for game_data in schedule_data:
                 round_name = game_data.get("round", "").lower()
                 game_num = game_data.get("gameNumber")
                 

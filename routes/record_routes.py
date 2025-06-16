@@ -11,27 +11,21 @@ record_bp = Blueprint('record_bp', __name__)
 
 def get_all_resolved_games():
     """
-    Holt alle Spiele und löst Platzhalter auf, basierend auf der bewährten Logik aus year_routes.py
+    Holt alle Spiele und löst Platzhalter auf
     """
-    # Nutze die bereits funktionierende Team-Auflösungslogik aus year_routes.py
     from models import TeamStats
     import re, os, json
     
     all_resolved_games = []
-    
-    # Hole alle Jahre
     years = ChampionshipYear.query.all()
     
     for year_obj in years:
         try:
-            # Simuliere year_view Logik für dieses Jahr um aufgelöste Teams zu bekommen
             games_raw = Game.query.filter_by(year_id=year_obj.id).order_by(Game.date, Game.start_time, Game.game_number).all()
             
             if not games_raw:
                 continue
                 
-            # Nutze dieselbe Team-Auflösungslogik wie in year_routes.py
-            # Erstelle Preliminary Round Statistics
             teams_stats = {}
             prelim_games = [g for g in games_raw if g.round == 'Preliminary Round' and g.group]
             
@@ -72,7 +66,6 @@ def get_all_resolved_games():
                     
                     standings_by_group[full_group_name_key] = current_group_teams
 
-            # Erstelle playoff_team_map exakt wie in year_routes.py
             playoff_team_map = {}
             for group_display_name, group_standings_list in standings_by_group.items():
                 group_letter_match = re.match(r"Group ([A-D])", group_display_name) 
@@ -83,7 +76,6 @@ def get_all_resolved_games():
 
             games_dict_by_num = {g.game_number: g for g in games_raw}
             
-            # Lade fixture data wie in year_routes.py
             qf_game_numbers = []
             sf_game_numbers = []
             bronze_game_number = None
@@ -131,7 +123,6 @@ def get_all_resolved_games():
                 playoff_team_map['SF1'] = str(sf_game_numbers[0])
                 playoff_team_map['SF2'] = str(sf_game_numbers[1])
 
-            # Verwende dieselbe get_resolved_code Funktion wie in year_routes.py
             def get_resolved_code(placeholder_code, current_map):
                 max_depth = 5 
                 current_code = placeholder_code
@@ -167,18 +158,15 @@ def get_all_resolved_games():
                         return current_code
                 return current_code
 
-            # Führe die Auflösung direkt auf games_raw durch
             for _pass_num in range(max(3, len(games_raw) // 2)): 
                 changes_in_pass = 0
                 for game in games_raw:
                     if game.team1_score is None or game.team2_score is None:
                         continue
                     
-                    # Löse Team-Codes auf
                     resolved_t1 = get_resolved_code(game.team1_code, playoff_team_map)
                     resolved_t2 = get_resolved_code(game.team2_code, playoff_team_map)
                     
-                    # Aktualisiere playoff_team_map mit Gewinnern/Verlierern
                     if game.round != 'Preliminary Round':
                         if is_code_final(resolved_t1) and is_code_final(resolved_t2):
                             actual_winner = resolved_t1 if game.team1_score > game.team2_score else resolved_t2
@@ -196,7 +184,6 @@ def get_all_resolved_games():
                 if changes_in_pass == 0 and _pass_num > 0: 
                     break 
 
-            # Führe dieselbe Semifinal-Logik durch wie in year_routes.py
             if qf_game_numbers and sf_game_numbers and len(sf_game_numbers) == 2:
                 qf_winners_teams = []
                 all_qf_winners_resolved = True
@@ -256,7 +243,6 @@ def get_all_resolved_games():
                             playoff_team_map['Q3'] = sf_game2_teams[0]
                             playoff_team_map['Q4'] = sf_game2_teams[1]
 
-            # Sammle alle aufgelösten Spiele
             for game in games_raw:
                 if game.team1_score is not None and game.team2_score is not None:
                     resolved_team1_code = get_resolved_code(game.team1_code, playoff_team_map)
@@ -270,7 +256,6 @@ def get_all_resolved_games():
                     })
                         
         except Exception as e:
-            # Fallback: Verwende nur Spiele mit finalen Team-Codes
             for game in Game.query.filter_by(year_id=year_obj.id).all():
                 if (game.team1_score is not None and game.team2_score is not None and
                     is_code_final(game.team1_code) and is_code_final(game.team2_code)):
@@ -290,7 +275,6 @@ def get_resolved_team_info(team_code, game=None):
     if not team_code:
         return team_code, None
     
-    # Versuche Team-Code zu bereinigen falls es ein Platzhalter ist
     if game and game.year_id:
         try:
             year_obj = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
@@ -298,16 +282,13 @@ def get_resolved_team_info(team_code, game=None):
                 all_games = db.session.query(Game).filter_by(year_id=game.year_id).all()
                 resolved_team1, resolved_team2 = resolve_game_participants(game, year_obj, all_games)
                 
-                # Bestimme welcher der beiden Teams der gewünschte ist
                 if game.team1_code == team_code:
                     team_code = resolved_team1
                 elif game.team2_code == team_code:
                     team_code = resolved_team2
         except:
-            # Fallback auf ursprünglichen Code wenn Auflösung fehlschlägt
             pass
     
-    # Hole ISO-Code für Flagge
     iso_code = TEAM_ISO_CODES.get(team_code)
     
     return team_code, iso_code
@@ -316,7 +297,6 @@ def get_resolved_team_info(team_code, game=None):
 def records_view():
     """Rekorde-Seite mit verschiedenen Rekordkategorien"""
     
-    # Alle Zeit Rekorde
     longest_win_streak = get_longest_win_streak()
     longest_loss_streak = get_longest_loss_streak()
     longest_scoring_streak = get_longest_scoring_streak()
@@ -333,23 +313,19 @@ def records_view():
     most_final_appearances = get_most_final_appearances()
     record_champion = get_record_champion()
     
-    # Pro Turnier Rekorde - Allgemein
     tournament_most_goals = get_tournament_with_most_goals()
     tournament_least_goals = get_tournament_with_least_goals()
     
-    # Pro Turnier Rekorde - Team
     most_goals_team_tournament = get_most_goals_team_tournament()
     fewest_goals_against_tournament = get_fewest_goals_against_tournament()
     most_shutouts_tournament = get_most_shutouts_tournament()
     
-    # Pro Turnier Rekorde - Spieler
     most_scorers_tournament = get_most_scorers_tournament()
     most_goals_player_tournament = get_most_goals_player_tournament()
     most_assists_player_tournament = get_most_assists_player_tournament()
     most_penalty_minutes_tournament = get_most_penalty_minutes_tournament()
     
     return render_template('records.html',
-                           # Alle Zeit Rekorde
                            longest_win_streak=longest_win_streak,
                            longest_loss_streak=longest_loss_streak,
                            longest_scoring_streak=longest_scoring_streak,
@@ -362,25 +338,20 @@ def records_view():
                            most_consecutive_tournament_wins=most_consecutive_tournament_wins,
                            most_final_appearances=most_final_appearances,
                            record_champion=record_champion,
-                           # Pro Turnier - Allgemein
                            tournament_most_goals=tournament_most_goals,
                            tournament_least_goals=tournament_least_goals,
-                           # Pro Turnier - Team
                            most_goals_team_tournament=most_goals_team_tournament,
                            fewest_goals_against_tournament=fewest_goals_against_tournament,
                            most_shutouts_tournament=most_shutouts_tournament,
-                           # Pro Turnier - Spieler
                            most_scorers_tournament=most_scorers_tournament,
                            most_goals_player_tournament=most_goals_player_tournament,
                            most_assists_player_tournament=most_assists_player_tournament,
                            most_penalty_minutes_tournament=most_penalty_minutes_tournament,
-                           # Team ISO codes für Flaggen
                            team_iso_codes=TEAM_ISO_CODES)
 
 def get_longest_win_streak():
     """Berechnet die längste Siegesserie über alle Turniere"""
     resolved_games = get_all_resolved_games()
-    # Sortiere nach Jahr, Datum und Spiel-Nummer für korrekte chronologische Reihenfolge
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 
@@ -408,7 +379,7 @@ def get_longest_win_streak():
             loser = team1_code
         
         if winner:
-            if team_streaks[winner] == 0:  # Neue Serie beginnt
+            if team_streaks[winner] == 0:
                 team_streak_start[winner] = game.date
             team_streaks[winner] += 1
             team_streak_end[winner] = game.date
@@ -417,7 +388,6 @@ def get_longest_win_streak():
             team_streak_start[loser] = None
             team_streak_end[loser] = None
             
-            # Prüfe ob das ein neuer Rekord ist
             if not max_streaks or team_streaks[winner] > max_streaks[0]['streak']:
                 max_streaks = [{
                     'team': winner, 
@@ -440,7 +410,6 @@ def get_longest_win_streak():
 def get_longest_loss_streak():
     """Berechnet die längste Niederlagenserie über alle Turniere"""
     resolved_games = get_all_resolved_games()
-    # Sortiere nach Jahr, Datum und Spiel-Nummer für korrekte chronologische Reihenfolge
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 
@@ -468,7 +437,7 @@ def get_longest_loss_streak():
             loser = team1_code
         
         if winner and loser:
-            if team_streaks[loser] == 0:  # Neue Serie beginnt
+            if team_streaks[loser] == 0:
                 team_streak_start[loser] = game.date
             team_streaks[loser] += 1
             team_streak_end[loser] = game.date
@@ -477,7 +446,6 @@ def get_longest_loss_streak():
             team_streak_start[winner] = None
             team_streak_end[winner] = None
             
-            # Prüfe ob das ein neuer Rekord ist
             if not max_streaks or team_streaks[loser] > max_streaks[0]['streak']:
                 max_streaks = [{
                     'team': loser, 
@@ -500,7 +468,6 @@ def get_longest_loss_streak():
 def get_longest_scoring_streak():
     """Berechnet die längste Serie mit mindestens 1 Tor"""
     resolved_games = get_all_resolved_games()
-    # Sortiere nach Jahr, Datum und Spiel-Nummer für korrekte chronologische Reihenfolge
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 
@@ -517,9 +484,8 @@ def get_longest_scoring_streak():
         team1_code = resolved_game['team1_code']
         team2_code = resolved_game['team2_code']
         
-        # Team1 hat mindestens 1 Tor geschossen
         if game.team1_score > 0:
-            if team_streaks[team1_code] == 0:  # Neue Serie beginnt
+            if team_streaks[team1_code] == 0:
                 team_streak_start[team1_code] = game.date
             team_streaks[team1_code] += 1
             team_streak_end[team1_code] = game.date
@@ -528,9 +494,8 @@ def get_longest_scoring_streak():
             team_streak_start[team1_code] = None
             team_streak_end[team1_code] = None
             
-        # Team2 hat mindestens 1 Tor geschossen
         if game.team2_score > 0:
-            if team_streaks[team2_code] == 0:  # Neue Serie beginnt
+            if team_streaks[team2_code] == 0:
                 team_streak_start[team2_code] = game.date
             team_streaks[team2_code] += 1
             team_streak_end[team2_code] = game.date
@@ -539,7 +504,6 @@ def get_longest_scoring_streak():
             team_streak_start[team2_code] = None
             team_streak_end[team2_code] = None
         
-        # Prüfe beide Teams für neue Rekorde
         for team in [team1_code, team2_code]:
             if not max_streaks or team_streaks[team] > max_streaks[0]['streak']:
                 max_streaks = [{
@@ -563,7 +527,6 @@ def get_longest_scoring_streak():
 def get_longest_shutout_streak():
     """Berechnet die längste Serie ohne Gegentor"""
     resolved_games = get_all_resolved_games()
-    # Sortiere nach Jahr, Datum und Spiel-Nummer für korrekte chronologische Reihenfolge
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 
@@ -580,9 +543,8 @@ def get_longest_shutout_streak():
         team1_code = resolved_game['team1_code']
         team2_code = resolved_game['team2_code']
         
-        # Team1 bekommt kein Gegentor
         if game.team2_score == 0:
-            if team_streaks[team1_code] == 0:  # Neue Serie beginnt
+            if team_streaks[team1_code] == 0:
                 team_streak_start[team1_code] = game.date
             team_streaks[team1_code] += 1
             team_streak_end[team1_code] = game.date
@@ -591,9 +553,8 @@ def get_longest_shutout_streak():
             team_streak_start[team1_code] = None
             team_streak_end[team1_code] = None
             
-        # Team2 bekommt kein Gegentor
         if game.team1_score == 0:
-            if team_streaks[team2_code] == 0:  # Neue Serie beginnt
+            if team_streaks[team2_code] == 0:
                 team_streak_start[team2_code] = game.date
             team_streaks[team2_code] += 1
             team_streak_end[team2_code] = game.date
@@ -602,7 +563,6 @@ def get_longest_shutout_streak():
             team_streak_start[team2_code] = None
             team_streak_end[team2_code] = None
         
-        # Prüfe beide Teams für neue Rekorde
         for team in [team1_code, team2_code]:
             if not max_streaks or team_streaks[team] > max_streaks[0]['streak']:
                 max_streaks = [{
@@ -626,7 +586,6 @@ def get_longest_shutout_streak():
 def get_longest_goalless_streak():
     """Berechnet die längste Serie ohne eigenes Tor"""
     resolved_games = get_all_resolved_games()
-    # Sortiere nach Jahr, Datum und Spiel-Nummer für korrekte chronologische Reihenfolge
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 
@@ -643,9 +602,8 @@ def get_longest_goalless_streak():
         team1_code = resolved_game['team1_code']
         team2_code = resolved_game['team2_code']
         
-        # Team1 schießt kein Tor
         if game.team1_score == 0:
-            if team_streaks[team1_code] == 0:  # Neue Serie beginnt
+            if team_streaks[team1_code] == 0:
                 team_streak_start[team1_code] = game.date
             team_streaks[team1_code] += 1
             team_streak_end[team1_code] = game.date
@@ -654,9 +612,8 @@ def get_longest_goalless_streak():
             team_streak_start[team1_code] = None
             team_streak_end[team1_code] = None
             
-        # Team2 schießt kein Tor
         if game.team2_score == 0:
-            if team_streaks[team2_code] == 0:  # Neue Serie beginnt
+            if team_streaks[team2_code] == 0:
                 team_streak_start[team2_code] = game.date
             team_streaks[team2_code] += 1
             team_streak_end[team2_code] = game.date
@@ -665,7 +622,6 @@ def get_longest_goalless_streak():
             team_streak_start[team2_code] = None
             team_streak_end[team2_code] = None
         
-        # Prüfe beide Teams für neue Rekorde
         for team in [team1_code, team2_code]:
             if not max_streaks or team_streaks[team] > max_streaks[0]['streak']:
                 max_streaks = [{
@@ -687,13 +643,12 @@ def get_longest_goalless_streak():
     return max_streaks
 
 def get_highest_victory():
-    """Findet den höchsten Sieg (größte Tordifferenz)"""
+    """Findet die TOP 3 höchsten Siege (größte Tordifferenzen)"""
     resolved_games = get_all_resolved_games()
     
     if not resolved_games:
         return []
     
-    # Berechne Tordifferenzen
     game_diffs = []
     for resolved_game in resolved_games:
         game = resolved_game['game']
@@ -702,64 +657,63 @@ def get_highest_victory():
         year = resolved_game['year']
         
         diff = abs(game.team1_score - game.team2_score)
+        
+        if game.team1_score > game.team2_score:
+            winner = team1_code
+            winner_score = game.team1_score
+            loser = team2_code
+            loser_score = game.team2_score
+        else:
+            winner = team2_code
+            winner_score = game.team2_score
+            loser = team1_code
+            loser_score = game.team1_score
+        
+        year_obj = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
         game_diffs.append({
-            'game': game,
-            'team1_code': team1_code,
-            'team2_code': team2_code,
-            'year': year,
-            'difference': diff
+            'winner': winner,
+            'winner_score': winner_score,
+            'loser': loser,
+            'loser_score': loser_score,
+            'difference': diff,
+            'year': year or 'Unknown',
+            'tournament': year_obj.name if year_obj else 'Unknown',
+            'rank': 0
         })
     
-    # Sortiere nach Differenz
     game_diffs.sort(key=lambda x: x['difference'], reverse=True)
     
     if not game_diffs:
         return []
     
-    max_diff = game_diffs[0]['difference']
-    results = []
+    top_3_results = []
+    current_rank = 1
+    last_diff = None
     
     for game_diff in game_diffs:
-        if game_diff['difference'] == max_diff:
-            game = game_diff['game']
-            team1_code = game_diff['team1_code']
-            team2_code = game_diff['team2_code']
-            year = game_diff['year']
-            
-            if game.team1_score > game.team2_score:
-                winner = team1_code
-                winner_score = game.team1_score
-                loser = team2_code
-                loser_score = game.team2_score
-            else:
-                winner = team2_code
-                winner_score = game.team2_score
-                loser = team1_code
-                loser_score = game.team1_score
-            
-            year_obj = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
-            results.append({
-                'winner': winner,
-                'winner_score': winner_score,
-                'loser': loser,
-                'loser_score': loser_score,
-                'difference': game_diff['difference'],
-                'year': year or 'Unknown',
-                'tournament': year_obj.name if year_obj else 'Unknown'
-            })
+        if last_diff is None or game_diff['difference'] != last_diff:
+            if len(top_3_results) >= 3:
+                break
+            if current_rank > 3:
+                break
+            game_diff['rank'] = current_rank
+            last_diff = game_diff['difference']
+            current_rank += 1
         else:
-            break
+            game_diff['rank'] = current_rank - 1
+        
+        if game_diff['rank'] <= 3:
+            top_3_results.append(game_diff)
     
-    return results
+    return top_3_results
 
 def get_most_goals_game():
-    """Findet das Spiel mit den meisten Toren"""
+    """Findet die TOP 3 Spiele mit den meisten Toren"""
     resolved_games = get_all_resolved_games()
     
     if not resolved_games:
         return []
     
-    # Berechne Gesamttore
     game_totals = []
     for resolved_game in resolved_games:
         game = resolved_game['game']
@@ -768,57 +722,55 @@ def get_most_goals_game():
         year = resolved_game['year']
         
         total_goals = game.team1_score + game.team2_score
+        year_obj = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
+        
         game_totals.append({
-            'game': game,
-            'team1_code': team1_code,
-            'team2_code': team2_code,
-            'year': year,
-            'total_goals': total_goals
+            'team1': team1_code,
+            'team1_score': game.team1_score,
+            'team2': team2_code,
+            'team2_score': game.team2_score,
+            'total_goals': total_goals,
+            'year': year or 'Unknown',
+            'tournament': year_obj.name if year_obj else 'Unknown',
+            'rank': 0
         })
     
-    # Sortiere nach Gesamttoren
     game_totals.sort(key=lambda x: x['total_goals'], reverse=True)
     
     if not game_totals:
         return []
     
-    max_goals = game_totals[0]['total_goals']
-    results = []
+    top_3_results = []
+    current_rank = 1
+    last_goals = None
     
     for game_total in game_totals:
-        if game_total['total_goals'] == max_goals:
-            game = game_total['game']
-            team1_code = game_total['team1_code']
-            team2_code = game_total['team2_code']
-            year = game_total['year']
-            
-            year_obj = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
-            results.append({
-                'team1': team1_code,
-                'team1_score': game.team1_score,
-                'team2': team2_code,
-                'team2_score': game.team2_score,
-                'total_goals': game_total['total_goals'],
-                'year': year or 'Unknown',
-                'tournament': year_obj.name if year_obj else 'Unknown'
-            })
+        if last_goals is None or game_total['total_goals'] != last_goals:
+            if len(top_3_results) >= 3:
+                break
+            if current_rank > 3:
+                break
+            game_total['rank'] = current_rank
+            last_goals = game_total['total_goals']
+            current_rank += 1
         else:
-            break
+            game_total['rank'] = current_rank - 1
+        
+        if game_total['rank'] <= 3:
+            top_3_results.append(game_total)
     
-    return results
+    return top_3_results
 
 def get_fastest_goal():
     """Findet die TOP 3 schnellsten Tore (basierend auf Minute)"""
     def parse_minute(minute_str):
         if not minute_str:
             return 999
-        # Extrahiere Zahlen aus Strings wie "1:23", "12:34", "0:45"
         match = re.match(r'(\d+):(\d+)', minute_str)
         if match:
             minutes = int(match.group(1))
             seconds = int(match.group(2))
             return minutes * 60 + seconds
-        # Falls nur Minuten angegeben sind
         try:
             return int(minute_str) * 60
         except:
@@ -826,7 +778,6 @@ def get_fastest_goal():
     
     goals = db.session.query(Goal).join(Player, Goal.scorer_id == Player.id).all()
     
-    # Erstelle Liste mit allen Toren und deren Zeiten
     goal_times = []
     for goal in goals:
         time_seconds = parse_minute(goal.minute)
@@ -844,10 +795,8 @@ def get_fastest_goal():
             'rank': 0
         })
     
-    # Sortiere nach Zeit
     goal_times.sort(key=lambda x: x['time_seconds'])
     
-    # Bestimme TOP 3 einzigartige Zeiten
     top_3_results = []
     current_rank = 1
     last_time = None
@@ -860,7 +809,7 @@ def get_fastest_goal():
             last_time = goal_time['time_seconds']
             current_rank += 1
         else:
-            goal_time['rank'] = current_rank - 1  # Gleiche Zeit = gleicher Rang
+            goal_time['rank'] = current_rank - 1
         
         if goal_time['rank'] <= 3:
             top_3_results.append(goal_time)
@@ -869,7 +818,6 @@ def get_fastest_goal():
 
 def get_fastest_hattrick():
     """Findet die TOP 3 schnellsten Hattricks"""
-    # Gruppiere Tore nach Spieler und Spiel
     goals = db.session.query(Goal).join(Player, Goal.scorer_id == Player.id).order_by(Goal.game_id, Goal.scorer_id, Goal.minute).all()
     
     player_game_goals = defaultdict(list)
@@ -899,11 +847,9 @@ def get_fastest_hattrick():
         return f"{minutes}:{seconds:02d}"
     
     for (player_id, game_id), game_goals in player_game_goals.items():
-        if len(game_goals) >= 3:  # Mindestens Hattrick
-            # Sortiere nach Zeit
+        if len(game_goals) >= 3:
             game_goals.sort(key=lambda g: parse_minute(g.minute))
             
-            # Berechne Dauer des Hattricks (1. bis 3. Tor)
             first_goal_time = parse_minute(game_goals[0].minute)
             third_goal_time = parse_minute(game_goals[2].minute)
             duration = third_goal_time - first_goal_time
@@ -926,10 +872,8 @@ def get_fastest_hattrick():
                 'rank': 0
             })
     
-    # Sortiere nach Dauer
     all_hattricks.sort(key=lambda x: x['duration_seconds'])
     
-    # Bestimme TOP 3 einzigartige Dauern
     top_3_results = []
     current_rank = 1
     last_duration = None
@@ -942,7 +886,7 @@ def get_fastest_hattrick():
             last_duration = hattrick['duration_seconds']
             current_rank += 1
         else:
-            hattrick['rank'] = current_rank - 1  # Gleiche Dauer = gleicher Rang
+            hattrick['rank'] = current_rank - 1
         
         if hattrick['rank'] <= 3:
             top_3_results.append(hattrick)
@@ -953,7 +897,6 @@ def get_most_consecutive_tournament_wins():
     """Findet die meisten Turniersiege in Folge basierend auf Gold Medal Game Gewinnern"""
     resolved_games = get_all_resolved_games()
     
-    # Sammle alle Gold Medal Game Gewinner chronologisch
     tournament_winners = []
     year_winners = {}
     
@@ -963,30 +906,23 @@ def get_most_consecutive_tournament_wins():
         team2_code = resolved_game['team2_code']
         year = resolved_game['year']
         
-        # Prüfe ob es ein Final ist (Gold Medal Game)
-        if (game.round and 
-            game.round == 'Gold Medal Game' and
-            game.team1_score is not None and 
-            game.team2_score is not None):
+        if (game.round and game.round == 'Gold Medal Game' and
+            game.team1_score is not None and game.team2_score is not None):
             
-            # Nur zählen wenn beide Teams finale Team-Codes haben
             if (is_code_final(team1_code) and is_code_final(team2_code) and
                 team1_code != team2_code and year):
                 
-                # Bestimme den Gewinner
                 if game.team1_score > game.team2_score:
                     winner = team1_code
                 elif game.team2_score > game.team1_score:
                     winner = team2_code
                 else:
-                    continue  # Unentschieden ignorieren
+                    continue
                 
                 year_winners[year] = winner
     
-    # Sortiere nach Jahren
     sorted_years = sorted(year_winners.keys())
     
-    # Berechne aufeinanderfolgende Siege
     team_current_streak = defaultdict(int)
     team_current_years = defaultdict(list)
     team_max_streak = defaultdict(int)
@@ -995,17 +931,14 @@ def get_most_consecutive_tournament_wins():
     for year in sorted_years:
         winner = year_winners[year]
         
-        # Setze alle anderen Teams zurück
         for team in team_current_streak:
             if team != winner:
                 team_current_streak[team] = 0
                 team_current_years[team] = []
         
-        # Erhöhe Streak für aktuellen Gewinner
         team_current_streak[winner] += 1
         team_current_years[winner].append(year)
         
-        # Prüfe ob neuer Rekord
         if team_current_streak[winner] > team_max_streak[winner]:
             team_max_streak[winner] = team_current_streak[winner]
             team_max_streak_years[winner] = team_current_years[winner][:]
@@ -1013,7 +946,6 @@ def get_most_consecutive_tournament_wins():
     if not team_max_streak:
         return []
     
-    # Finde das Maximum
     max_streak = max(team_max_streak.values())
     results = []
     
@@ -1034,23 +966,17 @@ def get_most_final_appearances():
     team_final_appearances = defaultdict(int)
     team_final_years = defaultdict(list)
     
-    # Suche nach Gold Medal Games (Finals) in allen aufgelösten Spielen
     for resolved_game in resolved_games:
         game = resolved_game['game']
         team1_code = resolved_game['team1_code']
         team2_code = resolved_game['team2_code']
         year = resolved_game['year']
         
-        # Prüfe ob es ein Final ist (Gold Medal Game)
-        if (game.round and 
-            game.round == 'Gold Medal Game' and
-            game.team1_score is not None and 
-            game.team2_score is not None):
+        if (game.round and game.round == 'Gold Medal Game' and
+            game.team1_score is not None and game.team2_score is not None):
             
-            # Nur zählen wenn beide Teams finale Team-Codes haben (nicht Platzhalter)
-            # und das Spiel tatsächlich gespielt wurde
             if (is_code_final(team1_code) and is_code_final(team2_code) and
-                team1_code != team2_code):  # Verhindere Duplikate
+                team1_code != team2_code):
                 
                 team_final_appearances[team1_code] += 1
                 team_final_appearances[team2_code] += 1
@@ -1082,31 +1008,24 @@ def get_record_champion():
     team_championships = defaultdict(int)
     team_championship_years = defaultdict(list)
     
-    # Suche nach Gold Medal Games (Finals) in allen aufgelösten Spielen
     for resolved_game in resolved_games:
         game = resolved_game['game']
         team1_code = resolved_game['team1_code']
         team2_code = resolved_game['team2_code']
         year = resolved_game['year']
         
-        # Prüfe ob es ein Final ist (Gold Medal Game)
-        if (game.round and 
-            game.round == 'Gold Medal Game' and
-            game.team1_score is not None and 
-            game.team2_score is not None):
+        if (game.round and game.round == 'Gold Medal Game' and
+            game.team1_score is not None and game.team2_score is not None):
             
-            # Nur zählen wenn beide Teams finale Team-Codes haben (nicht Platzhalter)
-            # und das Spiel tatsächlich gespielt wurde
             if (is_code_final(team1_code) and is_code_final(team2_code) and
-                team1_code != team2_code):  # Verhindere Duplikate
+                team1_code != team2_code):
                 
-                # Bestimme den Gewinner
                 if game.team1_score > game.team2_score:
                     winner = team1_code
                 elif game.team2_score > game.team1_score:
                     winner = team2_code
                 else:
-                    continue  # Unentschieden ignorieren (sollte in Finals nicht vorkommen)
+                    continue
                 
                 team_championships[winner] += 1
                 if year:
@@ -1133,7 +1052,6 @@ def get_tournament_with_most_goals():
     """Turnier mit den meisten Toren - nur beendete Turniere"""
     from routes.main_routes import get_tournament_statistics
     
-    # Zuerst nur beendete Turniere ermitteln
     all_years = db.session.query(ChampionshipYear).all()
     completed_years = []
     
@@ -1147,7 +1065,6 @@ def get_tournament_with_most_goals():
     if not completed_years:
         return []
     
-    # Berechne Tore nur für beendete Turniere
     tournament_goals = db.session.query(
         ChampionshipYear,
         func.sum(Game.team1_score + Game.team2_score).label('total_goals'),
@@ -1182,7 +1099,6 @@ def get_tournament_with_least_goals():
     """Turnier mit den wenigsten Toren - nur beendete Turniere"""
     from routes.main_routes import get_tournament_statistics
     
-    # Zuerst nur beendete Turniere ermitteln
     all_years = db.session.query(ChampionshipYear).all()
     completed_years = []
     
@@ -1196,7 +1112,6 @@ def get_tournament_with_least_goals():
     if not completed_years:
         return []
     
-    # Berechne Tore nur für beendete Turniere
     tournament_goals = db.session.query(
         ChampionshipYear,
         func.sum(Game.team1_score + Game.team2_score).label('total_goals'),
@@ -1231,7 +1146,6 @@ def get_most_goals_team_tournament():
     """Meiste Tore eines Teams in einem Turnier"""
     resolved_games = get_all_resolved_games()
     
-    # Berechnung mit aufgelösten Team-Codes und Jahr-Objekten für echte Turniernamen
     team_goals_by_tournament = defaultdict(lambda: defaultdict(int))
     year_objects = {year.year: year for year in ChampionshipYear.query.all()}
     
@@ -1277,7 +1191,6 @@ def get_fewest_goals_against_tournament():
     """Wenigste Gegentore eines Teams in einem Turnier - nur beendete Turniere"""
     from routes.main_routes import get_tournament_statistics
     
-    # Zuerst nur beendete Turniere ermitteln
     all_years = db.session.query(ChampionshipYear).all()
     completed_years = []
     
@@ -1293,7 +1206,6 @@ def get_fewest_goals_against_tournament():
     
     team_goals_against_by_tournament = defaultdict(lambda: defaultdict(int))
     
-    # Verwende aufgelöste Spiele statt ursprüngliche Team-Codes
     resolved_games = get_all_resolved_games()
     
     for resolved_game in resolved_games:
@@ -1302,7 +1214,6 @@ def get_fewest_goals_against_tournament():
         team2_code = resolved_game['team2_code']
         year = resolved_game['year']
         
-        # Nur beendete Turniere berücksichtigen
         year_obj = next((y for y in completed_years if y.year == year), None)
         if year_obj and is_code_final(team1_code) and is_code_final(team2_code):
             team_goals_against_by_tournament[year_obj.id][team1_code] += game.team2_score
@@ -1347,9 +1258,9 @@ def get_most_shutouts_tournament():
         
         if year and is_code_final(team1_code) and is_code_final(team2_code):
             year_key = f"{year}"
-            if game.team2_score == 0:  # Team1 hat Shutout
+            if game.team2_score == 0:
                 team_shutouts_by_tournament[year_key][team1_code] += 1
-            if game.team1_score == 0:  # Team2 hat Shutout
+            if game.team1_score == 0:
                 team_shutouts_by_tournament[year_key][team2_code] += 1
     
     max_shutouts = 0
@@ -1388,10 +1299,8 @@ def get_most_scorers_tournament():
         goals = db.session.query(Goal).join(Game).filter(Game.year_id == year.id).all()
         
         for goal in goals:
-            # Tor = 1 Punkt
             player_points_by_tournament[year.id][goal.scorer_id] += 1
             
-            # Assists = 1 Punkt jeweils
             if goal.assist1_id:
                 player_points_by_tournament[year.id][goal.assist1_id] += 1
             if goal.assist2_id:
@@ -1515,7 +1424,6 @@ def get_most_penalty_minutes_tournament():
         
         for penalty in penalties:
             if penalty.player_id:
-                # Verwende die korrekte PIM_MAP aus constants.py
                 minutes = PIM_MAP.get(penalty.penalty_type, 0)
                 player_pim_by_tournament[year.id][penalty.player_id] += minutes
     

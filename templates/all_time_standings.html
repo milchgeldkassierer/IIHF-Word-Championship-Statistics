@@ -127,6 +127,7 @@
                         <th scope="col" class="sortable" data-column="l" title="Losses (Regulation)">L</th>
                         <th scope="col" class="sortable" data-column="otl" title="Overtime Losses">OTL</th>
                         <th scope="col" class="sortable" data-column="sol" title="Shootout Losses">SOL</th>
+                        <th scope="col" class="sortable" data-column="win_pct" title="Winning Percentage">Win%</th>
                         <th scope="col" class="sortable" data-column="gf" title="Goals For">GF</th>
                         <th scope="col" class="sortable" data-column="ga" title="Goals Against">GA</th>
                         <th scope="col" class="sortable" data-column="gd" title="Goal Difference">GD</th>
@@ -155,6 +156,8 @@
                         <td data-value="{{ stat_entry.l }}">{{ stat_entry.l }}</td>
                         <td data-value="{{ stat_entry.otl }}">{{ stat_entry.otl }}</td>
                         <td data-value="{{ stat_entry.sol }}">{{ stat_entry.sol }}</td>
+                        {% set win_pct = ((stat_entry.w + stat_entry.otw + stat_entry.sow) / stat_entry.gp * 100) if stat_entry.gp > 0 else 0 %}
+                        <td data-value="{{ win_pct }}">{{ "%.1f"|format(win_pct) }}%</td>
                         <td data-value="{{ stat_entry.gf }}">{{ stat_entry.gf }}</td>
                         <td data-value="{{ stat_entry.ga }}">{{ stat_entry.ga }}</td>
                         <td data-value="{{ stat_entry.gd }}">{{ stat_entry.gd }}</td>
@@ -221,10 +224,11 @@ $(document).ready(function() {
                 'l': 8,        // 9th column
                 'otl': 9,      // 10th column
                 'sol': 10,     // 11th column
-                'gf': 11,      // 12th column
-                'ga': 12,      // 13th column
-                'gd': 13,      // 14th column
-                'pts': 14      // 15th column
+                'win_pct': 11, // 12th column
+                'gf': 12,      // 13th column
+                'ga': 13,      // 14th column
+                'gd': 14,      // 15th column
+                'pts': 15      // 16th column
             };
             
             const columnIndex = columnMap[column];
