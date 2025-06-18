@@ -28,7 +28,7 @@
                             {% for streak in longest_win_streak %}
                                 <div class="record-item">
                                     {% if team_iso_codes[streak.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[streak.team] }}.png" alt="{{ streak.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
-                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Siege in Folge<br>
+                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Spiele ohne Niederlage<br>
                                     {% if streak.start_date and streak.end_date %}
                                         <small class="text-muted">{{ streak.start_date }}{% if streak.start_date != streak.end_date %} - {{ streak.end_date }}{% endif %}</small>
                                     {% endif %}
@@ -52,7 +52,7 @@
                             {% for streak in longest_loss_streak %}
                                 <div class="record-item">
                                     {% if team_iso_codes[streak.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[streak.team] }}.png" alt="{{ streak.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
-                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Niederlagen in Folge<br>
+                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Spiele ohne Sieg<br>
                                     {% if streak.start_date and streak.end_date %}
                                         <small class="text-muted">{{ streak.start_date }}{% if streak.start_date != streak.end_date %} - {{ streak.end_date }}{% endif %}</small>
                                     {% endif %}
@@ -76,7 +76,7 @@
                             {% for streak in longest_scoring_streak %}
                                 <div class="record-item">
                                     {% if team_iso_codes[streak.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[streak.team] }}.png" alt="{{ streak.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
-                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Spiele mit Tor<br>
+                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Spiele mit eigenem Torerfolg<br>
                                     {% if streak.start_date and streak.end_date %}
                                         <small class="text-muted">{{ streak.start_date }}{% if streak.start_date != streak.end_date %} - {{ streak.end_date }}{% endif %}</small>
                                     {% endif %}
@@ -124,7 +124,7 @@
                             {% for streak in longest_goalless_streak %}
                                 <div class="record-item">
                                     {% if team_iso_codes[streak.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[streak.team] }}.png" alt="{{ streak.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
-                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Spiele ohne Tor<br>
+                                    <strong>{{ streak.team }}</strong>: {{ streak.streak }} Spiele ohne eigenes Tor<br>
                                     {% if streak.start_date and streak.end_date %}
                                         <small class="text-muted">{{ streak.start_date }}{% if streak.start_date != streak.end_date %} - {{ streak.end_date }}{% endif %}</small>
                                     {% endif %}

@@ -483,16 +483,149 @@ def year_view(year_id):
             potential_teams.add(p_obj.team_code.upper())
     unique_teams_in_year = sorted(list(potential_teams))
 
-    # Build team_combinations_with_games dictionary for VS button logic
+    # Build team_combinations_with_games dictionary for VS button logic (including resolved playoff teams)
     team_combinations_with_games = {}
+    
+    # Get all years to build year-specific playoff maps
+    all_years = ChampionshipYear.query.all()
+    playoff_maps_by_year = {}
+    
+    for year_item in all_years:
+        current_playoff_map = {}
+        if year_item.fixture_path:
+            absolute_fixture_path = resolve_fixture_path(year_item.fixture_path)
+            if absolute_fixture_path and os.path.exists(absolute_fixture_path):
+                try:
+                    with open(absolute_fixture_path, 'r', encoding='utf-8') as f:
+                        fixture_data = json.load(f)
+                    
+                    # Get all games for this year to use in playoff resolution
+                    year_games = Game.query.filter_by(year_id=year_item.id).all()
+                    year_games_dict = {g.game_number: g for g in year_games}
+                    
+                    # Build playoff map using similar logic as in the main function
+                    # First handle group rankings (A1, A2, etc.)
+                    year_prelim_games = [g for g in year_games if g.round == 'Preliminary Round' and g.group]
+                    year_unique_teams_in_prelim_groups = set()
+                    for g in year_prelim_games:
+                        if g.team1_code and g.group: 
+                            year_unique_teams_in_prelim_groups.add((g.team1_code, g.group))
+                        if g.team2_code and g.group: 
+                            year_unique_teams_in_prelim_groups.add((g.team2_code, g.group))
+
+                    year_teams_stats = {}
+                    for team_code, group_name in year_unique_teams_in_prelim_groups:
+                        if team_code not in year_teams_stats: 
+                            year_teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
+
+                    for g in [pg for pg in year_prelim_games if pg.team1_score is not None]: 
+                        for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
+                                                                (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
+                            stats = year_teams_stats.setdefault(code, TeamStats(name=code, group=grp))
+                            
+                            if stats.group == grp: 
+                                stats.gp += 1
+                                stats.gf += gf
+                                stats.ga += ga
+                                stats.pts += pts
+                                if res == 'REG':
+                                    stats.w += 1 if gf > ga else 0
+                                    stats.l += 1 if ga > gf else 0 
+                                elif res == 'OT':
+                                    stats.otw += 1 if gf > ga else 0
+                                    stats.otl += 1 if ga > gf else 0
+                                elif res == 'SO':
+                                    stats.sow += 1 if gf > ga else 0
+                                    stats.sol += 1 if ga > gf else 0
+                    
+                    # Create standings and map group positions
+                    year_standings_by_group = {}
+                    if year_teams_stats:
+                        group_full_names = sorted(list(set(s.group for s in year_teams_stats.values() if s.group))) 
+                        for full_group_name_key in group_full_names: 
+                            current_group_teams = sorted(
+                                [s for s in year_teams_stats.values() if s.group == full_group_name_key],
+                                key=lambda x: (x.pts, x.gd, x.gf),
+                                reverse=True
+                            )
+                            current_group_teams = _apply_head_to_head_tiebreaker(current_group_teams, year_prelim_games)
+                            year_standings_by_group[full_group_name_key] = current_group_teams
+                    
+                    # Map group positions (A1, A2, etc.)
+                    for group_display_name, group_standings_list in year_standings_by_group.items():
+                        group_letter_match = re.match(r"Group ([A-D])", group_display_name) 
+                        if group_letter_match:
+                            group_letter = group_letter_match.group(1)
+                            for i, s_team_obj in enumerate(group_standings_list): 
+                                current_playoff_map[f'{group_letter}{i+1}'] = s_team_obj.name
+                    
+                    # Now resolve W(game_number) placeholders
+                    max_iterations = 10  # Prevent infinite loops
+                    for iteration in range(max_iterations):
+                        changes_made = False
+                        schedule_data = fixture_data.get("schedule", [])
+                        for game_data in schedule_data:
+                            team1_code = game_data.get('team1_code', '')
+                            team2_code = game_data.get('team2_code', '')
+                            game_number = game_data.get('gameNumber')
+                            
+                            # Resolve W(game_number) or L(game_number) placeholders
+                            for team_code in [team1_code, team2_code]:
+                                if (team_code.startswith('W(') or team_code.startswith('L(')) and team_code.endswith(')'):
+                                    if team_code not in current_playoff_map:
+                                        # Extract the dependency game number
+                                        dependency_str = team_code[2:-1]  # Remove W( or L( and )
+                                        if dependency_str.isdigit():
+                                            dependency_game_num = int(dependency_str)
+                                            dependency_game = year_games_dict.get(dependency_game_num)
+                                            
+                                            if dependency_game and dependency_game.team1_score is not None and dependency_game.team2_score is not None:
+                                                # Determine winner/loser
+                                                if dependency_game.team1_score > dependency_game.team2_score:
+                                                    winner_code = dependency_game.team1_code
+                                                    loser_code = dependency_game.team2_code
+                                                else:
+                                                    winner_code = dependency_game.team2_code
+                                                    loser_code = dependency_game.team1_code
+                                                
+                                                # Resolve the winner/loser code if it's also a placeholder
+                                                resolved_winner = current_playoff_map.get(winner_code, winner_code)
+                                                resolved_loser = current_playoff_map.get(loser_code, loser_code)
+                                                
+                                                # Only add if we can resolve to actual team names
+                                                if team_code.startswith('W(') and TEAM_ISO_CODES.get(resolved_winner.upper()):
+                                                    current_playoff_map[team_code] = resolved_winner
+                                                    changes_made = True
+                                                elif team_code.startswith('L(') and TEAM_ISO_CODES.get(resolved_loser.upper()):
+                                                    current_playoff_map[team_code] = resolved_loser
+                                                    changes_made = True
+                        
+                        if not changes_made:
+                            break  # No more changes possible
+                            
+                except Exception as e:
+                    current_app.logger.warning(f"Error processing playoff map for year {year_item.id}: {e}")
+                    pass
+        
+        playoff_maps_by_year[year_item.id] = current_playoff_map
+    
+    # Now process all games with their respective playoff maps
     all_games_across_years = Game.query.filter(
         Game.team1_score.isnot(None), 
         Game.team2_score.isnot(None)
     ).all()
     
     for game in all_games_across_years:
-        if (TEAM_ISO_CODES.get(game.team1_code.upper()) and TEAM_ISO_CODES.get(game.team2_code.upper())):
-            team_pair_sorted = sorted([game.team1_code, game.team2_code])
+        # Get the playoff map for this game's year
+        game_playoff_map = playoff_maps_by_year.get(game.year_id, {})
+        
+        # Resolve team codes using the playoff map
+        resolved_team1 = game_playoff_map.get(game.team1_code, game.team1_code)
+        resolved_team2 = game_playoff_map.get(game.team2_code, game.team2_code)
+        
+        # Only add if both resolved teams are actual teams (not placeholders)
+        if (TEAM_ISO_CODES.get(resolved_team1.upper()) and TEAM_ISO_CODES.get(resolved_team2.upper())):
+            team_pair_sorted = sorted([resolved_team1, resolved_team2])
             team_pair_key = f"{team_pair_sorted[0]}_vs_{team_pair_sorted[1]}"
             team_combinations_with_games[team_pair_key] = True
 

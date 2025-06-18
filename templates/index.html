@@ -67,6 +67,12 @@
         color: #fbb040 !important;
     }
     
+    body.dark-mode .alert-info {
+        background-color: #2d3748;
+        border-color: #4a5568;
+        color: #e2e8f0;
+    }
+    
     .tournament-stats {
         min-width: 120px;
         text-align: right;
@@ -109,6 +115,24 @@
     <div class="col-md-6">
         <div class="stats-section">
             <h2 class="stats-title">Vorhandene Turniere</h2>
+            
+            <!-- Gesamtstatistiken -->
+            {% if overall_summary and overall_summary.total_tournaments > 0 %}
+            <div class="alert alert-info mb-3">
+                <h6 class="mb-2"><strong>📊 Gesamtstatistiken aller Turniere</strong></h6>
+                <div class="row">
+                    <div class="col-sm-6">
+                        <small><strong>{{ overall_summary.total_tournaments }}</strong> Turniere angelegt</small><br>
+                        <small><strong>{{ overall_summary.completed_games }}/{{ overall_summary.total_games }}</strong> Spiele eingetragen ({{ overall_summary.completion_percentage }}%)</small>
+                    </div>
+                    <div class="col-sm-6">
+                        <small><strong>{{ overall_summary.total_goals }}</strong> Tore geschossen</small><br>
+                        <small><strong>{{ overall_summary.total_penalties }}</strong> Penalties vergeben</small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
             {% if all_years %}
                 <ul class="list-group">
                     {% for y in all_years %}                    <li class="list-group-item d-flex justify-content-between align-items-center">

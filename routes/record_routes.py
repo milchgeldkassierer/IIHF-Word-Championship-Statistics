@@ -388,24 +388,52 @@ def get_longest_win_streak():
             team_streak_start[loser] = None
             team_streak_end[loser] = None
             
-            if not max_streaks or team_streaks[winner] > max_streaks[0]['streak']:
-                max_streaks = [{
-                    'team': winner, 
-                    'streak': team_streaks[winner],
-                    'start_date': team_streak_start[winner],
-                    'end_date': team_streak_end[winner]
-                }]
-            elif team_streaks[winner] == max_streaks[0]['streak']:
-                new_record = {
-                    'team': winner, 
-                    'streak': team_streaks[winner],
-                    'start_date': team_streak_start[winner],
-                    'end_date': team_streak_end[winner]
-                }
-                if new_record not in max_streaks:
-                    max_streaks.append(new_record)
+            # Sammle alle Streaks für spätere Top 3 Auswertung
+            current_record = {
+                'team': winner, 
+                'streak': team_streaks[winner],
+                'start_date': team_streak_start[winner],
+                'end_date': team_streak_end[winner],
+                'rank': 0
+            }
+            
+            # Prüfe ob bereits eine Serie für dieses Team und Startdatum existiert
+            record_exists = False
+            for i, existing in enumerate(max_streaks):
+                if (existing['team'] == winner and 
+                    existing['start_date'] == team_streak_start[winner]):
+                    # Ersetze mit längerer Serie
+                    if team_streaks[winner] > existing['streak']:
+                        max_streaks[i] = current_record
+                    record_exists = True
+                    break
+            
+            if not record_exists:
+                max_streaks.append(current_record)
     
-    return max_streaks
+    # Sortiere nach Streak-Länge und bestimme Top 3
+    max_streaks.sort(key=lambda x: x['streak'], reverse=True)
+    
+    top_3_results = []
+    current_rank = 1
+    last_streak = None
+    
+    for streak_record in max_streaks:
+        if last_streak is None or streak_record['streak'] != last_streak:
+            if len(top_3_results) >= 3:
+                break
+            if current_rank > 3:
+                break
+            streak_record['rank'] = current_rank
+            last_streak = streak_record['streak']
+            current_rank += 1
+        else:
+            streak_record['rank'] = current_rank - 1
+        
+        if streak_record['rank'] <= 3:
+            top_3_results.append(streak_record)
+    
+    return top_3_results
 
 def get_longest_loss_streak():
     """Berechnet die längste Niederlagenserie über alle Turniere"""
@@ -446,24 +474,52 @@ def get_longest_loss_streak():
             team_streak_start[winner] = None
             team_streak_end[winner] = None
             
-            if not max_streaks or team_streaks[loser] > max_streaks[0]['streak']:
-                max_streaks = [{
-                    'team': loser, 
-                    'streak': team_streaks[loser],
-                    'start_date': team_streak_start[loser],
-                    'end_date': team_streak_end[loser]
-                }]
-            elif team_streaks[loser] == max_streaks[0]['streak']:
-                new_record = {
-                    'team': loser, 
-                    'streak': team_streaks[loser],
-                    'start_date': team_streak_start[loser],
-                    'end_date': team_streak_end[loser]
-                }
-                if new_record not in max_streaks:
-                    max_streaks.append(new_record)
+            # Sammle alle Streaks für spätere Top 3 Auswertung
+            current_record = {
+                'team': loser, 
+                'streak': team_streaks[loser],
+                'start_date': team_streak_start[loser],
+                'end_date': team_streak_end[loser],
+                'rank': 0
+            }
+            
+            # Prüfe ob bereits eine Serie für dieses Team und Startdatum existiert
+            record_exists = False
+            for i, existing in enumerate(max_streaks):
+                if (existing['team'] == loser and 
+                    existing['start_date'] == team_streak_start[loser]):
+                    # Ersetze mit längerer Serie
+                    if team_streaks[loser] > existing['streak']:
+                        max_streaks[i] = current_record
+                    record_exists = True
+                    break
+            
+            if not record_exists:
+                max_streaks.append(current_record)
     
-    return max_streaks
+    # Sortiere nach Streak-Länge und bestimme Top 3
+    max_streaks.sort(key=lambda x: x['streak'], reverse=True)
+    
+    top_3_results = []
+    current_rank = 1
+    last_streak = None
+    
+    for streak_record in max_streaks:
+        if last_streak is None or streak_record['streak'] != last_streak:
+            if len(top_3_results) >= 3:
+                break
+            if current_rank > 3:
+                break
+            streak_record['rank'] = current_rank
+            last_streak = streak_record['streak']
+            current_rank += 1
+        else:
+            streak_record['rank'] = current_rank - 1
+        
+        if streak_record['rank'] <= 3:
+            top_3_results.append(streak_record)
+    
+    return top_3_results
 
 def get_longest_scoring_streak():
     """Berechnet die längste Serie mit mindestens 1 Tor"""
@@ -505,24 +561,53 @@ def get_longest_scoring_streak():
             team_streak_end[team2_code] = None
         
         for team in [team1_code, team2_code]:
-            if not max_streaks or team_streaks[team] > max_streaks[0]['streak']:
-                max_streaks = [{
+            if team_streaks[team] > 0:
+                # Sammle alle Streaks für spätere Top 3 Auswertung
+                current_record = {
                     'team': team, 
                     'streak': team_streaks[team],
                     'start_date': team_streak_start[team],
-                    'end_date': team_streak_end[team]
-                }]
-            elif team_streaks[team] == max_streaks[0]['streak'] and team_streaks[team] > 0:
-                new_record = {
-                    'team': team, 
-                    'streak': team_streaks[team],
-                    'start_date': team_streak_start[team],
-                    'end_date': team_streak_end[team]
+                    'end_date': team_streak_end[team],
+                    'rank': 0
                 }
-                if new_record not in max_streaks:
-                    max_streaks.append(new_record)
+                
+                # Prüfe ob bereits eine Serie für dieses Team und Startdatum existiert
+                record_exists = False
+                for i, existing in enumerate(max_streaks):
+                    if (existing['team'] == team and 
+                        existing['start_date'] == team_streak_start[team]):
+                        # Ersetze mit längerer Serie
+                        if team_streaks[team] > existing['streak']:
+                            max_streaks[i] = current_record
+                        record_exists = True
+                        break
+                
+                if not record_exists:
+                    max_streaks.append(current_record)
     
-    return max_streaks
+    # Sortiere nach Streak-Länge und bestimme Top 3
+    max_streaks.sort(key=lambda x: x['streak'], reverse=True)
+    
+    top_3_results = []
+    current_rank = 1
+    last_streak = None
+    
+    for streak_record in max_streaks:
+        if last_streak is None or streak_record['streak'] != last_streak:
+            if len(top_3_results) >= 3:
+                break
+            if current_rank > 3:
+                break
+            streak_record['rank'] = current_rank
+            last_streak = streak_record['streak']
+            current_rank += 1
+        else:
+            streak_record['rank'] = current_rank - 1
+        
+        if streak_record['rank'] <= 3:
+            top_3_results.append(streak_record)
+    
+    return top_3_results
 
 def get_longest_shutout_streak():
     """Berechnet die längste Serie ohne Gegentor"""
@@ -564,24 +649,53 @@ def get_longest_shutout_streak():
             team_streak_end[team2_code] = None
         
         for team in [team1_code, team2_code]:
-            if not max_streaks or team_streaks[team] > max_streaks[0]['streak']:
-                max_streaks = [{
+            if team_streaks[team] > 0:
+                # Sammle alle Streaks für spätere Top 3 Auswertung
+                current_record = {
                     'team': team, 
                     'streak': team_streaks[team],
                     'start_date': team_streak_start[team],
-                    'end_date': team_streak_end[team]
-                }]
-            elif team_streaks[team] == max_streaks[0]['streak'] and team_streaks[team] > 0:
-                new_record = {
-                    'team': team, 
-                    'streak': team_streaks[team],
-                    'start_date': team_streak_start[team],
-                    'end_date': team_streak_end[team]
+                    'end_date': team_streak_end[team],
+                    'rank': 0
                 }
-                if new_record not in max_streaks:
-                    max_streaks.append(new_record)
+                
+                # Prüfe ob bereits eine Serie für dieses Team und Startdatum existiert
+                record_exists = False
+                for i, existing in enumerate(max_streaks):
+                    if (existing['team'] == team and 
+                        existing['start_date'] == team_streak_start[team]):
+                        # Ersetze mit längerer Serie
+                        if team_streaks[team] > existing['streak']:
+                            max_streaks[i] = current_record
+                        record_exists = True
+                        break
+                
+                if not record_exists:
+                    max_streaks.append(current_record)
     
-    return max_streaks
+    # Sortiere nach Streak-Länge und bestimme Top 3
+    max_streaks.sort(key=lambda x: x['streak'], reverse=True)
+    
+    top_3_results = []
+    current_rank = 1
+    last_streak = None
+    
+    for streak_record in max_streaks:
+        if last_streak is None or streak_record['streak'] != last_streak:
+            if len(top_3_results) >= 3:
+                break
+            if current_rank > 3:
+                break
+            streak_record['rank'] = current_rank
+            last_streak = streak_record['streak']
+            current_rank += 1
+        else:
+            streak_record['rank'] = current_rank - 1
+        
+        if streak_record['rank'] <= 3:
+            top_3_results.append(streak_record)
+    
+    return top_3_results
 
 def get_longest_goalless_streak():
     """Berechnet die längste Serie ohne eigenes Tor"""
@@ -623,24 +737,53 @@ def get_longest_goalless_streak():
             team_streak_end[team2_code] = None
         
         for team in [team1_code, team2_code]:
-            if not max_streaks or team_streaks[team] > max_streaks[0]['streak']:
-                max_streaks = [{
+            if team_streaks[team] > 0:
+                # Sammle alle Streaks für spätere Top 3 Auswertung
+                current_record = {
                     'team': team, 
                     'streak': team_streaks[team],
                     'start_date': team_streak_start[team],
-                    'end_date': team_streak_end[team]
-                }]
-            elif team_streaks[team] == max_streaks[0]['streak'] and team_streaks[team] > 0:
-                new_record = {
-                    'team': team, 
-                    'streak': team_streaks[team],
-                    'start_date': team_streak_start[team],
-                    'end_date': team_streak_end[team]
+                    'end_date': team_streak_end[team],
+                    'rank': 0
                 }
-                if new_record not in max_streaks:
-                    max_streaks.append(new_record)
+                
+                # Prüfe ob bereits eine Serie für dieses Team und Startdatum existiert
+                record_exists = False
+                for i, existing in enumerate(max_streaks):
+                    if (existing['team'] == team and 
+                        existing['start_date'] == team_streak_start[team]):
+                        # Ersetze mit längerer Serie
+                        if team_streaks[team] > existing['streak']:
+                            max_streaks[i] = current_record
+                        record_exists = True
+                        break
+                
+                if not record_exists:
+                    max_streaks.append(current_record)
     
-    return max_streaks
+    # Sortiere nach Streak-Länge und bestimme Top 3
+    max_streaks.sort(key=lambda x: x['streak'], reverse=True)
+    
+    top_3_results = []
+    current_rank = 1
+    last_streak = None
+    
+    for streak_record in max_streaks:
+        if last_streak is None or streak_record['streak'] != last_streak:
+            if len(top_3_results) >= 3:
+                break
+            if current_rank > 3:
+                break
+            streak_record['rank'] = current_rank
+            last_streak = streak_record['streak']
+            current_rank += 1
+        else:
+            streak_record['rank'] = current_rank - 1
+        
+        if streak_record['rank'] <= 3:
+            top_3_results.append(streak_record)
+    
+    return top_3_results
 
 def get_highest_victory():
     """Findet die TOP 3 höchsten Siege (größte Tordifferenzen)"""
@@ -777,12 +920,31 @@ def get_fastest_goal():
             return 999
     
     goals = db.session.query(Goal).join(Player, Goal.scorer_id == Player.id).all()
+    resolved_games = get_all_resolved_games()
+    
+    # Erstelle ein Mapping von game_id zu aufgelösten Team-Codes
+    game_id_to_resolved = {}
+    for resolved_game in resolved_games:
+        game_id_to_resolved[resolved_game['game'].id] = {
+            'team1_code': resolved_game['team1_code'], 
+            'team2_code': resolved_game['team2_code']
+        }
     
     goal_times = []
     for goal in goals:
         time_seconds = parse_minute(goal.minute)
         game = db.session.query(Game).filter_by(id=goal.game_id).first()
         year = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first() if game else None
+        
+        # Verwende aufgelöste Team-Codes falls verfügbar
+        resolved_teams = game_id_to_resolved.get(goal.game_id)
+        if resolved_teams:
+            team1_code = resolved_teams['team1_code']
+            team2_code = resolved_teams['team2_code']
+            vs_team = team2_code if team1_code == goal.team_code else team1_code
+        else:
+            # Fallback auf ursprüngliche Logik
+            vs_team = game.team2_code if game and game.team1_code == goal.team_code else (game.team1_code if game else 'Unknown')
         
         goal_times.append({
             'player': f"{goal.scorer.first_name} {goal.scorer.last_name}",
@@ -791,7 +953,7 @@ def get_fastest_goal():
             'time_seconds': time_seconds,
             'year': year.year if year else 'Unknown',
             'tournament': year.name if year else 'Unknown',
-            'vs_team': game.team2_code if game and game.team1_code == goal.team_code else (game.team1_code if game else 'Unknown'),
+            'vs_team': vs_team,
             'rank': 0
         })
     
@@ -819,6 +981,15 @@ def get_fastest_goal():
 def get_fastest_hattrick():
     """Findet die TOP 3 schnellsten Hattricks"""
     goals = db.session.query(Goal).join(Player, Goal.scorer_id == Player.id).order_by(Goal.game_id, Goal.scorer_id, Goal.minute).all()
+    resolved_games = get_all_resolved_games()
+    
+    # Erstelle ein Mapping von game_id zu aufgelösten Team-Codes
+    game_id_to_resolved = {}
+    for resolved_game in resolved_games:
+        game_id_to_resolved[resolved_game['game'].id] = {
+            'team1_code': resolved_game['team1_code'], 
+            'team2_code': resolved_game['team2_code']
+        }
     
     player_game_goals = defaultdict(list)
     for goal in goals:
@@ -858,6 +1029,16 @@ def get_fastest_hattrick():
             game = db.session.query(Game).filter_by(id=game_id).first()
             year = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first() if game else None
             
+            # Verwende aufgelöste Team-Codes falls verfügbar
+            resolved_teams = game_id_to_resolved.get(game_id)
+            if resolved_teams:
+                team1_code = resolved_teams['team1_code']
+                team2_code = resolved_teams['team2_code']
+                vs_team = team2_code if team1_code == game_goals[0].team_code else team1_code
+            else:
+                # Fallback auf ursprüngliche Logik
+                vs_team = game.team2_code if game and game.team1_code == game_goals[0].team_code else (game.team1_code if game else 'Unknown')
+            
             all_hattricks.append({
                 'player': f"{player.first_name} {player.last_name}" if player else 'Unknown',
                 'team': game_goals[0].team_code,
@@ -868,7 +1049,7 @@ def get_fastest_hattrick():
                 'duration_formatted': format_duration(duration),
                 'year': year.year if year else 'Unknown',
                 'tournament': year.name if year else 'Unknown',
-                'vs_team': game.team2_code if game and game.team1_code == game_goals[0].team_code else (game.team1_code if game else 'Unknown'),
+                'vs_team': vs_team,
                 'rank': 0
             })
     

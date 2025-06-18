@@ -5,6 +5,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import db, ChampionshipYear, Game, AllTimeTeamStats, TeamStats, Player, Goal, Penalty
 from constants import TEAM_ISO_CODES, PRELIM_ROUNDS, PLAYOFF_ROUNDS, PIM_MAP
 from utils import get_resolved_team_code, is_code_final, resolve_game_participants, _apply_head_to_head_tiebreaker
+from tournament_summary import calculate_overall_tournament_summary, get_detailed_tournament_stats
 from sqlalchemy import func, case
 import traceback
 
@@ -493,8 +494,11 @@ def index():
 
     medal_data = get_medal_tally_data()
     medal_data_by_year = {medal_entry['year_obj'].year: medal_entry for medal_entry in medal_data}
+    
+    # Gesamtstatistiken berechnen
+    overall_summary = calculate_overall_tournament_summary()
 
-    return render_template('index.html', all_years=all_years_db, available_fixture_years=sorted_fixture_years, team_iso_codes=TEAM_ISO_CODES, medal_data_by_year=medal_data_by_year)
+    return render_template('index.html', all_years=all_years_db, available_fixture_years=sorted_fixture_years, team_iso_codes=TEAM_ISO_CODES, medal_data_by_year=medal_data_by_year, overall_summary=overall_summary)
 
 @main_bp.route('/all-time-standings')
 def all_time_standings_view():
