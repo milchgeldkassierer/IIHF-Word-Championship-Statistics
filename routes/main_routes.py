@@ -279,6 +279,21 @@ def calculate_all_time_standings():
                 f"Original team codes ('{game.team1_code}', '{game.team2_code}') will be used for resolution attempt."
             )
             current_year_playoff_map = {}
+        
+        # Apply custom seeding for this specific year if it exists
+        # Import here to avoid circular imports
+        try:
+            from routes.year_routes import get_custom_seeding_from_db
+            custom_seeding = get_custom_seeding_from_db(year_id)
+            if custom_seeding:
+                # Create a copy of the playoff map and override Q1-Q4 with custom seeding
+                current_year_playoff_map = current_year_playoff_map.copy()
+                current_year_playoff_map['Q1'] = custom_seeding['seed1']
+                current_year_playoff_map['Q2'] = custom_seeding['seed2']
+                current_year_playoff_map['Q3'] = custom_seeding['seed3']
+                current_year_playoff_map['Q4'] = custom_seeding['seed4']
+        except ImportError:
+            pass  # If import fails, continue without custom seeding
 
         current_year_games_list = games_by_year_id.get(year_id, [])
         current_year_games_map_by_number = {g.game_number: g for g in current_year_games_list if g.game_number is not None}
@@ -631,10 +646,28 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
         
         qf_results = {}
         if len(qf_winner_stats) >= 4:
-            qf_results["Q1"] = qf_winner_stats[0]['team']
-            qf_results["Q2"] = qf_winner_stats[3]['team']
-            qf_results["Q3"] = qf_winner_stats[1]['team']
-            qf_results["Q4"] = qf_winner_stats[2]['team']
+            # Check for custom seeding first
+            try:
+                from routes.year_routes import get_custom_seeding_from_db
+                custom_seeding = get_custom_seeding_from_db(year_obj_for_map.id)
+                if custom_seeding:
+                    # Apply custom seeding
+                    qf_results["Q1"] = custom_seeding['seed1']
+                    qf_results["Q2"] = custom_seeding['seed2']
+                    qf_results["Q3"] = custom_seeding['seed3']
+                    qf_results["Q4"] = custom_seeding['seed4']
+                else:
+                    # Use standard IIHF seeding
+                    qf_results["Q1"] = qf_winner_stats[0]['team']
+                    qf_results["Q2"] = qf_winner_stats[3]['team']
+                    qf_results["Q3"] = qf_winner_stats[1]['team']
+                    qf_results["Q4"] = qf_winner_stats[2]['team']
+            except ImportError:
+                # If import fails, use standard IIHF seeding
+                qf_results["Q1"] = qf_winner_stats[0]['team']
+                qf_results["Q2"] = qf_winner_stats[3]['team']
+                qf_results["Q3"] = qf_winner_stats[1]['team']
+                qf_results["Q4"] = qf_winner_stats[2]['team']
         
         def resolve_code(code):
             if is_code_final(code):
@@ -963,6 +996,20 @@ def get_medal_tally_data():
                             current_year_playoff_map['Q3'] = q3_team
                             current_year_playoff_map['Q4'] = q4_team
                             map_changed_this_iter = True
+        
+        # Apply custom seeding after all team resolution is complete
+        # Import here to avoid circular imports
+        try:
+            from routes.year_routes import get_custom_seeding_from_db
+            custom_seeding = get_custom_seeding_from_db(year_id_iter)
+            if custom_seeding:
+                # Override Q1-Q4 mappings with custom seeding
+                current_year_playoff_map['Q1'] = custom_seeding['seed1']
+                current_year_playoff_map['Q2'] = custom_seeding['seed2']
+                current_year_playoff_map['Q3'] = custom_seeding['seed3']
+                current_year_playoff_map['Q4'] = custom_seeding['seed4']
+        except ImportError:
+            pass  # If import fails, continue without custom seeding
                     
         resolved_playoff_maps_by_year_id[year_id_iter] = current_year_playoff_map
 
