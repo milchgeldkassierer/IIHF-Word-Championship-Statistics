@@ -156,4 +156,180 @@ This project is unlicensed (or specify your license, e.g., MIT License).
 
 ## Support
 
-For issues, questions, or feature requests, please open an issue in the GitHub repository. 
+For issues, questions, or feature requests, please open an issue in the GitHub repository.
+
+## Neue Backend-Routen für Semifinal Seeding (zu implementieren)
+
+Die folgenden Routen müssen in `routes/year_routes.py` hinzugefügt werden:
+
+### 1. Route zum Abrufen des aktuellen Seedings
+```python
+@year_bp.route('/<int:year_id>/semifinal_seeding', methods=['GET'])
+def get_semifinal_seeding(year_id):
+    """
+    Gibt das aktuelle Semifinal-Seeding zurück.
+    
+    Returns:
+        JSON: {
+            "success": bool,
+            "seeding": {
+                "seed1": "team_name",
+                "seed2": "team_name", 
+                "seed3": "team_name",
+                "seed4": "team_name"
+            }
+        }
+    """
+    try:
+        year_obj = ChampionshipYear.query.get_or_404(year_id)
+        
+        # Logik zum Ermitteln des aktuellen Seedings
+        # Basiert auf der bestehenden Semifinal-Logik in year_view()
+        # Die Q1-Q4 Mappings aus dem playoff_team_map verwenden
+        
+        # Beispiel-Implementation:
+        # 1. Alle QF-Gewinner sammeln
+        # 2. Nach Gruppenrang, Punkte, Tordifferenz, Tore sortieren
+        # 3. Seeding zuweisen: Q1=bester, Q2=viertbester, Q3=zweitbester, Q4=drittbester
+        
+        seeding = {
+            "seed1": "Team1",  # Ersetzen durch echte Logik
+            "seed2": "Team2", 
+            "seed3": "Team3",
+            "seed4": "Team4"
+        }
+        
+        return jsonify({
+            "success": True,
+            "seeding": seeding
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Fehler beim Abrufen des Seedings: {str(e)}"
+        }), 500
+```
+
+### 2. Route zum Anpassen des Seedings
+```python
+@year_bp.route('/<int:year_id>/adjust_semifinal_seeding', methods=['POST'])
+def adjust_semifinal_seeding(year_id):
+    """
+    Passt das Semifinal-Seeding manuell an.
+    
+    Expected JSON payload:
+        {
+            "seed1": "team_name",
+            "seed2": "team_name",
+            "seed3": "team_name", 
+            "seed4": "team_name"
+        }
+    """
+    try:
+        year_obj = ChampionshipYear.query.get_or_404(year_id)
+        data = request.get_json()
+        
+        # Validierung
+        required_seeds = ['seed1', 'seed2', 'seed3', 'seed4']
+        for seed in required_seeds:
+            if seed not in data or not data[seed]:
+                return jsonify({
+                    "success": False,
+                    "message": f"Fehlendes oder ungültiges Seeding für {seed}"
+                }), 400
+        
+        # Prüfung auf Duplikate
+        teams = [data[seed] for seed in required_seeds]
+        if len(set(teams)) != 4:
+            return jsonify({
+                "success": False,
+                "message": "Jedes Team kann nur einmal als Seed verwendet werden"
+            }), 400
+            
+        # Semifinal-Spiele finden (normalerweise Spiele 61 und 62)
+        sf_games = Game.query.filter_by(
+            year_id=year_id,
+            round='Semifinals'
+        ).order_by(Game.game_number).all()
+        
+        if len(sf_games) < 2:
+            return jsonify({
+                "success": False,
+                "message": "Nicht genügend Semifinal-Spiele gefunden"
+            }), 400
+            
+        # Team-Paarungen nach Standard-Seeding: 1vs4, 2vs3
+        sf_game_1 = sf_games[0]  # 1 vs 4
+        sf_game_2 = sf_games[1]  # 2 vs 3
+        
+        # Spiel 1: Seed 1 vs Seed 4
+        sf_game_1.team1_code = data['seed1']
+        sf_game_1.team2_code = data['seed4']
+        
+        # Spiel 2: Seed 2 vs Seed 3  
+        sf_game_2.team1_code = data['seed2']
+        sf_game_2.team2_code = data['seed3']
+        
+        db.session.commit()
+        
+        # Optional: Log der Änderung
+        # SeedingAdjustment Tabelle erstellen um Änderungen zu tracken
+        
+        return jsonify({
+            "success": True,
+            "message": "Semifinal-Seeding wurde erfolgreich angepasst",
+            "new_pairings": {
+                "game1": f"{data['seed1']} vs {data['seed4']}",
+                "game2": f"{data['seed2']} vs {data['seed3']}"
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": f"Fehler beim Anpassen des Seedings: {str(e)}"
+        }), 500
+```
+
+### 3. Optionale Tabelle für Seeding-History
+```python
+# In models.py hinzufügen:
+class SeedingAdjustment(db.Model):
+    __tablename__ = 'seeding_adjustments'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    year_id = db.Column(db.Integer, db.ForeignKey('championship_years.id'), nullable=False)
+    round_name = db.Column(db.String(50), nullable=False)  # 'Semifinals'
+    original_seeding = db.Column(db.JSON)  # Original Q1-Q4 mapping
+    adjusted_seeding = db.Column(db.JSON)  # New Q1-Q4 mapping
+    adjustment_reason = db.Column(db.Text)  # Optional reason
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    year = db.relationship('ChampionshipYear', backref='seeding_adjustments')
+```
+
+## Integration in bestehende Logik
+
+In der `year_view()` Funktion müssen Sie prüfen, ob manuelle Seeding-Anpassungen vorliegen:
+
+```python
+# In year_view() nach der Standard-Seeding-Logik:
+
+# Prüfung auf manuelle Seeding-Anpassung
+manual_seeding = SeedingAdjustment.query.filter_by(
+    year_id=year_id,
+    round_name='Semifinals'
+).order_by(SeedingAdjustment.created_at.desc()).first()
+
+if manual_seeding:
+    # Manuelle Anpassung überschreibt automatisches Seeding
+    adjusted_seeding = manual_seeding.adjusted_seeding
+    playoff_team_map['Q1'] = adjusted_seeding['seed1']
+    playoff_team_map['Q2'] = adjusted_seeding['seed2'] 
+    playoff_team_map['Q3'] = adjusted_seeding['seed3']
+    playoff_team_map['Q4'] = adjusted_seeding['seed4']
+    
+    # Semifinal-Spiele entsprechend anpassen
+    # ... (siehe adjust_semifinal_seeding Route)
+``` 

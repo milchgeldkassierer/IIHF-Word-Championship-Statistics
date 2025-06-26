@@ -202,46 +202,71 @@ def get_all_resolved_games():
                         if team_name in teams_stats: 
                             qf_winners_stats.append(teams_stats[team_name])
                         else: 
-                            all_qf_winners_resolved = False; break 
+                            all_qf_winners_resolved = False; break
                     
                     if all_qf_winners_resolved and len(qf_winners_stats) == 4:
                         qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
-                        R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats] 
-
-                        matchup1 = (R1, R4); matchup2 = (R2, R3)
-                        sf_game1_teams = None; sf_game2_teams = None
-                        primary_host_plays_sf1 = False
-
-                        if tournament_hosts:
-                            if tournament_hosts[0] in [R1,R2,R3,R4]: 
-                                 primary_host_plays_sf1 = True
-                                 if R1 == tournament_hosts[0] or R4 == tournament_hosts[0]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
-                                 else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
-                            elif len(tournament_hosts) > 1 and tournament_hosts[1] in [R1,R2,R3,R4]: 
-                                 primary_host_plays_sf1 = True 
-                                 if R1 == tournament_hosts[1] or R4 == tournament_hosts[1]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
-                                 else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
                         
-                        if not primary_host_plays_sf1: 
-                            sf_game1_teams = matchup1; sf_game2_teams = matchup2
-
-                        sf_game_obj_1 = games_dict_by_num.get(sf_game_numbers[0])
-                        sf_game_obj_2 = games_dict_by_num.get(sf_game_numbers[1])
-
-                        if sf_game_obj_1 and sf_game_obj_2 and sf_game1_teams and sf_game2_teams:
-                            if playoff_team_map.get(sf_game_obj_1.team1_code) != sf_game1_teams[0]:
-                                playoff_team_map[sf_game_obj_1.team1_code] = sf_game1_teams[0]
-                            if playoff_team_map.get(sf_game_obj_1.team2_code) != sf_game1_teams[1]:
-                                playoff_team_map[sf_game_obj_1.team2_code] = sf_game1_teams[1]
-                            if playoff_team_map.get(sf_game_obj_2.team1_code) != sf_game2_teams[0]:
-                                playoff_team_map[sf_game_obj_2.team1_code] = sf_game2_teams[0]
-                            if playoff_team_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
-                                playoff_team_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
+                        # Check for custom seeding for this specific year
+                        from routes.year_routes import get_custom_seeding_from_db
+                        custom_seeding = get_custom_seeding_from_db(year_obj.id)
+                        
+                        if custom_seeding:
+                            # Use custom seeding
+                            playoff_team_map['Q1'] = custom_seeding['seed1']
+                            playoff_team_map['Q2'] = custom_seeding['seed2']
+                            playoff_team_map['Q3'] = custom_seeding['seed3']
+                            playoff_team_map['Q4'] = custom_seeding['seed4']
                             
-                            playoff_team_map['Q1'] = sf_game1_teams[0]
-                            playoff_team_map['Q2'] = sf_game1_teams[1]
-                            playoff_team_map['Q3'] = sf_game2_teams[0]
-                            playoff_team_map['Q4'] = sf_game2_teams[1]
+                            # Update semifinal game assignments based on custom seeding
+                            # Semifinal 1: seed1 vs seed4, Semifinal 2: seed2 vs seed3
+                            sf_game_obj_1 = games_dict_by_num.get(sf_game_numbers[0])
+                            sf_game_obj_2 = games_dict_by_num.get(sf_game_numbers[1])
+                            
+                            if sf_game_obj_1:
+                                playoff_team_map[sf_game_obj_1.team1_code] = custom_seeding['seed1']
+                                playoff_team_map[sf_game_obj_1.team2_code] = custom_seeding['seed4']
+                            if sf_game_obj_2:
+                                playoff_team_map[sf_game_obj_2.team1_code] = custom_seeding['seed2']
+                                playoff_team_map[sf_game_obj_2.team2_code] = custom_seeding['seed3']
+                        else:
+                            # Use standard IIHF seeding
+                            R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats] 
+
+                            matchup1 = (R1, R4); matchup2 = (R2, R3)
+                            sf_game1_teams = None; sf_game2_teams = None
+                            primary_host_plays_sf1 = False
+
+                            if tournament_hosts:
+                                if tournament_hosts[0] in [R1,R2,R3,R4]: 
+                                     primary_host_plays_sf1 = True
+                                     if R1 == tournament_hosts[0] or R4 == tournament_hosts[0]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
+                                     else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
+                                elif len(tournament_hosts) > 1 and tournament_hosts[1] in [R1,R2,R3,R4]: 
+                                     primary_host_plays_sf1 = True 
+                                     if R1 == tournament_hosts[1] or R4 == tournament_hosts[1]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
+                                     else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
+                            
+                            if not primary_host_plays_sf1: 
+                                sf_game1_teams = matchup1; sf_game2_teams = matchup2
+
+                            sf_game_obj_1 = games_dict_by_num.get(sf_game_numbers[0])
+                            sf_game_obj_2 = games_dict_by_num.get(sf_game_numbers[1])
+
+                            if sf_game_obj_1 and sf_game_obj_2 and sf_game1_teams and sf_game2_teams:
+                                if playoff_team_map.get(sf_game_obj_1.team1_code) != sf_game1_teams[0]:
+                                    playoff_team_map[sf_game_obj_1.team1_code] = sf_game1_teams[0]
+                                if playoff_team_map.get(sf_game_obj_1.team2_code) != sf_game1_teams[1]:
+                                    playoff_team_map[sf_game_obj_1.team2_code] = sf_game1_teams[1]
+                                if playoff_team_map.get(sf_game_obj_2.team1_code) != sf_game2_teams[0]:
+                                    playoff_team_map[sf_game_obj_2.team1_code] = sf_game2_teams[0]
+                                if playoff_team_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
+                                    playoff_team_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
+                                
+                                playoff_team_map['Q1'] = sf_game1_teams[0]
+                                playoff_team_map['Q2'] = sf_game1_teams[1]
+                                playoff_team_map['Q3'] = sf_game2_teams[0]
+                                playoff_team_map['Q4'] = sf_game2_teams[1]
 
             for game in games_raw:
                 if game.team1_score is not None and game.team2_score is not None:
@@ -315,6 +340,7 @@ def records_view():
     
     tournament_most_goals = get_tournament_with_most_goals()
     tournament_least_goals = get_tournament_with_least_goals()
+    tournament_most_penalty_minutes = get_tournament_with_most_penalty_minutes()
     
     most_goals_team_tournament = get_most_goals_team_tournament()
     fewest_goals_against_tournament = get_fewest_goals_against_tournament()
@@ -324,6 +350,8 @@ def records_view():
     most_goals_player_tournament = get_most_goals_player_tournament()
     most_assists_player_tournament = get_most_assists_player_tournament()
     most_penalty_minutes_tournament = get_most_penalty_minutes_tournament()
+    
+    most_frequent_matchup = get_most_frequent_matchup()
     
     return render_template('records.html',
                            longest_win_streak=longest_win_streak,
@@ -340,6 +368,7 @@ def records_view():
                            record_champion=record_champion,
                            tournament_most_goals=tournament_most_goals,
                            tournament_least_goals=tournament_least_goals,
+                           tournament_most_penalty_minutes=tournament_most_penalty_minutes,
                            most_goals_team_tournament=most_goals_team_tournament,
                            fewest_goals_against_tournament=fewest_goals_against_tournament,
                            most_shutouts_tournament=most_shutouts_tournament,
@@ -347,7 +376,8 @@ def records_view():
                            most_goals_player_tournament=most_goals_player_tournament,
                            most_assists_player_tournament=most_assists_player_tournament,
                            most_penalty_minutes_tournament=most_penalty_minutes_tournament,
-                           team_iso_codes=TEAM_ISO_CODES)
+                           team_iso_codes=TEAM_ISO_CODES,
+                           most_frequent_matchup=most_frequent_matchup)
 
 def get_longest_win_streak():
     """Berechnet die längste Siegesserie über alle Turniere"""
@@ -934,7 +964,7 @@ def get_fastest_goal():
     for goal in goals:
         time_seconds = parse_minute(goal.minute)
         game = db.session.query(Game).filter_by(id=goal.game_id).first()
-        year = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first() if game else None
+        year = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
         
         # Verwende aufgelöste Team-Codes falls verfügbar
         resolved_teams = game_id_to_resolved.get(goal.game_id)
@@ -1027,7 +1057,7 @@ def get_fastest_hattrick():
             
             player = db.session.query(Player).filter_by(id=player_id).first()
             game = db.session.query(Game).filter_by(id=game_id).first()
-            year = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first() if game else None
+            year = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
             
             # Verwende aufgelöste Team-Codes falls verfügbar
             resolved_teams = game_id_to_resolved.get(game_id)
@@ -1318,6 +1348,78 @@ def get_tournament_with_least_goals():
                 'games': games,
                 'goals_per_game': round(total_goals / games, 2) if games > 0 else 0
             })
+        else:
+            break
+    
+    return results
+
+def get_tournament_with_most_penalty_minutes():
+    """Turnier mit den meisten Strafminuten - nur beendete Turniere"""
+    from routes.main_routes import get_tournament_statistics
+    
+    all_years = db.session.query(ChampionshipYear).all()
+    completed_years = []
+    
+    for year_obj in all_years:
+        tournament_stats = get_tournament_statistics(year_obj)
+        is_completed = (tournament_stats['total_games'] > 0 and 
+                       tournament_stats['completed_games'] == tournament_stats['total_games'])
+        if is_completed:
+            completed_years.append(year_obj)
+    
+    if not completed_years:
+        return []
+    
+    # Berechne Strafminuten pro Turnier
+    tournament_pim_data = []
+    
+    for year_obj in completed_years:
+        # Summe aller Strafminuten für dieses Turnier
+        total_pim = db.session.query(
+            func.sum(
+                case(
+                    (Penalty.penalty_type == '2', 2),
+                    (Penalty.penalty_type == '4', 4),
+                    (Penalty.penalty_type == '5', 5),
+                    (Penalty.penalty_type == '10', 10),
+                    (Penalty.penalty_type == '20', 20),
+                    else_=2  # Default für unbekannte Strafarten
+                )
+            )
+        ).join(Game, Penalty.game_id == Game.id).filter(
+            Game.year_id == year_obj.id,
+            Game.team1_score.isnot(None),
+            Game.team2_score.isnot(None)
+        ).scalar() or 0
+        
+        # Anzahl der gespielten Spiele
+        games_count = db.session.query(func.count(Game.id)).filter(
+            Game.year_id == year_obj.id,
+            Game.team1_score.isnot(None),
+            Game.team2_score.isnot(None)
+        ).scalar() or 0
+        
+        if games_count > 0:
+            tournament_pim_data.append({
+                'tournament': year_obj.name,
+                'year': year_obj.year,
+                'total_pim': total_pim,
+                'games': games_count,
+                'pim_per_game': round(total_pim / games_count, 2) if games_count > 0 else 0
+            })
+    
+    if not tournament_pim_data:
+        return []
+    
+    # Sortiere nach meisten Strafminuten
+    tournament_pim_data.sort(key=lambda x: x['total_pim'], reverse=True)
+    max_pim = tournament_pim_data[0]['total_pim']
+    
+    # Gib alle Turniere mit den meisten Strafminuten zurück
+    results = []
+    for data in tournament_pim_data:
+        if data['total_pim'] == max_pim:
+            results.append(data)
         else:
             break
     
@@ -1634,3 +1736,76 @@ def get_most_penalty_minutes_tournament():
                 })
     
     return results
+
+def get_most_frequent_matchup():
+    """Findet die TOP 3 häufigsten Duelle über alle Turniere"""
+    resolved_games = get_all_resolved_games()
+    
+    if not resolved_games:
+        return []
+    
+    matchup_counts = defaultdict(int)
+    matchup_examples = defaultdict(list)
+    
+    for resolved_game in resolved_games:
+        game = resolved_game['game']
+        team1_code = resolved_game['team1_code']
+        team2_code = resolved_game['team2_code']
+        year = resolved_game['year']
+        
+        # Nur finale Team-Codes verwenden
+        if is_code_final(team1_code) and is_code_final(team2_code) and team1_code != team2_code:
+            # Teams alphabetisch sortieren um sicherzustellen dass A vs B und B vs A als dasselbe Duell gezählt werden
+            teams = sorted([team1_code, team2_code])
+            matchup_key = f"{teams[0]} vs {teams[1]}"
+            
+            matchup_counts[matchup_key] += 1
+            
+            # Sammle alle Jahre für Zeitspanne
+            matchup_examples[matchup_key].append(year if year else 0)
+    
+    if not matchup_counts:
+        return []
+    
+    # Sortiere nach Häufigkeit
+    sorted_matchups = sorted(matchup_counts.items(), key=lambda x: x[1], reverse=True)
+    
+    # Zeige alle Duelle derselben Häufigkeit, bis mindestens 3 Duelle erreicht sind
+    top_3_results = []
+    current_rank = 1
+    last_count = None
+    
+    for matchup, count in sorted_matchups:
+        # Wenn wir schon mindestens 3 haben und eine neue (niedrigere) Häufigkeit beginnt, stoppe
+        if len(top_3_results) >= 3 and count != last_count:
+            break
+            
+        # Bestimme den Rang
+        if last_count is None or count != last_count:
+            rank = len(top_3_results) + 1
+            last_count = count
+        else:
+            # Gleiche Häufigkeit - finde den Rang des ersten Elements mit dieser Häufigkeit
+            rank = next(r['rank'] for r in top_3_results if r['count'] == count)
+        
+        # Füge das Duell hinzu
+        teams = matchup.split(' vs ')
+        
+        # Berechne Zeitspanne
+        years = [y for y in matchup_examples[matchup] if y > 0]
+        if years:
+            years.sort()
+            timespan = f"{years[0]} - {years[-1]}" if len(years) > 1 and years[0] != years[-1] else str(years[0])
+        else:
+            timespan = "Unbekannt"
+        
+        result = {
+            'team1': teams[0],
+            'team2': teams[1],
+            'count': count,
+            'timespan': timespan,
+            'rank': rank
+        }
+        top_3_results.append(result)
+    
+    return top_3_results

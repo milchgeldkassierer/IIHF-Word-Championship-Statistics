@@ -13,7 +13,8 @@ TEAM_ISO_CODES = {
 PRELIM_ROUNDS = ["Preliminary Round", "Group Stage", "Round Robin"]
 PLAYOFF_ROUNDS = ["Quarterfinals", "Semifinals", "Final", "Bronze Medal Game", "Gold Medal Game", "Playoff"]
 
-
+# Hauptrunden-Spiele Konstanten
+MAX_PRELIM_GAMES_PER_TEAM = 7  # Maximale Anzahl der Hauptrundenspiele pro Team
 
 # Define penalty choices
 PENALTY_TYPES_CHOICES = ["2 Min", "2+2 Min", "5 Min + Spieldauer", "10 Min Disziplinar", "Spieldauer Disziplinar"]
@@ -30,7 +31,7 @@ PENALTY_REASONS_CHOICES = [
     "Halten des Stocks",
     "Hoher Stock",
     "Kopfstoß",
-    "Schiedsrichterkritik",
+    "Spielverzögerung",
     "Stockschlag",
     "übertriebene Härte",
     "unerlaubter Körperangriff",

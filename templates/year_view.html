@@ -415,12 +415,40 @@
             padding: 0.125rem 0.25rem;
             border-radius: 0.25rem;
         }
+        
+        /* Dark mode styles for semifinal seeding section */
+        body.dark-mode .card {
+            background-color: #2d3748;
+            border-color: #4a5568;
+        }
+        
+        body.dark-mode .card-header {
+            background-color: #1a202c;
+            border-bottom-color: #4a5568;
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode .list-group-item {
+            background-color: #2d3748;
+            border-color: #4a5568;
+            color: #e2e8f0;
+        }
+        
+        body.dark-mode #newPairingsPreview {
+            background-color: #4a5568 !important;
+            border-color: #718096 !important;
+            color: #e2e8f0;
+        }
     </style>
     <script>
         var all_players_by_team_json_str = '{{ all_players_by_team_json|tojson|safe }}';
         var all_players_by_team_json = JSON.parse(all_players_by_team_json_str);
         var current_year_id_str = '{{ year.id|tojson|safe }}';
         var current_year_id = JSON.parse(current_year_id_str);
+        
+        // Make TEAM_ISO_CODES available to JavaScript
+        var team_iso_codes_str = '{{ team_iso_codes|tojson|safe }}';
+        window.TEAM_ISO_CODES_FROM_TEMPLATE = JSON.parse(team_iso_codes_str);
     </script>
 {% endblock %}
 
@@ -520,7 +548,10 @@
                 {% endfor %}
             </div>
             <small class="form-text text-muted">
-                Punkte: Sieg=3, OT/Penalty-Sieg=2, OT/Penalty-Niederlage=1. Sortierung nach IIHF-Regeln: Punkte, direktes Duell (Punkte → Tordifferenz → Tore), Tordifferenz gesamt, Erzielte Tore gesamt.<br>
+                Punkte: Sieg=3, OT/Penalty-Sieg=2, OT/Penalty-Niederlage=1. 
+                <strong>Sortierung nach IIHF-Regeln:</strong> Punkte, dann bei Punktgleichheit:<br>
+                • <strong>2 Teams:</strong> Direktes Duell entscheidet nur wenn gespielt, sonst Tordifferenz → Erzielte Tore<br>
+                • <strong>3+ Teams:</strong> Head-to-Head nur wenn alle 7 Hauptrundenspiele gespielt, sonst Tordifferenz → Erzielte Tore<br>
                 <span class="badge badge-success">&nbsp;</span> Top 4: Viertelfinale. 
                 <span class="badge badge-danger">&nbsp;</span> Platz 8: Absteiger (können von den realen Absteigern abweichen).
             </small>
@@ -530,7 +561,155 @@
         {# Spiele pro Runde #}
         {% for round_name, games_in_round in games_by_round.items() %}
         <div class="tab-pane fade {% if not standings and loop.first %}show active{% endif %}" id="{{ round_name|replace(' ', '-')|lower }}" role="tabpanel" aria-labelledby="{{ round_name|replace(' ', '-')|lower }}-tab">
+            {% if round_name == 'Semifinals' %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2>{{ round_name }}</h2>
+                {% if games_in_round|length >= 2 %}
+                    {% set sf_teams_resolved = [] %}
+                    {% set sf_games_with_results = [] %}
+                    {% for game in games_in_round %}
+                        {% set p1_original_code = game.team1_code %}
+                        {% set p2_original_code = game.team2_code %}
+                        {% set p1_intermediate_code = playoff_team_map.get(p1_original_code, p1_original_code) %}
+                        {% set p2_intermediate_code = playoff_team_map.get(p2_original_code, p2_original_code) %}
+                        
+                        {# Resolve team names #}
+                        {% set p1_display_name = p1_intermediate_code %}
+                        {% set p2_display_name = p2_intermediate_code %}
+                        {% set standings_digits = "12345678" %}
+                        {% set standings_groups = ['A', 'B', 'C', 'D'] %}
+                        
+                        {% if p1_intermediate_code and p1_intermediate_code|length == 2 and p1_intermediate_code[0] in standings_groups and p1_intermediate_code[1] in standings_digits %}
+                            {% set group_letter = p1_intermediate_code[0] %}
+                            {% set rank = (p1_intermediate_code[1] | int) - 1 %}
+                            {% set group_name = "Group " + group_letter %}
+                            {% if standings.get(group_name) and 0 <= rank < standings[group_name]|length %}
+                                {% set p1_display_name = standings[group_name][rank].name %}
+                            {% endif %}
+                        {% endif %}
+                        
+                        {% if p2_intermediate_code and p2_intermediate_code|length == 2 and p2_intermediate_code[0] in standings_groups and p2_intermediate_code[1] in standings_digits %}
+                            {% set group_letter = p2_intermediate_code[0] %}
+                            {% set rank = (p2_intermediate_code[1] | int) - 1 %}
+                            {% set group_name = "Group " + group_letter %}
+                            {% if standings.get(group_name) and 0 <= rank < standings[group_name]|length %}
+                                {% set p2_display_name = standings[group_name][rank].name %}
+                            {% endif %}
+                        {% endif %}
+                            
+                        {# Check if teams are resolved (not placeholders) #}
+                        {% if team_iso_codes.get(p1_display_name) and team_iso_codes.get(p2_display_name) %}
+                            {% do sf_teams_resolved.append(p1_display_name) %}
+                            {% do sf_teams_resolved.append(p2_display_name) %}
+                        {% endif %}
+                        
+                        {# Check if semifinal game has started (has score, goals, or penalties) #}
+                        {% if game.team1_score is not none or game.team2_score is not none or game.goals|length > 0 or game.penalties|length > 0 %}
+                            {% do sf_games_with_results.append(game.id) %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if sf_teams_resolved|length >= 4 and sf_games_with_results|length == 0 %}
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-toggle="collapse" data-target="#semifinalSeedingAdjust" aria-expanded="false" aria-controls="semifinalSeedingAdjust" id="adjustSeedingBtn">
+                        <i class="fas fa-cogs"></i> Seeding Anpassen
+                    </button>
+                    {% elif sf_games_with_results|length > 0 %}
+                    <button class="btn btn-outline-secondary btn-sm" disabled title="Seeding kann nicht mehr geändert werden - Semifinal-Spiele haben bereits begonnen">
+                        <i class="fas fa-cogs"></i> Seeding Anpassen
+                    </button>
+                    {% else %}
+                    <button class="btn btn-outline-secondary btn-sm" disabled title="Seeding kann erst angepasst werden, wenn alle Semifinal-Teams feststehen">
+                        <i class="fas fa-cogs"></i> Seeding Anpassen
+                    </button>
+                    {% endif %}
+                {% endif %}
+            </div>
+            
+            {# Semifinal Seeding Adjustment Section #}
+            {% if games_in_round|length >= 2 and sf_teams_resolved|length >= 4 and sf_games_with_results|length == 0 %}
+            <div class="collapse mb-4" id="semifinalSeedingAdjust">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-trophy"></i> Semifinal Seeding Anpassung
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="seedingMessageArea" class="mb-3"></div>
+                        
+                        <div class="alert alert-info" role="alert">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Standard Seeding:</strong> 1. Seed vs 4. Seed, 2. Seed vs 3. Seed<br>
+                            <small class="text-muted">Das Seeding basiert auf der Gruppenplatzierung (Gruppenrang → Punkte → Tordifferenz → Erzielte Tore)</small>
+                        </div>
+                        
+                        <form id="adjustSeedingForm">
+                            <input type="hidden" name="year_id" value="{{ year.id }}">
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>Aktuelles Seeding:</h6>
+                                    <div id="currentSeedingDisplay">
+                                        {# This will be populated by JavaScript #}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Neues Seeding:</h6>
+                                    <div class="form-group">
+                                        <label for="seed1">1. Seed:</label>
+                                        <select class="form-control form-control-sm" name="seed1" id="seed1" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="seed2">2. Seed:</label>
+                                        <select class="form-control form-control-sm" name="seed2" id="seed2" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="seed3">3. Seed:</label>
+                                        <select class="form-control form-control-sm" name="seed3" id="seed3" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="seed4">4. Seed:</label>
+                                        <select class="form-control form-control-sm" name="seed4" id="seed4" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <strong>Neue Semifinal-Paarungen:</strong>
+                                <div id="newPairingsPreview" class="mt-2 p-2 bg-light border rounded">
+                                    <div id="pairing1">Spiel 1: <span class="font-weight-bold" id="seed1Display">-</span> vs <span class="font-weight-bold" id="seed4Display">-</span></div>
+                                    <div id="pairing2">Spiel 2: <span class="font-weight-bold" id="seed2Display">-</span> vs <span class="font-weight-bold" id="seed3Display">-</span></div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-save"></i> Seeding Speichern
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm ml-2" id="resetSeedingBtn">
+                                    <i class="fas fa-undo"></i> Zurücksetzen
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm ml-2" data-toggle="collapse" data-target="#semifinalSeedingAdjust">
+                                    Abbrechen
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% else %}
             <h2>{{ round_name }}</h2>
+            {% endif %}
+            
             {% if games_in_round %}
             <div class="table-responsive">
                 <table class="table table-striped">
@@ -687,9 +866,9 @@
                                                 <i class="fas fa-exclamation-triangle"></i>
                                             </span>
                                         {% elif game.scores_fully_match_goals %}
-                                            <span class="text-success score-match-indicator valid-indicator" data-game-id="{{ game.id }}" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>
+                                            <span class="text-success score-match-indicator valid-indicator" data-game-id="{{ game.id }}" title="Spielstand, erfasste Tore, SOG-Daten und Powerplay-Situationen sind vollständig und korrekt. Overtime-Regeln und Penalty-Sonderregeln (5+Spieldauer, 2+2 Min) beachtet.">✓</span>
                                         {% else %}
-                                            <span class="text-danger score-match-indicator invalid-indicator" data-game-id="{{ game.id }}" style="cursor: pointer;" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1). Klicken zum Überregeln.">✗</span>
+                                            <span class="text-danger score-match-indicator invalid-indicator" data-game-id="{{ game.id }}" style="cursor: pointer;" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1), oder Powerplay-/Penalty-Situationen sind inkonsistent (PP/SH-Tore bei aktiven Strafen, Sonderregeln für 5+Spieldauer und 2+2 Min beachtet). Klicken zum Überregeln.">✗</span>
                                         {% endif %}
                                     {% endif %}
                                     </span>
@@ -1534,6 +1713,82 @@ $(document).ready(function(){
         handleSogSubmit(gameId); 
     });
 
+    // Validate SOG when OT shots or result type changes
+    $(document).on('change blur', 'input[name="team1_p4_shots"], input[name="team2_p4_shots"]', function() {
+        const gameId = $(this).closest('form').attr('id').split('-')[1];
+        validateAndShowSogWarning(gameId);
+    });
+
+    $(document).on('change', 'select[name="result_type"]', function() {
+        const gameId = $(this).closest('tr').attr('id').replace('game-', '');
+        if (gameId) {
+            validateAndShowSogWarning(gameId);
+        }
+    });
+
+    // Re-validate SOG after game score/result_type form submission (page reload)
+    $(document).ready(function() {
+        // Check all games on page load to ensure SOG overtime validation is applied
+        $('tr[id^="game-"]').each(function() {
+            const gameId = $(this).attr('id').replace('game-', '');
+            if (gameId) {
+                // Small delay to ensure all elements are loaded
+                setTimeout(function() {
+                    validateAndShowSogWarning(gameId);
+                }, 100);
+            }
+        });
+    });
+
+    function validateAndShowSogWarning(gameId) {
+        const validationResult = validateSogForOvertimeGame(gameId);
+        const messageArea = $('#sogMessageArea-' + gameId);
+        
+        if (!validationResult.valid) {
+            // Only show warning if there's no other alert already showing
+            if (messageArea.find('.alert').length === 0) {
+                messageArea.html('<div class="alert alert-warning alert-dismissible fade show" role="alert">' + 
+                               '<i class="fas fa-exclamation-triangle"></i> ' + validationResult.message + 
+                               '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>');
+            }
+        } else {
+            // Clear warning if validation passes
+            messageArea.find('.alert-warning').alert('close');
+        }
+        
+        // Update score match indicator when SOG validation changes
+        // Check current indicator state to preserve existing validation results
+        const indicatorContainer = $('#scoreMatchIndicatorContainer-' + gameId);
+        const currentIndicator = indicatorContainer.find('.score-match-indicator');
+        
+        // Don't update if overruled
+        if (currentIndicator.hasClass('overruled-indicator')) {
+            return;
+        }
+        
+        let currentScoresMatch = true; // Default assumption for cases where we can't determine
+        
+        if (currentIndicator.hasClass('valid-indicator')) {
+            currentScoresMatch = true;
+        } else if (currentIndicator.hasClass('invalid-indicator')) {
+            // Check if the current error is only about SOG overtime or also other issues
+            const currentTitle = currentIndicator.attr('title') || '';
+            currentScoresMatch = !currentTitle.includes('Spielstand und erfasste Tore stimmen NICHT überein');
+        } else {
+            // No indicator present - need to determine from backend data
+            // Look at the original server-rendered state
+            const gameRow = $('#game-' + gameId);
+            const scoreMatchSpan = gameRow.find('span[data-game-id="' + gameId + '"]');
+            if (scoreMatchSpan.length > 0) {
+                // Use the original server state as reference
+                currentScoresMatch = scoreMatchSpan.hasClass('valid-indicator') || 
+                                   !scoreMatchSpan.attr('title')?.includes('Spielstand und erfasste Tore stimmen NICHT überein');
+            }
+        }
+        
+        updateScoreMatchIndicatorSafe(gameId, currentScoresMatch);
+    }
+
     // Helper function to update score match indicator while respecting overrules
     function updateScoreMatchIndicatorSafe(gameId, scoresMatch) {
         var indicatorContainer = $('#scoreMatchIndicatorContainer-' + gameId);
@@ -1547,10 +1802,23 @@ $(document).ready(function(){
             // Check if there's an existing overrule - if so, don't change the indicator
             var existingOverrule = indicatorContainer.find('.overruled-indicator');
             if (existingOverrule.length === 0) {
-                if (scoresMatch) {
-                    indicatorContainer.html('<span class="text-success score-match-indicator valid-indicator" data-game-id="' + gameId + '" title="Spielstand, erfasste Tore und SOG-Daten sind vollständig und korrekt. Overtime-Regeln beachtet.">✓</span>');
+                // Check SOG overtime validation
+                var sogOvertimeValidation = validateSogForOvertimeGame(gameId);
+                var allValidationsPass = scoresMatch && sogOvertimeValidation.valid;
+                
+                if (allValidationsPass) {
+                    indicatorContainer.html('<span class="text-success score-match-indicator valid-indicator" data-game-id="' + gameId + '" title="Spielstand, erfasste Tore, SOG-Daten und Powerplay-Situationen sind vollständig und korrekt. Overtime-Regeln und Penalty-Sonderregeln (5+Spieldauer, 2+2 Min) beachtet.">✓</span>');
                 } else {
-                    indicatorContainer.html('<span class="text-danger score-match-indicator invalid-indicator" data-game-id="' + gameId + '" style="cursor: pointer;" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1). Klicken zum Überregeln.">✗</span>');
+                    var errorMessages = [];
+                    if (!scoresMatch) {
+                        errorMessages.push("Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1), oder Powerplay-/Penalty-Situationen sind inkonsistent (PP/SH-Tore bei aktiven Strafen, Sonderregeln für 5+Spieldauer und 2+2 Min beachtet)");
+                    }
+                    if (!sogOvertimeValidation.valid) {
+                        errorMessages.push(sogOvertimeValidation.message);
+                    }
+                    var tooltipText = errorMessages.join(". ") + ". Klicken zum Überregeln.";
+                    
+                    indicatorContainer.html('<span class="text-danger score-match-indicator invalid-indicator" data-game-id="' + gameId + '" style="cursor: pointer;" title="' + tooltipText + '">✗</span>');
                 }
             }
         } else { 
@@ -1646,6 +1914,34 @@ $(document).ready(function(){
         if (!inputValue) return { valid: false, error: 'Keine Zeit eingegeben' };
         
         var value = inputValue.trim();
+        
+        // Handle numeric input with any non-digit separator or pure numbers
+        // Examples: 1234 → 12:34, 754 → 7:54, 123 → 1:23, 12x34 → 12:34, 12;34 → 12:34
+        if (/^\d+$/.test(value) || /^\d+[^\d]\d+$/.test(value)) {
+            var digits = value.replace(/[^\d]/g, ''); // Remove all non-digits
+            
+            if (digits.length < 3 || digits.length > 4) {
+                return { valid: false, error: 'Zeitformat muss 3-4 Ziffern haben (z.B. 123 → 1:23, 1234 → 12:34)' };
+            }
+            
+            var minutes, seconds;
+            if (digits.length === 3) {
+                // 123 → 1:23
+                minutes = parseInt(digits.substring(0, 1));
+                seconds = parseInt(digits.substring(1, 3));
+            } else {
+                // 1234 → 12:34
+                minutes = parseInt(digits.substring(0, 2));
+                seconds = parseInt(digits.substring(2, 4));
+            }
+            
+            if (seconds >= 60) {
+                return { valid: false, error: 'Sekunden müssen < 60 sein' };
+            }
+            
+            var formattedTime = (minutes < 10 ? '0' + minutes : minutes) + ':' + (seconds < 10 ? '0' + seconds : seconds);
+            return { valid: true, time: formattedTime };
+        }
         
         // Standard mm:ss format (0:00-99:59)
         if (/^\d{1,2}:\d{2}$/.test(value)) {
@@ -2212,9 +2508,44 @@ $(document).ready(function(){
         }
     }
 
+    // Validate SOG for OT/SO games
+    function validateSogForOvertimeGame(gameId) {
+        const gameRow = $('#game-' + gameId);
+        const resultTypeSelect = gameRow.find('select[name="result_type"]');
+        const resultType = resultTypeSelect.val();
+        
+        // Check if game was decided in OT or SO
+        if (resultType === 'OT' || resultType === 'SO') {
+            const form = document.getElementById(`sogEditForm-${gameId}`);
+            if (form) {
+                const team1OtShots = parseInt(form.elements['team1_p4_shots']?.value) || 0;
+                const team2OtShots = parseInt(form.elements['team2_p4_shots']?.value) || 0;
+                const totalOtShots = team1OtShots + team2OtShots;
+                
+                if (totalOtShots === 0) {
+                    return {
+                        valid: false,
+                        message: `Spiele nach ${resultType === 'OT' ? 'Verlängerung' : 'Penalties'} müssen mindestens 1 Schuss in der OT-Spalte haben.`
+                    };
+                }
+            }
+        }
+        
+        return { valid: true };
+    }
+
     function handleSogSubmit(gameId) {
         const form = document.getElementById(`sogEditForm-${gameId}`); // Changed ID to sogEditForm-
         const messageArea = $('#sogMessageArea-' + gameId);
+        
+        // Validate SOG for OT/SO games before submitting
+        const validationResult = validateSogForOvertimeGame(gameId);
+        if (!validationResult.valid) {
+            messageArea.html('<div class="alert alert-danger alert-dismissible fade show" role="alert">' + 
+                           validationResult.message + 
+                           '<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>');
+            return;
+        }
         
         messageArea.html('<div class="alert alert-info alert-dismissible fade show" role="alert">Speichern...<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>');
 
@@ -2841,7 +3172,7 @@ $(document).ready(function(){
             if (score1 !== '' && score2 !== '') {
                 // For now, assume it goes back to invalid state when overrule is removed
                 // In reality, you'd need to re-check the validation
-                newHtml = `<span class="text-danger score-match-indicator invalid-indicator" data-game-id="${gameId}" style="cursor: pointer;" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, oder Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1). Klicken zum Überregeln.">✗</span>`;
+                newHtml = `<span class="text-danger score-match-indicator invalid-indicator" data-game-id="${gameId}" style="cursor: pointer;" title="Spielstand und erfasste Tore stimmen NICHT überein, SOG-Daten fehlen für P1-P3, Overtime-Regeln verletzt (Tore nach 60:00 erfordern n.V. und Tordifferenz von 1), oder Powerplay-/Penalty-Situationen sind inkonsistent (PP/SH-Tore bei aktiven Strafen, Sonderregeln für 5+Spieldauer und 2+2 Min beachtet). Klicken zum Überregeln.">✗</span>`;
             } else {
                 newHtml = '';
             }
@@ -2866,6 +3197,280 @@ $(document).ready(function(){
         }, 5000);
     }
     // --- End of Overrule Feature JavaScript ---
+
+    // --- Semifinal Seeding Adjustment Feature ---
+    let currentSemifinalTeams = [];
+    let originalSeeding = {};
+    
+    // Initialize seeding form when collapse is shown
+    $('#semifinalSeedingAdjust').on('show.bs.collapse', function () {
+        initializeSeedingForm();
+    });
+
+    function initializeSeedingForm() {
+        // Get current semifinal teams and their seeding
+        getCurrentSemifinalTeams().then(teams => {
+            currentSemifinalTeams = teams;
+            originalSeeding = {...teams.seeding};
+            
+            populateSeedingDropdowns(teams.resolved_teams);
+            displayCurrentSeeding(teams.seeding);
+            setInitialSeedingValues(teams.seeding);
+        });
+    }
+
+    async function getCurrentSemifinalTeams() {
+        // Get current seeding from server
+        try {
+            const response = await fetch(`/year/${current_year_id}/semifinal_seeding`);
+            const data = await response.json();
+            
+            if (data.success && data.seeding && data.resolved_teams) {
+                return {
+                    resolved_teams: data.resolved_teams,
+                    seeding: data.seeding
+                };
+            } else {
+                // Fallback: extract teams from current page if server data not available
+                return extractTeamsFromPage();
+            }
+        } catch (error) {
+            console.error('Error fetching current seeding:', error);
+            // Fallback: extract teams from current page
+            return extractTeamsFromPage();
+        }
+    }
+
+    function extractTeamsFromPage() {
+        let resolvedTeams = [];
+        let seeding = {};
+        
+        // Extract teams from the current semifinals section
+        const semifinalsTab = $('#semifinals');
+        const gameRows = semifinalsTab.find('tbody tr[id^="game-"]');
+        
+        gameRows.each(function(index) {
+            const team1Cell = $(this).find('td:nth-child(5)'); // Heim team cell
+            const team2Cell = $(this).find('td:nth-child(7)'); // Gast team cell
+            
+            if (team1Cell.length && team2Cell.length) {
+                let team1Name = team1Cell.text().trim().split('(')[0].trim();
+                let team2Name = team2Cell.text().trim().split('(')[0].trim();
+                
+                // Remove any flag icons or extra text
+                team1Name = team1Name.replace(/^\s*\S+\s+/, ''); // Remove first word if it's likely a flag
+                team2Name = team2Name.replace(/^\s*\S+\s+/, ''); // Remove first word if it's likely a flag
+                
+                if (team1Name && team2Name && 
+                    window.TEAM_ISO_CODES_FROM_TEMPLATE[team1Name] && 
+                    window.TEAM_ISO_CODES_FROM_TEMPLATE[team2Name]) {
+                    resolvedTeams.push(team1Name, team2Name);
+                }
+            }
+        });
+        
+        // Remove duplicates
+        resolvedTeams = [...new Set(resolvedTeams)];
+        
+        if (resolvedTeams.length >= 4) {
+            // Assign seeding based on current order as fallback
+            resolvedTeams.forEach((team, index) => {
+                seeding[`seed${index + 1}`] = team;
+            });
+        }
+        
+        return {
+            resolved_teams: resolvedTeams,
+            seeding: seeding
+        };
+    }
+
+    function populateSeedingDropdowns(teams) {
+        const seedSelects = ['#seed1', '#seed2', '#seed3', '#seed4'];
+        
+        seedSelects.forEach(selectId => {
+            const $select = $(selectId);
+            $select.empty().append('<option value="">Team wählen...</option>');
+            
+            teams.forEach(team => {
+                const isoCode = window.TEAM_ISO_CODES_FROM_TEMPLATE[team];
+                const flagImg = isoCode ? `🏴 ` : '';
+                $select.append(`<option value="${team}">${flagImg}${team}</option>`);
+            });
+        });
+    }
+
+    function displayCurrentSeeding(seeding) {
+        let html = '<div class="list-group list-group-flush">';
+        
+        for (let i = 1; i <= 4; i++) {
+            const team = seeding[`seed${i}`] || '-';
+            const isoCode = window.TEAM_ISO_CODES_FROM_TEMPLATE[team];
+            const flagImg = isoCode ? `<img src="https://flagcdn.com/w20/${isoCode}.png" alt="${team}" style="margin-right: 5px;">` : '';
+            
+            html += `<div class="list-group-item py-1 px-2">
+                        <strong>${i}. Seed:</strong> ${flagImg}${team}
+                     </div>`;
+        }
+        
+        html += '</div>';
+        html += '<div class="mt-2 small text-muted">';
+        html += '<strong>Aktuelle Paarungen:</strong><br>';
+        html += `Spiel 1: ${seeding.seed1 || '-'} vs ${seeding.seed4 || '-'}<br>`;
+        html += `Spiel 2: ${seeding.seed2 || '-'} vs ${seeding.seed3 || '-'}`;
+        html += '</div>';
+        
+        $('#currentSeedingDisplay').html(html);
+    }
+
+    function setInitialSeedingValues(seeding) {
+        $('#seed1').val(seeding.seed1 || '');
+        $('#seed2').val(seeding.seed2 || '');
+        $('#seed3').val(seeding.seed3 || '');
+        $('#seed4').val(seeding.seed4 || '');
+        
+        updatePairingsPreview();
+    }
+
+    // Update pairings preview when dropdown values change
+    $('#seed1, #seed2, #seed3, #seed4').on('change', function() {
+        updatePairingsPreview();
+        validateSeedingSelection();
+    });
+
+    function updatePairingsPreview() {
+        const seed1 = $('#seed1').val();
+        const seed2 = $('#seed2').val();
+        const seed3 = $('#seed3').val();
+        const seed4 = $('#seed4').val();
+        
+        $('#seed1Display').text(seed1 || '-');
+        $('#seed2Display').text(seed2 || '-');
+        $('#seed3Display').text(seed3 || '-');
+        $('#seed4Display').text(seed4 || '-');
+    }
+
+    function validateSeedingSelection() {
+        const seeds = [$('#seed1').val(), $('#seed2').val(), $('#seed3').val(), $('#seed4').val()];
+        const uniqueSeeds = new Set(seeds.filter(seed => seed !== ''));
+        
+        // Check for duplicates
+        const hasDuplicates = uniqueSeeds.size !== seeds.filter(seed => seed !== '').length;
+        const allSelected = seeds.every(seed => seed !== '');
+        
+        const submitBtn = $('#adjustSeedingForm button[type="submit"]');
+        
+        if (hasDuplicates) {
+            showSeedingMessage('warning', 'Jedes Team kann nur einmal ausgewählt werden.');
+            submitBtn.prop('disabled', true);
+        } else if (!allSelected) {
+            $('#seedingMessageArea').empty();
+            submitBtn.prop('disabled', true);
+        } else {
+            $('#seedingMessageArea').empty();
+            submitBtn.prop('disabled', false);
+        }
+    }
+
+    // Reset seeding to original values
+    $('#resetSeedingBtn').on('click', function() {
+        if (confirm('Möchten Sie das Seeding auf die Standard IIHF-Regeln zurücksetzen? Dies löscht alle manuellen Anpassungen.')) {
+            // Call DELETE route to reset to standard seeding
+            fetch(`/year/${current_year_id}/semifinal_seeding`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSeedingMessage('success', data.message || 'Seeding wurde auf Standard-Regeln zurückgesetzt.');
+                    
+                    // Reload the page to show updated seeding
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    showSeedingMessage('danger', data.message || 'Fehler beim Zurücksetzen des Seedings.');
+                }
+            })
+            .catch(error => {
+                console.error('Error resetting seeding:', error);
+                showSeedingMessage('danger', 'Netzwerkfehler beim Zurücksetzen des Seedings.');
+            });
+        }
+    });
+
+    // Handle seeding form submission
+    $('#adjustSeedingForm').on('submit', function(event) {
+        event.preventDefault();
+        
+        const seedingData = {
+            seeding: {
+                seed1: $('#seed1').val(),
+                seed2: $('#seed2').val(),
+                seed3: $('#seed3').val(),
+                seed4: $('#seed4').val()
+            }
+        };
+        
+        // Show loading message
+        showSeedingMessage('info', 'Seeding wird gespeichert...');
+        
+        fetch(`/year/${current_year_id}/semifinal_seeding`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(seedingData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSeedingMessage('success', data.message || 'Seeding wurde erfolgreich geändert!');
+                
+                // Update the original seeding for reset functionality
+                originalSeeding = {
+                    seed1: seedingData.seeding.seed1,
+                    seed2: seedingData.seeding.seed2,
+                    seed3: seedingData.seeding.seed3,
+                    seed4: seedingData.seeding.seed4
+                };
+                
+                // Reload the page after a short delay to show updated pairings
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            } else {
+                showSeedingMessage('danger', data.message || 'Fehler beim Speichern des Seedings.');
+            }
+        })
+        .catch(error => {
+            console.error('Error adjusting seeding:', error);
+            showSeedingMessage('danger', 'Netzwerkfehler beim Speichern des Seedings.');
+        });
+    });
+
+    function showSeedingMessage(type, message) {
+        const alertClass = type === 'success' ? 'alert-success' : 
+                          type === 'warning' ? 'alert-warning' : 
+                          type === 'info' ? 'alert-info' : 'alert-danger';
+        
+        const messageHtml = `<div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                                ${message}
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                             </div>`;
+        
+        $('#seedingMessageArea').html(messageHtml);
+        
+        // Auto-dismiss success messages after 3 seconds
+        if (type === 'success') {
+            setTimeout(() => {
+                $('#seedingMessageArea .alert').alert('close');
+            }, 3000);
+        }
+    }
+    // --- End of Semifinal Seeding Adjustment Feature ---
 
 });
 </script>

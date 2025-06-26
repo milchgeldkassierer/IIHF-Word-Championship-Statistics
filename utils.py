@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple, Set, Optional
 
 # Assuming models.py and constants.py are accessible in the Python path
 from models import Game, ChampionshipYear, TeamStats
-from constants import PRELIM_ROUNDS, PLAYOFF_ROUNDS, TEAM_ISO_CODES
+from constants import PRELIM_ROUNDS, PLAYOFF_ROUNDS, TEAM_ISO_CODES, MAX_PRELIM_GAMES_PER_TEAM, PIM_MAP
 
 # Helper to check if a team code is a final, resolved code (e.g., "USA", "SWE")
 def is_code_final(team_code: Optional[str]) -> bool:
@@ -136,26 +136,107 @@ def _apply_head_to_head_tiebreaker(teams_list: List[TeamStats], all_games: List[
 
 def _sort_teams_by_head_to_head(tied_teams: List[TeamStats], all_games: List[Game]) -> List[TeamStats]:
     """
-    Sort teams that are tied on points by head-to-head results following IIHF rules.
+    Sort teams that are tied on points by head-to-head results following updated IIHF rules.
     
-    IIHF Tie-breaking procedure:
-    - For 2 teams: Direct game between them is decisive
+    Updated Tie-breaking procedure:
+    - For 2 teams: Direct game between them is decisive ONLY if it has been played
+      If direct game not played: Use overall goal difference and goals for
     - For 3+ teams tied: 
-      Step 1: Points in direct games among tied teams
-      Step 2: Goal difference in direct games among tied teams  
-      Step 3: Goals scored in direct games among tied teams
-      Steps 4-5: Results vs teams outside sub-group (not implemented - rare edge case)
-    
-    Special case - If not all mutual games played:
-    1. Fewest games played
-    2. Overall goal difference 
-    3. Overall goals for
-    4. Tournament seeding (not available)
+      Head-to-head tiebreaker ONLY applies if ALL teams have played ALL their 7 preliminary games
+      If not all games played: Use overall goal difference and goals for
     """
     if len(tied_teams) <= 1:
         return tied_teams
     
-    # Get all head-to-head games between these teams
+    # Check if we have exactly 2 teams or more than 2 teams
+    if len(tied_teams) == 2:
+        return _sort_two_teams_by_head_to_head(tied_teams, all_games)
+    else:
+        return _sort_multiple_teams_by_head_to_head(tied_teams, all_games)
+
+def _sort_two_teams_by_head_to_head(tied_teams: List[TeamStats], all_games: List[Game]) -> List[TeamStats]:
+    """
+    Sort exactly 2 teams that are tied on points.
+    Uses head-to-head if the direct game has been played, otherwise overall stats.
+    """
+    team1, team2 = tied_teams[0], tied_teams[1]
+    
+    # Find head-to-head games between these two teams
+    head_to_head_games = []
+    for game in all_games:
+        if (game.team1_code == team1.name and game.team2_code == team2.name) or \
+           (game.team1_code == team2.name and game.team2_code == team1.name):
+            if (game.team1_score is not None and game.team2_score is not None and
+                game.round in PRELIM_ROUNDS):
+                head_to_head_games.append(game)
+    
+    # If direct game has been played, use head-to-head result
+    if head_to_head_games:
+        # Calculate head-to-head stats
+        h2h_stats = {
+            team1.name: {'points': 0, 'gf': 0, 'ga': 0},
+            team2.name: {'points': 0, 'gf': 0, 'ga': 0}
+        }
+        
+        for game in head_to_head_games:
+            team1_h2h = h2h_stats[game.team1_code] if game.team1_code in h2h_stats else h2h_stats[game.team2_code]
+            team2_h2h = h2h_stats[game.team2_code] if game.team2_code in h2h_stats else h2h_stats[game.team1_code]
+            
+            # Determine which team is which in the game
+            if game.team1_code == team1.name:
+                t1_score, t2_score = game.team1_score, game.team2_score
+                t1_h2h, t2_h2h = h2h_stats[team1.name], h2h_stats[team2.name]
+            else:
+                t1_score, t2_score = game.team2_score, game.team1_score
+                t1_h2h, t2_h2h = h2h_stats[team1.name], h2h_stats[team2.name]
+            
+            t1_h2h['gf'] += t1_score
+            t1_h2h['ga'] += t2_score
+            t2_h2h['gf'] += t2_score
+            t2_h2h['ga'] += t1_score
+            
+            # Award points based on result
+            if game.result_type == 'REG':
+                if t1_score > t2_score:
+                    t1_h2h['points'] += 3
+                else:
+                    t2_h2h['points'] += 3
+            elif game.result_type in ['OT', 'SO']:
+                if t1_score > t2_score:
+                    t1_h2h['points'] += 2
+                    t2_h2h['points'] += 1
+                else:
+                    t2_h2h['points'] += 2
+                    t1_h2h['points'] += 1
+        
+        # Sort by head-to-head results
+        team_list = [(team1, h2h_stats[team1.name]), (team2, h2h_stats[team2.name])]
+        team_list.sort(key=lambda x: (
+            x[1]['points'],                    # H2H points
+            x[1]['gf'] - x[1]['ga'],          # H2H goal difference
+            x[1]['gf'],                       # H2H goals for
+            x[0].gd,                          # Overall goal difference
+            x[0].gf                           # Overall goals for
+        ), reverse=True)
+        
+        return [team_obj for team_obj, _ in team_list]
+    
+    # No direct game played, use overall stats
+    return sorted(tied_teams, key=lambda x: (x.gd, x.gf), reverse=True)
+
+def _sort_multiple_teams_by_head_to_head(tied_teams: List[TeamStats], all_games: List[Game]) -> List[TeamStats]:
+    """
+    Sort 3+ teams that are tied on points.
+    Uses head-to-head only if ALL teams have played ALL their 7 preliminary games.
+    """
+    # Check if all teams have played all their preliminary games
+    all_games_completed = all(team.gp >= MAX_PRELIM_GAMES_PER_TEAM for team in tied_teams)
+    
+    if not all_games_completed:
+        # Not all games played, use overall stats
+        return sorted(tied_teams, key=lambda x: (x.gd, x.gf), reverse=True)
+    
+    # All games completed, use head-to-head tiebreaker
     team_names = {team.name for team in tied_teams}
     head_to_head_games = []
     
@@ -165,30 +246,19 @@ def _sort_teams_by_head_to_head(tied_teams: List[TeamStats], all_games: List[Gam
             game.round in PRELIM_ROUNDS):
             head_to_head_games.append(game)
     
-    # Check if all mutual games have been played
-    expected_games = len(tied_teams) * (len(tied_teams) - 1) // 2  # n choose 2
-    actual_games = len(head_to_head_games)
-    all_mutual_games_played = (actual_games == expected_games)
-    
-    # Calculate head-to-head records and games played per team
+    # Calculate head-to-head records
     h2h_stats = {}
     for team in tied_teams:
         h2h_stats[team.name] = {
             'points': 0,
             'gf': 0,
             'ga': 0,
-            'games_played': 0,
-            'wins': 0,
             'team_obj': team
         }
     
     for game in head_to_head_games:
         team1_h2h = h2h_stats[game.team1_code]
         team2_h2h = h2h_stats[game.team2_code]
-        
-        # Update games played for both teams
-        team1_h2h['games_played'] += 1
-        team2_h2h['games_played'] += 1
         
         team1_h2h['gf'] += game.team1_score
         team1_h2h['ga'] += game.team2_score
@@ -199,40 +269,25 @@ def _sort_teams_by_head_to_head(tied_teams: List[TeamStats], all_games: List[Gam
         if game.result_type == 'REG':
             if game.team1_score > game.team2_score:
                 team1_h2h['points'] += 3
-                team1_h2h['wins'] += 1
             else:
                 team2_h2h['points'] += 3
-                team2_h2h['wins'] += 1
         elif game.result_type in ['OT', 'SO']:
             if game.team1_score > game.team2_score:
-                team1_h2h['points'] += 2  # Winner gets 2 points
-                team2_h2h['points'] += 1  # Loser gets 1 point
-                team1_h2h['wins'] += 1
+                team1_h2h['points'] += 2
+                team2_h2h['points'] += 1
             else:
-                team2_h2h['points'] += 2  # Winner gets 2 points
-                team1_h2h['points'] += 1  # Loser gets 1 point
-                team2_h2h['wins'] += 1
+                team2_h2h['points'] += 2
+                team1_h2h['points'] += 1
     
-    # Sort by appropriate criteria based on whether all mutual games were played
+    # Sort by head-to-head criteria
     h2h_list = list(h2h_stats.values())
-    
-    if all_mutual_games_played:
-        # Standard IIHF procedure: Steps 1-3
-        h2h_list.sort(key=lambda x: (
-            x['points'],                # Step 1: Head-to-head points
-            x['gf'] - x['ga'],         # Step 2: Head-to-head goal difference
-            x['gf'],                   # Step 3: Head-to-head goals for
-            x['team_obj'].gd,          # Fallback: Overall goal difference
-            x['team_obj'].gf           # Fallback: Overall goals for
-        ), reverse=True)
-    else:
-        # IIHF incomplete games procedure
-        h2h_list.sort(key=lambda x: (
-            -x['games_played'],        # 1. Fewest games played (negative for ascending)
-            x['team_obj'].gd,          # 2. Overall goal difference
-            x['team_obj'].gf,          # 3. Overall goals for
-            x['team_obj'].pts          # 4. Overall points (as proxy for seeding)
-        ), reverse=True)
+    h2h_list.sort(key=lambda x: (
+        x['points'],                # Head-to-head points
+        x['gf'] - x['ga'],         # Head-to-head goal difference
+        x['gf'],                   # Head-to-head goals for
+        x['team_obj'].gd,          # Overall goal difference
+        x['team_obj'].gf           # Overall goals for
+    ), reverse=True)
     
     return [h2h['team_obj'] for h2h in h2h_list]
 
@@ -720,11 +775,214 @@ def check_game_data_consistency(game_display, sog_data=None):
         if missing_sog_periods:
             warnings.append(f"Game {game_display.id}: Missing SOG data for period(s): {missing_sog_periods}")
             scores_fully_match_data = False
+
+    # NEW: Check PowerPlay/Penalty consistency
+    if hasattr(game_display, 'sorted_events') and game_display.sorted_events:
+        pp_penalty_warnings = check_powerplay_penalty_consistency(game_display)
+        warnings.extend(pp_penalty_warnings)
+        if pp_penalty_warnings:
+            scores_fully_match_data = False
     
     return {
         'warnings': warnings,
         'scores_fully_match_data': scores_fully_match_data
     }
+
+def check_powerplay_penalty_consistency(game_display):
+    """
+    Überprüft die Konsistenz von Powerplay-/Penalty-Situationen in einem Spiel.
+    
+    Regeln:
+    - Wenn eine Strafe aktiv ist und ein Tor innerhalb von 2 Minuten fällt, muss es PP oder SH sein
+    - Bei einem SH-Tor läuft die Strafe weiter
+    - Bei einem PP-Tor endet die Strafe (außer bei Major Penalties ≥ 5 Minuten)
+    - Bei 5 Min + Spieldauer: PP-Tor beendet die Strafe NICHT (Major Penalty Regel)
+    - Bei 2+2 Min: PP-Tor in den ersten 2 Minuten reduziert die Strafe auf 2 Min
+    - Bei gleichzeitigen Strafen beider Teams ist es kein Powerplay (4-on-4)
+    
+    Args:
+        game_display: GameDisplay Objekt mit sorted_events
+        
+    Returns:
+        List von Warnungen als Strings
+    """
+    warnings = []
+    
+    # Sammle alle Tore und Strafen mit Zeiten in Sekunden
+    goals = []
+    penalties = []
+    
+    for event in game_display.sorted_events:
+        if event.get('type') == 'goal':
+            goal_data = event.get('data', {})
+            goals.append({
+                'time_seconds': event.get('time_for_sort', 0),
+                'time_str': goal_data.get('minute', ''),
+                'team': goal_data.get('team_code', ''),
+                'goal_type': goal_data.get('goal_type_display', ''),
+                'scorer': goal_data.get('scorer', ''),
+                'id': goal_data.get('id', 0)
+            })
+        elif event.get('type') == 'penalty':
+            penalty_data = event.get('data', {})
+            penalty_duration = get_penalty_duration_minutes(penalty_data.get('penalty_type', ''))
+            penalties.append({
+                'time_seconds': event.get('time_for_sort', 0),
+                'time_str': penalty_data.get('minute_of_game', ''),
+                'team': penalty_data.get('team_code', ''),
+                'penalty_type': penalty_data.get('penalty_type', ''),
+                'duration_minutes': penalty_duration,
+                'original_duration_minutes': penalty_duration,  # Originale Dauer für 2+2 Strafen
+                'player': penalty_data.get('player_name', ''),
+                'id': penalty_data.get('id', 0),
+                'is_active': True  # Wird bei PP-Toren modifiziert
+            })
+    
+    # Sortiere nach Zeit
+    goals.sort(key=lambda x: x['time_seconds'])
+    penalties.sort(key=lambda x: x['time_seconds'])
+    
+    # Überprüfe jedes Tor auf Powerplay-Konsistenz
+    for goal in goals:
+        goal_time = goal['time_seconds']
+        goal_team = goal['team']
+        goal_type = goal['goal_type']
+        
+        # Finde aktive Strafen zum Zeitpunkt des Tors
+        active_penalties_at_goal = []
+        for penalty in penalties:
+            if not penalty['is_active']:
+                continue
+                
+            penalty_start = penalty['time_seconds']
+            penalty_end = penalty_start + (penalty['duration_minutes'] * 60)
+            
+            # Strafe ist aktiv, wenn das Tor zwischen Start und Ende fällt
+            if penalty_start <= goal_time <= penalty_end:
+                active_penalties_at_goal.append(penalty)
+        
+        # Analysiere die Powerplay-Situation
+        pp_situation = analyze_powerplay_situation(active_penalties_at_goal, goal_team, game_display.team1_code, game_display.team2_code)
+        
+        # Überprüfe, ob der Tortyp zur Situation passt
+        expected_goal_types = get_expected_goal_types(pp_situation)
+        
+        if expected_goal_types and goal_type not in expected_goal_types:
+            situation_desc = describe_powerplay_situation(pp_situation, active_penalties_at_goal)
+            warnings.append(f"Spiel {game_display.id}: Tor von {goal_team} um {goal['time_str']} ist als '{goal_type}' markiert, aber bei {situation_desc} sollte es '{'/'.join(expected_goal_types)}' sein")
+        
+        # Spezielle Behandlung von Strafen bei PP-Toren
+        if goal_type == 'PP':
+            for penalty in active_penalties_at_goal:
+                if penalty['team'] != goal_team:  # Strafe des Gegners
+                    penalty_type = penalty['penalty_type']
+                    time_since_penalty_start = goal_time - penalty['time_seconds']
+                    
+                    if penalty_type == '5 Min + Spieldauer':
+                        # Bei 5+Spieldauer: PP-Tor beendet die Strafe NICHT (Major Penalty)
+                        # Die Strafe läuft weiter
+                        pass
+                    elif penalty_type == '2+2 Min':
+                        # Bei 2+2 Min: PP-Tor in den ersten 2 Minuten reduziert auf 2 Min
+                        if time_since_penalty_start <= 120:  # Ersten 2 Minuten (120 Sekunden)
+                            # Strafe wird auf 2 Minuten reduziert
+                            penalty['duration_minutes'] = 2
+                        else:
+                            # Nach den ersten 2 Minuten: Strafe endet normal
+                            penalty['is_active'] = False
+                    elif penalty['duration_minutes'] < 5:
+                        # Minor Penalties (< 5 Min): Strafe endet bei PP-Tor
+                        penalty['is_active'] = False
+                    # Major Penalties (>= 5 Min aber nicht 5+Spieldauer): Strafe läuft weiter
+    
+    return warnings
+
+def get_penalty_duration_minutes(penalty_type):
+    """Gibt die Dauer einer Strafe in Minuten zurück."""
+    # Hauptmapping aus constants.py
+    if penalty_type in PIM_MAP:
+        return PIM_MAP[penalty_type]
+    
+    # Fallback für andere mögliche Formate
+    duration_map = {
+        '2 min': 2,
+        '2+2 min': 4,
+        '2+10 min': 12,
+        '4 min': 4,
+        '5 min': 5,
+        '5+10 min': 15,
+        '10 min': 10,
+        '20 min': 20,
+        'Match penalty': 20,
+        'Game misconduct': 10,
+        'Misconduct': 10
+    }
+    return duration_map.get(penalty_type.lower(), 2)  # Default 2 Minuten
+
+def analyze_powerplay_situation(active_penalties, goal_team, team1_code, team2_code):
+    """
+    Analysiert die Powerplay-Situation basierend auf aktiven Strafen.
+    
+    Returns:
+        dict mit 'type' ('pp', 'sh', '4on4', 'even') und Details
+    """
+    # Zähle Strafen pro Team
+    team1_penalties = [p for p in active_penalties if p['team'] == team1_code]
+    team2_penalties = [p for p in active_penalties if p['team'] == team2_code]
+    
+    team1_penalty_count = len(team1_penalties)
+    team2_penalty_count = len(team2_penalties)
+    
+    # Bestimme welches Team das Tor geschossen hat
+    goal_team_penalties = team1_penalties if goal_team == team1_code else team2_penalties
+    opponent_penalties = team2_penalties if goal_team == team1_code else team1_penalties
+    
+    goal_team_penalty_count = len(goal_team_penalties)
+    opponent_penalty_count = len(opponent_penalties)
+    
+    if goal_team_penalty_count == 0 and opponent_penalty_count == 0:
+        return {'type': 'even'}
+    elif goal_team_penalty_count > 0 and opponent_penalty_count == 0:
+        return {'type': 'sh', 'goal_team_penalties': goal_team_penalty_count}
+    elif goal_team_penalty_count == 0 and opponent_penalty_count > 0:
+        return {'type': 'pp', 'opponent_penalties': opponent_penalty_count}
+    elif goal_team_penalty_count > 0 and opponent_penalty_count > 0:
+        # Beide Teams haben Strafen - normalerweise 4-on-4
+        return {'type': '4on4', 'goal_team_penalties': goal_team_penalty_count, 'opponent_penalties': opponent_penalty_count}
+    else:
+        return {'type': 'unknown'}
+
+def get_expected_goal_types(pp_situation):
+    """Gibt die erwarteten Tortypen für eine gegebene Powerplay-Situation zurück."""
+    situation_type = pp_situation.get('type')
+    
+    if situation_type == 'pp':
+        return ['PP']
+    elif situation_type == 'sh':
+        return ['SH']
+    elif situation_type == '4on4':
+        return ['REG']  # 4-on-4 gilt als regulär
+    elif situation_type == 'even':
+        return ['REG']
+    else:
+        return []
+
+def describe_powerplay_situation(pp_situation, active_penalties):
+    """Beschreibt die Powerplay-Situation für Fehlermeldungen."""
+    situation_type = pp_situation.get('type')
+    
+    if situation_type == 'pp':
+        penalty_count = pp_situation.get('opponent_penalties', 1)
+        return f"aktiver Strafe des Gegners (Powerplay, {penalty_count} Strafe{'n' if penalty_count > 1 else ''})"
+    elif situation_type == 'sh':
+        penalty_count = pp_situation.get('goal_team_penalties', 1)
+        return f"eigener Strafe (Unterzahl, {penalty_count} Strafe{'n' if penalty_count > 1 else ''})"
+    elif situation_type == '4on4':
+        return "gleichzeitigen Strafen beider Teams (4-gegen-4)"
+    elif situation_type == 'even':
+        return "gleichstarker Besetzung"
+    else:
+        return "unklarer Strafsituation"
 
 def calculate_expected_points(team1_score: int, team2_score: int, result_type: str) -> Tuple[int, int]:
     """

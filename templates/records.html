@@ -185,6 +185,30 @@
                 </div>
             </div>
 
+            <!-- Häufigstes Duell -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-history text-info"></i> Häufigste Duelle</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if most_frequent_matchup %}
+                            {% for matchup in most_frequent_matchup %}
+                                <div class="record-item">
+                                    {% if team_iso_codes[matchup.team1] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[matchup.team1] }}.png" alt="{{ matchup.team1 }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ matchup.team1 }}</strong> vs 
+                                    {% if team_iso_codes[matchup.team2] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[matchup.team2] }}.png" alt="{{ matchup.team2 }}" style="margin-left: 5px; margin-right: 5px; vertical-align: middle;">{% endif %}
+                                    <strong>{{ matchup.team2 }}</strong><br>
+                                    <small class="text-muted">{{ matchup.count }} Begegnungen ({{ matchup.timespan }})</small>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
             <!-- TOP 3 Schnellste Tore -->
             <div class="col-md-6 mb-4">
                 <div class="card">
@@ -316,7 +340,7 @@
 
         <div class="row">
             <!-- Turnier mit den meisten Toren -->
-            <div class="col-md-6 mb-4">
+            <div class="col-md-4 mb-4">
                 <div class="card">
                     <div class="card-header">
                         <h5><i class="fas fa-arrow-up text-success"></i> Turnier mit den meisten Toren</h5>
@@ -338,7 +362,7 @@
             </div>
 
             <!-- Turnier mit den wenigsten Toren -->
-            <div class="col-md-6 mb-4">
+            <div class="col-md-4 mb-4">
                 <div class="card">
                     <div class="card-header">
                         <h5><i class="fas fa-arrow-down text-danger"></i> Turnier mit den wenigsten Toren</h5>
@@ -350,6 +374,28 @@
                                     <strong>{{ tournament.tournament }} {{ tournament.year }}</strong><br>
                                     {{ tournament.total_goals }} Tore in {{ tournament.games }} Spielen 
                                     ({{ tournament.goals_per_game }} Tore/Spiel)
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Turnier mit den meisten Strafminuten -->
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-exclamation-triangle text-warning"></i> Turnier mit den meisten Strafminuten</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if tournament_most_penalty_minutes %}
+                            {% for tournament in tournament_most_penalty_minutes %}
+                                <div class="record-item">
+                                    <strong>{{ tournament.tournament }} {{ tournament.year }}</strong><br>
+                                    {{ tournament.total_pim }} PIM in {{ tournament.games }} Spielen 
+                                    ({{ tournament.pim_per_game }} PIM/Spiel)
                                 </div>
                             {% endfor %}
                         {% else %}
