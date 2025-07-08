@@ -263,6 +263,20 @@ def calculate_all_time_standings():
                             current_year_playoff_map['Q3'] = q3_team
                             current_year_playoff_map['Q4'] = q4_team
                             map_changed_this_iter = True
+        
+        # Apply custom seeding after all team resolution is complete
+        # Import here to avoid circular imports
+        try:
+            from routes.year_routes import get_custom_seeding_from_db
+            custom_seeding = get_custom_seeding_from_db(year_id)
+            if custom_seeding:
+                # Override Q1-Q4 mappings with custom seeding
+                current_year_playoff_map['Q1'] = custom_seeding['seed1']
+                current_year_playoff_map['Q2'] = custom_seeding['seed2']
+                current_year_playoff_map['Q3'] = custom_seeding['seed3']
+                current_year_playoff_map['Q4'] = custom_seeding['seed4']
+        except ImportError:
+            pass  # If import fails, continue without custom seeding
                     
         resolved_playoff_maps_by_year_id[year_id] = current_year_playoff_map
 
@@ -529,20 +543,74 @@ def medal_tally_view():
 def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, year_obj_for_map):
     final_ranking = {}
     
-    def trace_team_from_medal_games():
-        sf_games = [g for g in games_this_year if g.round == "Semifinals" and g.team1_score is not None and g.team2_score is not None]
+    # Direkte Berechnung der Medal Games aus den tatsächlichen Spielergebnissen
+    # Diese Methode ist robuster und funktioniert auch bei manuell geändertem Seeding
+    
+    # Sammle die Semifinal-Ergebnisse zuerst
+    sf_games = [g for g in games_this_year if g.round == "Semifinals" and g.team1_score is not None and g.team2_score is not None]
+    sf_results = {}
+    
+    for sf_game in sf_games:
+        winner = sf_game.team1_code if sf_game.team1_score > sf_game.team2_score else sf_game.team2_code
+        loser = sf_game.team2_code if sf_game.team1_score > sf_game.team2_score else sf_game.team1_code
         
-        sf_results = {}
-        for sf_game in sf_games:
-            winner = sf_game.team1_code if sf_game.team1_score > sf_game.team2_score else sf_game.team2_code
-            loser = sf_game.team2_code if sf_game.team1_score > sf_game.team2_score else sf_game.team1_code
-            
-            if sf_game.game_number == 61:  # SF1
-                sf_results["W(SF1)"] = winner
-                sf_results["L(SF1)"] = loser
-            elif sf_game.game_number == 62:  # SF2  
-                sf_results["W(SF2)"] = winner
-                sf_results["L(SF2)"] = loser
+        if sf_game.game_number == 61:  # SF1
+            sf_results["W(SF1)"] = winner
+            sf_results["L(SF1)"] = loser
+        elif sf_game.game_number == 62:  # SF2  
+            sf_results["W(SF2)"] = winner
+            sf_results["L(SF2)"] = loser
+    
+    # Suche Bronze Medal Game und berechne 3./4. Platz direkt
+    bronze_game = None
+    for game in games_this_year:
+        if game.round == "Bronze Medal Game" and game.team1_score is not None and game.team2_score is not None:
+            bronze_game = game
+            break
+    
+    if bronze_game:
+        team1_code = bronze_game.team1_code
+        team2_code = bronze_game.team2_code
+        
+        # Löse Platzhalter auf, falls nötig
+        team1_resolved = sf_results.get(team1_code, team1_code)
+        team2_resolved = sf_results.get(team2_code, team2_code)
+        
+        # Bestimme Bronze (3.) und 4. Platz basierend auf dem tatsächlichen Spielergebnis
+        if bronze_game.team1_score > bronze_game.team2_score:
+            final_ranking[3] = team1_resolved  # Bronze
+            final_ranking[4] = team2_resolved  # 4. Platz
+        else:
+            final_ranking[3] = team2_resolved  # Bronze
+            final_ranking[4] = team1_resolved  # 4. Platz
+    
+    # Suche Gold Medal Game und berechne 1./2. Platz direkt
+    final_game = None
+    for game in games_this_year:
+        if game.round == "Gold Medal Game" and game.team1_score is not None and game.team2_score is not None:
+            final_game = game
+            break
+    
+    if final_game:
+        team1_code = final_game.team1_code
+        team2_code = final_game.team2_code
+        
+        # Löse Platzhalter auf, falls nötig
+        team1_resolved = sf_results.get(team1_code, team1_code)
+        team2_resolved = sf_results.get(team2_code, team2_code)
+        
+        # Bestimme Gold (1.) und Silber (2.) basierend auf dem tatsächlichen Spielergebnis
+        if final_game.team1_score > final_game.team2_score:
+            final_ranking[1] = team1_resolved  # Gold
+            final_ranking[2] = team2_resolved  # Silber
+        else:
+            final_ranking[1] = team2_resolved  # Gold
+            final_ranking[2] = team1_resolved  # Silber
+    
+    # Hier beginnt die ursprüngliche komplexe Logik für die restlichen Plätze (5-16)
+    def trace_team_from_medal_games():
+        # Verwende die bereits berechneten sf_results
+        sf_results_trace = sf_results
         
         team_map = {}
         prelim_games = [g for g in games_this_year if g.round in PRELIM_ROUNDS and is_code_final(g.team1_code) and is_code_final(g.team2_code)]
@@ -676,50 +744,15 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
                 return team_map[code]
             if code in qf_results:
                 return resolve_code(qf_results[code])
-            if code in sf_results:
-                return resolve_code(sf_results[code])
+            if code in sf_results_trace:
+                return resolve_code(sf_results_trace[code])
             return code
         
         return resolve_code
-    
-    resolve_team = trace_team_from_medal_games()
-    
-    games_map = {g.game_number: g for g in games_this_year if g.game_number is not None}
-    
-    bronze_game = None
-    for game in games_this_year:
-        if game.round == "Bronze Medal Game" and game.team1_score is not None and game.team2_score is not None:
-            bronze_game = game
-            break
-    
-    final_game = None
-    for game in games_this_year:
-        if game.round == "Gold Medal Game" and game.team1_score is not None and game.team2_score is not None:
-            final_game = game
-            break
-    
-    if bronze_game:
-        team1_resolved = resolve_team(bronze_game.team1_code)
-        team2_resolved = resolve_team(bronze_game.team2_code)
-        
-        if bronze_game.team1_score > bronze_game.team2_score:
-            final_ranking[3] = team1_resolved
-            final_ranking[4] = team2_resolved
-        else:
-            final_ranking[3] = team2_resolved
-            final_ranking[4] = team1_resolved
-    
-    if final_game:
-        team1_resolved = resolve_team(final_game.team1_code)
-        team2_resolved = resolve_team(final_game.team2_code)
-        
-        if final_game.team1_score > final_game.team2_score:
-            final_ranking[1] = team1_resolved
-            final_ranking[2] = team2_resolved
-        else:
-            final_ranking[1] = team2_resolved
-            final_ranking[2] = team1_resolved
 
+    resolve_team = trace_team_from_medal_games()
+
+    # Berechne die restlichen Plätze (5-16)
     prelim_stats_map = {}
     prelim_games = [
         g for g in games_this_year
