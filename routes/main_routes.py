@@ -30,16 +30,52 @@ def resolve_fixture_path(relative_path):
 
 def get_tournament_statistics(year_obj):
     """
-    Calculate tournament statistics: games completed, total games, and winner
-    Returns dict with: total_games, completed_games, winner
+    Calculate tournament statistics: games completed, total games, goals, penalties and winner
+    Returns dict with: total_games, completed_games, goals, penalties, avg_goals_per_game, avg_penalties_per_game, winner
     """
     if not year_obj:
-        return {'total_games': 0, 'completed_games': 0, 'winner': None}
+        return {
+            'total_games': 0, 
+            'completed_games': 0, 
+            'goals': 0, 
+            'penalties': 0, 
+            'avg_goals_per_game': 0.0,
+            'avg_penalties_per_game': 0.0,
+            'winner': None
+        }
     
     all_games = Game.query.filter_by(year_id=year_obj.id).all()
     total_games = len(all_games)
     
-    completed_games = sum(1 for game in all_games if game.team1_score is not None and game.team2_score is not None)
+    completed_games_list = [game for game in all_games if game.team1_score is not None and game.team2_score is not None]
+    completed_games = len(completed_games_list)
+    
+    # Calculate goals and penalties for completed games only
+    goals_count = 0
+    penalties_count = 0
+    
+    if completed_games > 0:
+        # Calculate goals from game scores (same method as records.html)
+        goals_count = sum(game.team1_score + game.team2_score for game in completed_games_list)
+        
+        # Calculate PIM from penalty types (same method as records.html)
+        from constants import PIM_MAP
+        penalties_count = db.session.query(
+            func.sum(
+                case(
+                    *[(Penalty.penalty_type == penalty_type, pim_value) for penalty_type, pim_value in PIM_MAP.items()],
+                    else_=2  # Default for unknown penalty types
+                )
+            )
+        ).join(Game, Penalty.game_id == Game.id).filter(
+            Game.year_id == year_obj.id,
+            Game.team1_score.isnot(None),
+            Game.team2_score.isnot(None)
+        ).scalar() or 0
+    
+    # Calculate averages
+    avg_goals_per_game = round(goals_count / completed_games, 2) if completed_games > 0 else 0.0
+    avg_penalties_per_game = round(penalties_count / completed_games, 2) if completed_games > 0 else 0.0
     
     winner = None
     if completed_games == total_games and total_games > 0:
@@ -74,13 +110,17 @@ def get_tournament_statistics(year_obj):
     return {
         'total_games': total_games,
         'completed_games': completed_games,
+        'goals': goals_count,
+        'penalties': penalties_count,
+        'avg_goals_per_game': avg_goals_per_game,
+        'avg_penalties_per_game': avg_penalties_per_game,
         'winner': winner
     }
 
 def calculate_all_time_standings():
     """
     Calculates all-time standings for all teams based on game results.
-    This version precomputes playoff maps for each year.
+    This version precomputes playoff maps for each year and uses correct medal game resolution.
     """
     all_games = Game.query.options(db.joinedload(Game.championship_year)).all()
     year_objects_map = {year.id: year for year in ChampionshipYear.query.all()}
@@ -90,6 +130,31 @@ def calculate_all_time_standings():
         games_by_year_id.setdefault(game_obj.year_id, []).append(game_obj)
 
     resolved_playoff_maps_by_year_id = {}
+    
+    # Pre-calculate correct medal game rankings for each year (with custom seeding)
+    medal_game_rankings_by_year = {}
+    for year_id, games_in_this_year in games_by_year_id.items():
+        year_obj = year_objects_map.get(year_id)
+        if year_obj:
+            try:
+                # CRITICAL: Apply custom seeding BEFORE calculating final ranking
+                playoff_map_for_ranking = {}
+                try:
+                    from routes.year_routes import get_custom_seeding_from_db
+                    custom_seeding = get_custom_seeding_from_db(year_id)
+                    if custom_seeding:
+                        playoff_map_for_ranking['Q1'] = custom_seeding['seed1']
+                        playoff_map_for_ranking['Q2'] = custom_seeding['seed2']
+                        playoff_map_for_ranking['Q3'] = custom_seeding['seed3']
+                        playoff_map_for_ranking['Q4'] = custom_seeding['seed4']
+                except ImportError:
+                    pass  # Continue without custom seeding if import fails
+                
+                final_ranking = calculate_complete_final_ranking(year_obj, games_in_this_year, playoff_map_for_ranking, year_obj)
+                medal_game_rankings_by_year[year_id] = final_ranking
+            except Exception as e:
+                current_app.logger.warning(f"Could not calculate final ranking for year {year_id}: {e}")
+                medal_game_rankings_by_year[year_id] = {}
 
     for year_id, games_in_this_year in games_by_year_id.items():
         year_obj = year_objects_map.get(year_id)
@@ -294,44 +359,102 @@ def calculate_all_time_standings():
             )
             current_year_playoff_map = {}
         
-        # Apply custom seeding for this specific year if it exists
-        # Import here to avoid circular imports
-        try:
-            from routes.year_routes import get_custom_seeding_from_db
-            custom_seeding = get_custom_seeding_from_db(year_id)
-            if custom_seeding:
-                # Create a copy of the playoff map and override Q1-Q4 with custom seeding
-                current_year_playoff_map = current_year_playoff_map.copy()
-                current_year_playoff_map['Q1'] = custom_seeding['seed1']
-                current_year_playoff_map['Q2'] = custom_seeding['seed2']
-                current_year_playoff_map['Q3'] = custom_seeding['seed3']
-                current_year_playoff_map['Q4'] = custom_seeding['seed4']
-        except ImportError:
-            pass  # If import fails, continue without custom seeding
-
-        current_year_games_list = games_by_year_id.get(year_id, [])
-        current_year_games_map_by_number = {g.game_number: g for g in current_year_games_list if g.game_number is not None}
-
-        resolved_team1_code = get_resolved_team_code(game.team1_code, current_year_playoff_map, current_year_games_map_by_number)
-        resolved_team2_code = get_resolved_team_code(game.team2_code, current_year_playoff_map, current_year_games_map_by_number)
+        # CRITICAL: Special handling for Medal Games AND Semifinals using correct final ranking
+        final_team1_code = None
+        final_team2_code = None
         
-        if game.round in ['SF', 'F'] or game.game_number in [61, 62, 63, 64]:
-            pass
+        if game.round in ['Gold Medal Game', 'Bronze Medal Game', 'Semifinals']:
+            # Use correct medal game resolution from calculate_complete_final_ranking
+            year_ranking = medal_game_rankings_by_year.get(year_id, {})
+            if year_ranking:
+                if game.round == 'Gold Medal Game':
+                    final_team1_code = year_ranking.get(1)  # Gold
+                    final_team2_code = year_ranking.get(2)  # Silver
+                    # Ensure correct order based on actual game result
+                    if (final_team1_code and final_team2_code and 
+                        game.team1_score is not None and game.team2_score is not None):
+                        # If resolved teams don't match game structure, swap them
+                        if (game.team1_score > game.team2_score and final_team1_code != year_ranking.get(1)) or \
+                           (game.team2_score > game.team1_score and final_team2_code != year_ranking.get(1)):
+                            final_team1_code, final_team2_code = final_team2_code, final_team1_code
+                elif game.round == 'Bronze Medal Game':
+                    final_team1_code = year_ranking.get(3)  # Bronze
+                    final_team2_code = year_ranking.get(4)  # Fourth
+                    # Ensure correct order based on actual game result
+                    if (final_team1_code and final_team2_code and 
+                        game.team1_score is not None and game.team2_score is not None):
+                        # If resolved teams don't match game structure, swap them
+                        if (game.team1_score > game.team2_score and final_team1_code != year_ranking.get(3)) or \
+                           (game.team2_score > game.team1_score and final_team2_code != year_ranking.get(3)):
+                            final_team1_code, final_team2_code = final_team2_code, final_team1_code
+                elif game.round == 'Semifinals':
+                    # CRITICAL: Use same logic as get_all_resolved_games() for semifinals
+                    # Check for custom seeding first
+                    try:
+                        from routes.year_routes import get_custom_seeding_from_db
+                        custom_seeding = get_custom_seeding_from_db(year_id)
+                        if custom_seeding:
+                            # Direct assignment based on custom seeding and game number
+                            if game.game_number == 61:  # SF1: seed1 vs seed4
+                                # Get the two teams that played in SF1
+                                team_a = custom_seeding['seed1']
+                                team_b = custom_seeding['seed4']
+                            elif game.game_number == 62:  # SF2: seed2 vs seed3
+                                # Get the two teams that played in SF2
+                                team_a = custom_seeding['seed2']
+                                team_b = custom_seeding['seed3']
+                            else:
+                                team_a = None
+                                team_b = None
+                            
+                            # Assign teams to final codes (order doesn't matter much, just ensure they're assigned)
+                            if team_a and team_b:
+                                final_team1_code = team_a
+                                final_team2_code = team_b
+                        else:
+                            # No custom seeding - use standard resolution (will happen in fallback below)
+                            pass
+                    except ImportError:
+                        # If import fails, use standard resolution (will happen in fallback below)
+                        pass
 
-        has_final_resolved_codes = is_code_final(resolved_team1_code) and is_code_final(resolved_team2_code)
-        has_final_original_codes = is_code_final(game.team1_code) and is_code_final(game.team2_code)
-        
-        if not (has_final_resolved_codes or has_final_original_codes):
-            skipped_games_count = getattr(calculate_all_time_standings, '_skipped_count', 0) + 1
-            calculate_all_time_standings._skipped_count = skipped_games_count
-            continue
+        # Fallback to standard resolution if medal game resolution failed
+        if not final_team1_code or not final_team2_code:
+            # Apply custom seeding for this specific year if it exists
+            # Import here to avoid circular imports
+            try:
+                from routes.year_routes import get_custom_seeding_from_db
+                custom_seeding = get_custom_seeding_from_db(year_id)
+                if custom_seeding:
+                    # Create a copy of the playoff map and override Q1-Q4 with custom seeding
+                    current_year_playoff_map = current_year_playoff_map.copy()
+                    current_year_playoff_map['Q1'] = custom_seeding['seed1']
+                    current_year_playoff_map['Q2'] = custom_seeding['seed2']
+                    current_year_playoff_map['Q3'] = custom_seeding['seed3']
+                    current_year_playoff_map['Q4'] = custom_seeding['seed4']
+            except ImportError:
+                pass  # If import fails, continue without custom seeding
+
+            current_year_games_list = games_by_year_id.get(year_id, [])
+            current_year_games_map_by_number = {g.game_number: g for g in current_year_games_list if g.game_number is not None}
+
+            resolved_team1_code = get_resolved_team_code(game.team1_code, current_year_playoff_map, current_year_games_map_by_number)
+            resolved_team2_code = get_resolved_team_code(game.team2_code, current_year_playoff_map, current_year_games_map_by_number)
+
+            has_final_resolved_codes = is_code_final(resolved_team1_code) and is_code_final(resolved_team2_code)
+            has_final_original_codes = is_code_final(game.team1_code) and is_code_final(game.team2_code)
             
-        if has_final_resolved_codes:
-            final_team1_code = resolved_team1_code
-            final_team2_code = resolved_team2_code
-        else:
-            final_team1_code = game.team1_code
-            final_team2_code = game.team2_code
+            if not (has_final_resolved_codes or has_final_original_codes):
+                skipped_games_count = getattr(calculate_all_time_standings, '_skipped_count', 0) + 1
+                calculate_all_time_standings._skipped_count = skipped_games_count
+                continue
+                
+            if has_final_resolved_codes:
+                final_team1_code = resolved_team1_code
+                final_team2_code = resolved_team2_code
+            else:
+                final_team1_code = game.team1_code
+                final_team2_code = game.team2_code
             
         year_of_game = game.championship_year.year if game.championship_year else None
 
@@ -376,7 +499,6 @@ def calculate_all_time_standings():
     
     skipped_count = getattr(calculate_all_time_standings, '_skipped_count', 0)
     if skipped_count > 0:
-        current_app.logger.info(f"All-time standings calculated. Skipped {skipped_count} games with non-final team codes (placeholder/unresolved teams).")
         calculate_all_time_standings._skipped_count = 0
     
     return final_all_time_standings
@@ -536,81 +658,45 @@ def all_time_standings_view():
 
 @main_bp.route('/medal-tally')
 def medal_tally_view():
-    current_app.logger.info("Accessing medal tally page.")
     medal_data = get_medal_tally_data()
     return render_template('medal_tally.html', medal_data=medal_data, team_iso_codes=TEAM_ISO_CODES)
 
 def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, year_obj_for_map):
     final_ranking = {}
     
-    # Direkte Berechnung der Medal Games aus den tatsächlichen Spielergebnissen
-    # Diese Methode ist robuster und funktioniert auch bei manuell geändertem Seeding
-    
-    # Sammle die Semifinal-Ergebnisse zuerst
-    sf_games = [g for g in games_this_year if g.round == "Semifinals" and g.team1_score is not None and g.team2_score is not None]
-    sf_results = {}
-    
-    for sf_game in sf_games:
-        winner = sf_game.team1_code if sf_game.team1_score > sf_game.team2_score else sf_game.team2_code
-        loser = sf_game.team2_code if sf_game.team1_score > sf_game.team2_score else sf_game.team1_code
-        
-        if sf_game.game_number == 61:  # SF1
-            sf_results["W(SF1)"] = winner
-            sf_results["L(SF1)"] = loser
-        elif sf_game.game_number == 62:  # SF2  
-            sf_results["W(SF2)"] = winner
-            sf_results["L(SF2)"] = loser
-    
-    # Suche Bronze Medal Game und berechne 3./4. Platz direkt
-    bronze_game = None
-    for game in games_this_year:
-        if game.round == "Bronze Medal Game" and game.team1_score is not None and game.team2_score is not None:
-            bronze_game = game
-            break
-    
-    if bronze_game:
-        team1_code = bronze_game.team1_code
-        team2_code = bronze_game.team2_code
-        
-        # Löse Platzhalter auf, falls nötig
-        team1_resolved = sf_results.get(team1_code, team1_code)
-        team2_resolved = sf_results.get(team2_code, team2_code)
-        
-        # Bestimme Bronze (3.) und 4. Platz basierend auf dem tatsächlichen Spielergebnis
-        if bronze_game.team1_score > bronze_game.team2_score:
-            final_ranking[3] = team1_resolved  # Bronze
-            final_ranking[4] = team2_resolved  # 4. Platz
-        else:
-            final_ranking[3] = team2_resolved  # Bronze
-            final_ranking[4] = team1_resolved  # 4. Platz
-    
-    # Suche Gold Medal Game und berechne 1./2. Platz direkt
-    final_game = None
-    for game in games_this_year:
-        if game.round == "Gold Medal Game" and game.team1_score is not None and game.team2_score is not None:
-            final_game = game
-            break
-    
-    if final_game:
-        team1_code = final_game.team1_code
-        team2_code = final_game.team2_code
-        
-        # Löse Platzhalter auf, falls nötig
-        team1_resolved = sf_results.get(team1_code, team1_code)
-        team2_resolved = sf_results.get(team2_code, team2_code)
-        
-        # Bestimme Gold (1.) und Silber (2.) basierend auf dem tatsächlichen Spielergebnis
-        if final_game.team1_score > final_game.team2_score:
-            final_ranking[1] = team1_resolved  # Gold
-            final_ranking[2] = team2_resolved  # Silber
-        else:
-            final_ranking[1] = team2_resolved  # Gold
-            final_ranking[2] = team1_resolved  # Silber
-    
-    # Hier beginnt die ursprüngliche komplexe Logik für die restlichen Plätze (5-16)
     def trace_team_from_medal_games():
-        # Verwende die bereits berechneten sf_results
-        sf_results_trace = sf_results
+        sf_games = [g for g in games_this_year if g.round == "Semifinals" and g.team1_score is not None and g.team2_score is not None]
+        
+        # Bei manuell geändertem Seeding: sammle alle Semifinal-Gewinner und -Verlierer
+        # unabhängig von Game-Nummern, da die Zuordnung durch das Custom Seeding gestört ist
+        sf_winners = []
+        sf_losers = []
+        sf_results = {}
+        
+        for sf_game in sf_games:
+            # Löse die Teams direkt auf, falls sie noch Platzhalter sind
+            team1_resolved = sf_game.team1_code
+            team2_resolved = sf_game.team2_code
+            
+            # Bei manuell geändertem Seeding sind die Teams schon echte Team-Codes
+            if is_code_final(team1_resolved) and is_code_final(team2_resolved):
+                winner = team1_resolved if sf_game.team1_score > sf_game.team2_score else team2_resolved
+                loser = team2_resolved if sf_game.team1_score > sf_game.team2_score else team1_resolved
+            else:
+                # Fallback für den Fall, dass noch Platzhalter verwendet werden
+                winner = sf_game.team1_code if sf_game.team1_score > sf_game.team2_score else sf_game.team2_code
+                loser = sf_game.team2_code if sf_game.team1_score > sf_game.team2_score else sf_game.team1_code
+            
+            sf_winners.append(winner)
+            sf_losers.append(loser)
+            
+            # Noch die ursprüngliche Zuordnung für Fallback-Kompatibilität
+            if sf_game.game_number == 61:  # SF1
+                sf_results["W(SF1)"] = winner
+                sf_results["L(SF1)"] = loser
+            elif sf_game.game_number == 62:  # SF2  
+                sf_results["W(SF2)"] = winner
+                sf_results["L(SF2)"] = loser
         
         team_map = {}
         prelim_games = [g for g in games_this_year if g.round in PRELIM_ROUNDS and is_code_final(g.team1_code) and is_code_final(g.team2_code)]
@@ -713,29 +799,20 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
         qf_winner_stats.sort(key=lambda x: (x['rank_in_group'], -x['pts'], -x['gd'], -x['gf']))
         
         qf_results = {}
-        if len(qf_winner_stats) >= 4:
-            # Check for custom seeding first
-            try:
-                from routes.year_routes import get_custom_seeding_from_db
-                custom_seeding = get_custom_seeding_from_db(year_obj_for_map.id)
-                if custom_seeding:
-                    # Apply custom seeding
-                    qf_results["Q1"] = custom_seeding['seed1']
-                    qf_results["Q2"] = custom_seeding['seed2']
-                    qf_results["Q3"] = custom_seeding['seed3']
-                    qf_results["Q4"] = custom_seeding['seed4']
-                else:
-                    # Use standard IIHF seeding
-                    qf_results["Q1"] = qf_winner_stats[0]['team']
-                    qf_results["Q2"] = qf_winner_stats[3]['team']
-                    qf_results["Q3"] = qf_winner_stats[1]['team']
-                    qf_results["Q4"] = qf_winner_stats[2]['team']
-            except ImportError:
-                # If import fails, use standard IIHF seeding
-                qf_results["Q1"] = qf_winner_stats[0]['team']
-                qf_results["Q2"] = qf_winner_stats[3]['team']
-                qf_results["Q3"] = qf_winner_stats[1]['team']
-                qf_results["Q4"] = qf_winner_stats[2]['team']
+        
+        # CRITICAL: Use playoff_map for Q1-Q4 if provided (contains custom seeding)
+        if playoff_map and all(key in playoff_map for key in ['Q1', 'Q2', 'Q3', 'Q4']):
+            # Use playoff_map (which contains custom seeding)
+            qf_results["Q1"] = playoff_map['Q1']
+            qf_results["Q2"] = playoff_map['Q2']
+            qf_results["Q3"] = playoff_map['Q3']
+            qf_results["Q4"] = playoff_map['Q4']
+        elif len(qf_winner_stats) >= 4:
+            # Fallback to calculated seeding if no playoff_map provided
+            qf_results["Q1"] = qf_winner_stats[0]['team']
+            qf_results["Q2"] = qf_winner_stats[3]['team']
+            qf_results["Q3"] = qf_winner_stats[1]['team']
+            qf_results["Q4"] = qf_winner_stats[2]['team']
         
         def resolve_code(code):
             if is_code_final(code):
@@ -744,14 +821,207 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
                 return team_map[code]
             if code in qf_results:
                 return resolve_code(qf_results[code])
-            if code in sf_results_trace:
-                return resolve_code(sf_results_trace[code])
+            if code in sf_results:
+                return resolve_code(sf_results[code])
+            
+            # Spezielle Behandlung für Medal Game Platzhalter bei manuell geändertem Seeding
+            # Da die Game-Nummer-basierte Zuordnung gestört ist, nutze die tatsächlichen Ergebnisse
+            if code.startswith('L(SF') and len(sf_losers) >= 2:
+                # Für Bronze Medal Game: nutze die beiden Semifinal-Verlierer
+                if code == 'L(SF1)':
+                    return sf_losers[0] if is_code_final(sf_losers[0]) else sf_losers[0]
+                elif code == 'L(SF2)':
+                    return sf_losers[1] if is_code_final(sf_losers[1]) else sf_losers[1]
+            elif code.startswith('W(SF') and len(sf_winners) >= 2:
+                # Für Gold Medal Game: nutze die beiden Semifinal-Gewinner
+                if code == 'W(SF1)':
+                    return sf_winners[0] if is_code_final(sf_winners[0]) else sf_winners[0]
+                elif code == 'W(SF2)':
+                    return sf_winners[1] if is_code_final(sf_winners[1]) else sf_winners[1]
+                    
             return code
         
         return resolve_code
 
     resolve_team = trace_team_from_medal_games()
-
+    
+    games_map = {g.game_number: g for g in games_this_year if g.game_number is not None}
+    
+    # Finde Medal Games (Bronze und Final)
+    bronze_game = None
+    final_game = None
+    
+    for game in games_this_year:
+        if game.round == "Bronze Medal Game":
+            bronze_game = game
+        elif game.round == "Gold Medal Game":
+            final_game = game
+    
+    # GENERELLE LÖSUNG FÜR CUSTOM SEEDING PROBLEM
+    # Verbesserte Medal Game Auflösung die mit allen Jahren und Seeding-Arten funktioniert
+    
+    # Sammle alle Semifinal-Ergebnisse mit korrekter Team-Auflösung
+    semifinal_teams_resolved = {}
+    sf_games = [g for g in games_this_year if g.round == "Semifinals" and g.team1_score is not None and g.team2_score is not None]
+    
+    for sf_game in sf_games:
+        # Löse Teams auf (bei Custom Seeding sind es bereits echte Teams, sonst Platzhalter)
+        team1 = sf_game.team1_code if is_code_final(sf_game.team1_code) else resolve_team(sf_game.team1_code)
+        team2 = sf_game.team2_code if is_code_final(sf_game.team2_code) else resolve_team(sf_game.team2_code)
+        
+        winner = team1 if sf_game.team1_score > sf_game.team2_score else team2
+        loser = team2 if sf_game.team1_score > sf_game.team2_score else team1
+        
+        # Speichere mit Game-Nummer für korrekte Zuordnung
+        game_key = f"SF{sf_game.game_number - 60}" if sf_game.game_number >= 61 else f"SF{len(semifinal_teams_resolved) + 1}"
+        semifinal_teams_resolved[f"W({game_key})"] = winner
+        semifinal_teams_resolved[f"L({game_key})"] = loser
+    
+    # Prüfe ob Custom Seeding verwendet wird
+    has_custom_seeding = False
+    try:
+        from routes.year_routes import get_custom_seeding_from_db
+        custom_seeding = get_custom_seeding_from_db(year_obj_for_map.id)
+        has_custom_seeding = custom_seeding is not None
+    except Exception as e:
+        has_custom_seeding = False
+    
+    # Bei Custom Seeding: Komplett neue Medal Game Berechnung um Platzhalter-Probleme zu umgehen
+    if has_custom_seeding:
+        # Sammle alle Semifinal-Ergebnisse
+        sf_winners = []
+        sf_losers = []
+        for sf_game in sf_games:
+            team1 = sf_game.team1_code if is_code_final(sf_game.team1_code) else resolve_team(sf_game.team1_code)
+            team2 = sf_game.team2_code if is_code_final(sf_game.team2_code) else resolve_team(sf_game.team2_code)
+            
+            winner = team1 if sf_game.team1_score > sf_game.team2_score else team2
+            loser = team2 if sf_game.team1_score > sf_game.team2_score else team1
+            
+            if is_code_final(winner):
+                sf_winners.append(winner)
+            if is_code_final(loser):
+                sf_losers.append(loser)
+        
+        # INTELLIGENTE MEDAL GAME AUFLÖSUNG
+        # Versuche zuerst die Platzhalter aufzulösen
+        if bronze_game and len(sf_losers) >= 2:
+            # Versuche Standard-Platzhalter-Auflösung
+            try:
+                resolved_bronze_team1 = resolve_team(bronze_game.team1_code)
+                resolved_bronze_team2 = resolve_team(bronze_game.team2_code)
+                
+                # Prüfe ob das eine Standard-Struktur ist (beide Teams sind SF Losers)
+                if resolved_bronze_team1 in sf_losers and resolved_bronze_team2 in sf_losers:
+                    if bronze_game.team1_score > bronze_game.team2_score:
+                        final_ranking[3] = resolved_bronze_team1  # Bronze
+                        final_ranking[4] = resolved_bronze_team2  # 4th
+                    else:
+                        final_ranking[3] = resolved_bronze_team2  # Bronze
+                        final_ranking[4] = resolved_bronze_team1  # 4th
+                    
+                else:
+                    # Cross-Over: Einer ist SF Winner, einer ist SF Loser
+                    # Bronze Game Gewinner = Bronze, Verlierer = 4th
+                    if bronze_game.team1_score > bronze_game.team2_score:
+                        final_ranking[3] = resolved_bronze_team1  # Bronze
+                        final_ranking[4] = resolved_bronze_team2  # 4th
+                    else:
+                        final_ranking[3] = resolved_bronze_team2  # Bronze  
+                        final_ranking[4] = resolved_bronze_team1  # 4th
+                    
+            except Exception as e:
+                # Fallback: Verwende SF Losers
+                if bronze_game.team1_score > bronze_game.team2_score:
+                    final_ranking[3] = sf_losers[0]
+                    final_ranking[4] = sf_losers[1]
+                else:
+                    final_ranking[3] = sf_losers[1]
+                    final_ranking[4] = sf_losers[0]
+            
+        if final_game and len(sf_winners) >= 2:
+            # Versuche Standard-Platzhalter-Auflösung
+            try:
+                resolved_final_team1 = resolve_team(final_game.team1_code)
+                resolved_final_team2 = resolve_team(final_game.team2_code)
+                
+                # Prüfe ob das eine Standard-Struktur ist (beide Teams sind SF Winners)
+                if resolved_final_team1 in sf_winners and resolved_final_team2 in sf_winners:
+                    if final_game.team1_score > final_game.team2_score:
+                        final_ranking[1] = resolved_final_team1  # Gold
+                        final_ranking[2] = resolved_final_team2  # Silver
+                    else:
+                        final_ranking[1] = resolved_final_team2  # Gold
+                        final_ranking[2] = resolved_final_team1  # Silver
+                    
+                else:
+                    # Cross-Over: Einer ist SF Winner, einer ist SF Loser  
+                    # Final Game Gewinner = Gold, Verlierer = Silver
+                    if final_game.team1_score > final_game.team2_score:
+                        final_ranking[1] = resolved_final_team1  # Gold
+                        final_ranking[2] = resolved_final_team2  # Silver
+                    else:
+                        final_ranking[1] = resolved_final_team2  # Gold
+                        final_ranking[2] = resolved_final_team1  # Silver
+                    
+            except Exception as e:
+                # Fallback: Verwende SF Winners
+                if final_game.team1_score > final_game.team2_score:
+                    final_ranking[1] = sf_winners[0]
+                    final_ranking[2] = sf_winners[1]
+                else:
+                    final_ranking[1] = sf_winners[1]
+                    final_ranking[2] = sf_winners[0]
+    
+    else:
+        # Standard-Auflösung für normale Jahre ohne Custom Seeding
+        def resolve_medal_placeholder(placeholder):
+            # Erste Priorität: direkte Auflösung über semifinal_teams_resolved
+            if placeholder in semifinal_teams_resolved:
+                return semifinal_teams_resolved[placeholder]
+            
+            # Zweite Priorität: Standard resolve_team Funktion
+            resolved = resolve_team(placeholder)
+            if is_code_final(resolved):
+                return resolved
+                
+            # Dritte Priorität: Fallback für häufige Platzhalter-Muster
+            if placeholder in ['L(SF1)', 'L(SF2)']:
+                # Finde Semifinal-Verlierer
+                sf_losers = [v for k, v in semifinal_teams_resolved.items() if k.startswith('L(SF') and is_code_final(v)]
+                if len(sf_losers) >= 2:
+                    return sf_losers[0] if placeholder == 'L(SF1)' else sf_losers[1]
+            elif placeholder in ['W(SF1)', 'W(SF2)']:
+                # Finde Semifinal-Gewinner
+                sf_winners = [v for k, v in semifinal_teams_resolved.items() if k.startswith('W(SF') and is_code_final(v)]
+                if len(sf_winners) >= 2:
+                    return sf_winners[0] if placeholder == 'W(SF1)' else sf_winners[1]
+            
+            return placeholder  # Fallback
+        
+        # Standard Medal Game Auflösung
+        if bronze_game and bronze_game.team1_score is not None and bronze_game.team2_score is not None:
+            bronze_team1 = resolve_medal_placeholder(bronze_game.team1_code)
+            bronze_team2 = resolve_medal_placeholder(bronze_game.team2_code)
+            
+            if bronze_game.team1_score > bronze_game.team2_score:
+                final_ranking[3] = bronze_team1  # Bronze Gewinner
+                final_ranking[4] = bronze_team2  # 4. Platz
+            else:
+                final_ranking[3] = bronze_team2  # Bronze Gewinner
+                final_ranking[4] = bronze_team1  # 4. Platz
+        
+        if final_game and final_game.team1_score is not None and final_game.team2_score is not None:
+            final_team1 = resolve_medal_placeholder(final_game.team1_code)
+            final_team2 = resolve_medal_placeholder(final_game.team2_code)
+            
+            if final_game.team1_score > final_game.team2_score:
+                final_ranking[1] = final_team1  # Gold Gewinner
+                final_ranking[2] = final_team2  # Silber (Finalist-Verlierer)
+            else:
+                final_ranking[1] = final_team2  # Gold Gewinner
+                final_ranking[2] = final_team1  # Silber (Finalist-Verlierer)
+    
     # Berechne die restlichen Plätze (5-16)
     prelim_stats_map = {}
     prelim_games = [
@@ -839,7 +1109,6 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
     return final_ranking
 
 def get_medal_tally_data():
-    current_app.logger.info("Starting medal tally calculation.")
     medal_tally_results = []
 
     all_games = Game.query.options(db.joinedload(Game.championship_year)).all()
@@ -853,9 +1122,6 @@ def get_medal_tally_data():
                        tournament_stats['completed_games'] == tournament_stats['total_games'])
         if is_completed:
             completed_years.append(year_obj)
-            current_app.logger.info(f"Including completed tournament: {year_obj.year} ({tournament_stats['completed_games']}/{tournament_stats['total_games']} games)")
-        else:
-            current_app.logger.info(f"Excluding incomplete tournament: {year_obj.year} ({tournament_stats['completed_games']}/{tournament_stats['total_games']} games)")
 
     games_by_year_id = {}
     for game_obj in all_games:
@@ -1067,12 +1333,9 @@ def get_medal_tally_data():
 
     medal_tally_results.sort(key=lambda x: x['year_obj'].year, reverse=True)
     
-    current_app.logger.info(f"Finished medal tally calculation. Processed {len(completed_years)} completed tournaments.")
     return medal_tally_results
 
 def get_all_player_stats(team_filter=None):
-    current_app.logger.info(f"Starting player statistics calculation. Team filter: {team_filter}")
-
     goals_sq = db.session.query(
         Goal.scorer_id.label("player_id"),
         func.count(Goal.id).label("num_goals")
@@ -1145,7 +1408,6 @@ def get_all_player_stats(team_filter=None):
 
     results.sort(key=lambda x: (x['scorer_points'], x['goals']), reverse=True)
     
-    current_app.logger.info(f"Finished player statistics calculation. Found {len(results)} players.")
     return results
 
 @main_bp.route('/player-stats')
@@ -1154,7 +1416,6 @@ def player_stats_view():
     if not team_filter:
         team_filter = None
     
-    current_app.logger.info(f"Accessing player statistics page. Team filter: {team_filter}")
     player_stats_data = get_all_player_stats(team_filter=team_filter)
     return render_template('player_stats.html', player_stats=player_stats_data, team_iso_codes=TEAM_ISO_CODES)
 
@@ -1164,7 +1425,6 @@ def player_stats_data():
     if not team_filter:
         team_filter = None
     
-    current_app.logger.info(f"Accessing player statistics JSON data. Team filter: {team_filter}")
     player_stats_data = get_all_player_stats(team_filter=team_filter)
     
     formatted_data = {

@@ -19,6 +19,39 @@ def get_all_resolved_games():
     all_resolved_games = []
     years = ChampionshipYear.query.all()
     
+    # Pre-calculate correct medal game rankings for each year (like in calculate_all_time_standings)
+    # CRITICAL: Must use the same playoff resolution logic as the main function to be consistent
+    medal_game_rankings_by_year = {}
+    games_by_year_id = {}
+    
+    # First pass: collect all games by year and calculate medal rankings with proper custom seeding
+    for year_obj in years:
+        games_this_year = Game.query.filter_by(year_id=year_obj.id).order_by(Game.date, Game.start_time, Game.game_number).all()
+        games_by_year_id[year_obj.id] = games_this_year
+        
+        # Build a basic playoff map for this year including custom seeding
+        temp_playoff_map = {}
+        
+        # Apply custom seeding if it exists
+        try:
+            from routes.year_routes import get_custom_seeding_from_db
+            custom_seeding = get_custom_seeding_from_db(year_obj.id)
+            if custom_seeding:
+                temp_playoff_map['Q1'] = custom_seeding['seed1']
+                temp_playoff_map['Q2'] = custom_seeding['seed2']
+                temp_playoff_map['Q3'] = custom_seeding['seed3']
+                temp_playoff_map['Q4'] = custom_seeding['seed4']
+        except:
+            pass
+        
+        # Pre-calculate final ranking for this year
+        try:
+            from routes.main_routes import calculate_complete_final_ranking
+            final_ranking = calculate_complete_final_ranking(year_obj, games_this_year, temp_playoff_map, year_obj)
+            medal_game_rankings_by_year[year_obj.id] = final_ranking
+        except Exception as e:
+            medal_game_rankings_by_year[year_obj.id] = {}
+    
     for year_obj in years:
         try:
             games_raw = Game.query.filter_by(year_id=year_obj.id).order_by(Game.date, Game.start_time, Game.game_number).all()
@@ -212,23 +245,9 @@ def get_all_resolved_games():
                         custom_seeding = get_custom_seeding_from_db(year_obj.id)
                         
                         if custom_seeding:
-                            # Use custom seeding
-                            playoff_team_map['Q1'] = custom_seeding['seed1']
-                            playoff_team_map['Q2'] = custom_seeding['seed2']
-                            playoff_team_map['Q3'] = custom_seeding['seed3']
-                            playoff_team_map['Q4'] = custom_seeding['seed4']
-                            
-                            # Update semifinal game assignments based on custom seeding
-                            # Semifinal 1: seed1 vs seed4, Semifinal 2: seed2 vs seed3
-                            sf_game_obj_1 = games_dict_by_num.get(sf_game_numbers[0])
-                            sf_game_obj_2 = games_dict_by_num.get(sf_game_numbers[1])
-                            
-                            if sf_game_obj_1:
-                                playoff_team_map[sf_game_obj_1.team1_code] = custom_seeding['seed1']
-                                playoff_team_map[sf_game_obj_1.team2_code] = custom_seeding['seed4']
-                            if sf_game_obj_2:
-                                playoff_team_map[sf_game_obj_2.team1_code] = custom_seeding['seed2']
-                                playoff_team_map[sf_game_obj_2.team2_code] = custom_seeding['seed3']
+                            # NOTE: Custom seeding will be applied at the end of the resolution process
+                            # to ensure consistent application. For now, just note that custom seeding exists.
+                            pass
                         else:
                             # Use standard IIHF seeding
                             R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats] 
@@ -268,15 +287,94 @@ def get_all_resolved_games():
                                 playoff_team_map['Q3'] = sf_game2_teams[0]
                                 playoff_team_map['Q4'] = sf_game2_teams[1]
 
+            # Apply custom seeding after all team resolution is complete (like in get_medal_tally_data)
+            # This ensures that custom seeding overrides any previous Q1-Q4 mappings
+            try:
+                from routes.year_routes import get_custom_seeding_from_db
+                custom_seeding = get_custom_seeding_from_db(year_obj.id)
+                if custom_seeding:
+                    # Override Q1-Q4 mappings with custom seeding
+                    playoff_team_map['Q1'] = custom_seeding['seed1']
+                    playoff_team_map['Q2'] = custom_seeding['seed2']
+                    playoff_team_map['Q3'] = custom_seeding['seed3']
+                    playoff_team_map['Q4'] = custom_seeding['seed4']
+            except ImportError:
+                pass  # If import fails, continue without custom seeding
+
             for game in games_raw:
                 if game.team1_score is not None and game.team2_score is not None:
-                    resolved_team1_code = get_resolved_code(game.team1_code, playoff_team_map)
-                    resolved_team2_code = get_resolved_code(game.team2_code, playoff_team_map)
+                    # CRITICAL: Special handling for Medal Games using correct final ranking (like in calculate_all_time_standings)
+                    final_team1_code = None
+                    final_team2_code = None
+                    
+                    if game.round in ['Gold Medal Game', 'Bronze Medal Game', 'Semifinals']:
+                        # Use correct medal game resolution from calculate_complete_final_ranking
+                        year_ranking = medal_game_rankings_by_year.get(year_obj.id, {})
+                        if year_ranking:
+                            if game.round == 'Gold Medal Game':
+                                final_team1_code = year_ranking.get(1)  # Gold
+                                final_team2_code = year_ranking.get(2)  # Silver
+                                # Ensure correct order based on actual game result
+                                if (final_team1_code and final_team2_code and 
+                                    game.team1_score is not None and game.team2_score is not None):
+                                    # If resolved teams don't match game structure, swap them
+                                    if (game.team1_score > game.team2_score and final_team1_code != year_ranking.get(1)) or \
+                                       (game.team2_score > game.team1_score and final_team2_code != year_ranking.get(1)):
+                                        final_team1_code, final_team2_code = final_team2_code, final_team1_code
+                            elif game.round == 'Bronze Medal Game':
+                                final_team1_code = year_ranking.get(3)  # Bronze
+                                final_team2_code = year_ranking.get(4)  # Fourth
+                                # Ensure correct order based on actual game result
+                                if (final_team1_code and final_team2_code and 
+                                    game.team1_score is not None and game.team2_score is not None):
+                                    # If resolved teams don't match game structure, swap them
+                                    if (game.team1_score > game.team2_score and final_team1_code != year_ranking.get(3)) or \
+                                       (game.team2_score > game.team1_score and final_team2_code != year_ranking.get(3)):
+                                        final_team1_code, final_team2_code = final_team2_code, final_team1_code
+                            elif game.round == 'Semifinals':
+                                # Check if custom seeding exists for this year first
+                                try:
+                                    from routes.year_routes import get_custom_seeding_from_db
+                                    custom_seeding = get_custom_seeding_from_db(year_obj.id)
+                                    
+                                    if custom_seeding:
+                                        # For custom seeding, we know the exact teams that played
+                                        if game.game_number == 61:  # SF1: seed1 vs seed4
+                                            # Teams that played: seed1 and seed4
+                                            sf1_teams = [custom_seeding['seed1'], custom_seeding['seed4']]
+                                            # Assign based on who's listed first in team codes (maintain order)
+                                            final_team1_code = sf1_teams[0]  # seed1
+                                            final_team2_code = sf1_teams[1]  # seed4
+                                        elif game.game_number == 62:  # SF2: seed2 vs seed3
+                                            # Teams that played: seed2 and seed3
+                                            sf2_teams = [custom_seeding['seed2'], custom_seeding['seed3']]
+                                            # Assign based on who's listed first in team codes (maintain order)
+                                            final_team1_code = sf2_teams[0]  # seed2
+                                            final_team2_code = sf2_teams[1]  # seed3
+                                        else:
+                                            # Unknown game number, use standard resolution
+                                            final_team1_code = get_resolved_code(game.team1_code, playoff_team_map)
+                                            final_team2_code = get_resolved_code(game.team2_code, playoff_team_map)
+                                    else:
+                                        # No custom seeding, use standard resolution
+                                        final_team1_code = get_resolved_code(game.team1_code, playoff_team_map)
+                                        final_team2_code = get_resolved_code(game.team2_code, playoff_team_map)
+                                except:
+                                    # Fallback to standard resolution
+                                    final_team1_code = get_resolved_code(game.team1_code, playoff_team_map)
+                                    final_team2_code = get_resolved_code(game.team2_code, playoff_team_map)
+                    
+                    # Fallback to standard resolution if medal game resolution failed
+                    if not final_team1_code or not final_team2_code:
+                        resolved_team1_code = get_resolved_code(game.team1_code, playoff_team_map)
+                        resolved_team2_code = get_resolved_code(game.team2_code, playoff_team_map)
+                        final_team1_code = resolved_team1_code
+                        final_team2_code = resolved_team2_code
                     
                     all_resolved_games.append({
                         'game': game,
-                        'team1_code': resolved_team1_code,
-                        'team2_code': resolved_team2_code,
+                        'team1_code': final_team1_code,
+                        'team2_code': final_team2_code,
                         'year': year_obj.year
                     })
                         

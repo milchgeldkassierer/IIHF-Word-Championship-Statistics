@@ -267,6 +267,84 @@
         color: #e2e8f0;
     }
     
+    /* Playoff game highlighting with round-specific colors */
+    .playoff-quarterfinal {
+        background-color: #d4f4dd !important;
+        border-left: 4px solid #28a745 !important;
+    }
+    
+    .playoff-semifinal {
+        background-color: #e3f2fd !important;
+        border-left: 4px solid #2196f3 !important;
+    }
+    
+    .playoff-bronze {
+        background-color: #f3e5ab !important;
+        border-left: 4px solid #cd7f32 !important;
+    }
+    
+    .playoff-final {
+        background-color: #fff9c4 !important;
+        border-left: 4px solid #ffd700 !important;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+    }
+    
+    /* Dark mode colors - aligned with medal_tally.html */
+    body.dark-mode .playoff-quarterfinal {
+        background-color: rgba(40, 167, 69, 0.15) !important;
+        border-left: 4px solid #28a745 !important;
+    }
+    
+    body.dark-mode .playoff-semifinal {
+        background-color: rgba(33, 150, 243, 0.15) !important;
+        border-left: 4px solid #2196f3 !important;
+    }
+    
+    body.dark-mode .playoff-bronze {
+        background-color: rgba(205, 127, 50, 0.15) !important;
+        border-left: 4px solid #cd7f32 !important;
+    }
+    
+    body.dark-mode .playoff-final {
+        background-color: rgba(255, 215, 0, 0.15) !important;
+        border-left: 4px solid #ffd700 !important;
+        box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+    }
+    
+    /* Round indicator badges */
+    .round-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-left: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .badge-quarterfinal {
+        background: #66bb6a;
+        color: white;
+    }
+    
+    .badge-semifinal {
+        background: #ff9800;
+        color: white;
+    }
+    
+    .badge-bronze {
+        background: #cd7f32;
+        color: white;
+    }
+    
+    .badge-final {
+        background: #ffd700;
+        color: #1a1a1a;
+        font-weight: 700;
+    }
+    
     .powerplay-stats {
         display: flex;
         justify-content: space-around;
@@ -515,10 +593,29 @@
                 </thead>
                 <tbody>
                     {% for d in duel_details %}
-                    <tr>
+                    {% set round_lower = d.round_display.lower() if d.round_display else '' %}
+                    {% set playoff_class = '' %}
+                    {% set badge_class = '' %}
+                    {% set round_symbol = '' %}
+                    {% if 'viertelfinale' in round_lower or 'quarter' in round_lower %}
+                        {% set playoff_class = 'playoff-quarterfinal' %}
+                        {% set badge_class = 'badge-quarterfinal' %}
+                    {% elif 'halbfinale' in round_lower or 'semi' in round_lower %}
+                        {% set playoff_class = 'playoff-semifinal' %}
+                        {% set badge_class = 'badge-semifinal' %}
+                    {% elif 'platz 3' in round_lower or 'bronze' in round_lower or '3rd place' in round_lower %}
+                        {% set playoff_class = 'playoff-bronze' %}
+                        {% set badge_class = 'badge-bronze' %}
+                        {% set round_symbol = '🥉 ' %}
+                    {% elif 'finale' in round_lower or 'final' in round_lower %}
+                        {% set playoff_class = 'playoff-final' %}
+                        {% set badge_class = 'badge-final' %}
+                        {% set round_symbol = '🏆 ' %}
+                    {% endif %}
+                    <tr{% if playoff_class %} class="{{ playoff_class }}"{% endif %}>
                         <td>{{ d.year_display }}</td>
                         <td>{{ d.date.split('-') | reverse | join('.') if d.date else '-' }}</td>
-                        <td>{{ d.round_display }}</td>
+                        <td>{{ round_symbol }}{{ d.round_display }}</td>
                         <td>{{ d.location }}</td>
                         <td style="text-align: center; font-weight: bold;">{{ d.t1_score if d.t1_score is not none else '-' }}</td>
                         <td style="text-align: center; font-weight: bold;">{{ d.t2_score if d.t2_score is not none else '-' }}</td>

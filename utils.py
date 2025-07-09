@@ -321,7 +321,6 @@ def _build_playoff_team_map_for_year(
                 sf_game_numbers = fixture_data.get("sf_game_numbers") or [61, 62]
                 host_team_codes = fixture_data.get("host_teams", []) 
             except (json.JSONDecodeError, OSError) as e:
-                # print(f"Warning: Could not load or parse fixture {year_obj.fixture_path}: {e}") # Consider logging
                 qf_game_numbers = [57, 58, 59, 60]
                 sf_game_numbers = [61, 62]
     else:
@@ -528,7 +527,6 @@ def get_resolved_team_code(
 
         # Cycle detection for the current resolution path
         if current_code in visited_codes:
-            # print(f"Cycle detected resolving {placeholder_code}. Path: {visited_codes} -> {current_code}")
             return placeholder_code # Return original to break cycle
         visited_codes.add(current_code)
 
@@ -849,17 +847,64 @@ def check_powerplay_penalty_consistency(game_display):
         goal_type = goal['goal_type']
         
         # Finde aktive Strafen zum Zeitpunkt des Tors
+        # Berücksichtige die Regel: Max 2 Spieler gleichzeitig in der Strafbank
         active_penalties_at_goal = []
+        
+        # Gruppiere Strafen nach Teams
+        penalties_by_team = {}
         for penalty in penalties:
             if not penalty['is_active']:
                 continue
-                
-            penalty_start = penalty['time_seconds']
-            penalty_end = penalty_start + (penalty['duration_minutes'] * 60)
+            team = penalty['team']
+            if team not in penalties_by_team:
+                penalties_by_team[team] = []
+            penalties_by_team[team].append(penalty)
+        
+        # Berechne für jedes Team die effektiven Strafzeiten
+        for team, team_penalties in penalties_by_team.items():
+            # Sortiere Strafen nach Startzeit
+            team_penalties.sort(key=lambda x: x['time_seconds'])
             
-            # Strafe ist aktiv, wenn das Tor zwischen Start und Ende fällt
-            if penalty_start <= goal_time <= penalty_end:
-                active_penalties_at_goal.append(penalty)
+            # Verfolge die aktiven Strafen für dieses Team
+            active_team_penalties = []
+            
+            for penalty in team_penalties:
+                penalty_start = penalty['time_seconds']
+                penalty_duration = penalty['duration_minutes'] * 60
+                
+                # Finde die effektive Startzeit dieser Strafe
+                effective_start = penalty_start
+                
+                # Wenn bereits 2 Strafen aktiv sind, muss diese Strafe warten
+                if len(active_team_penalties) >= 2:
+                    # Finde die früheste Endzeit der aktiven Strafen
+                    earliest_end = min(p['effective_end'] for p in active_team_penalties)
+                    if penalty_start < earliest_end:
+                        effective_start = earliest_end
+                
+                effective_end = effective_start + penalty_duration
+                
+                # Prüfe, ob diese Strafe zum Zeitpunkt des Tors aktiv ist
+                if effective_start <= goal_time <= effective_end:
+                    penalty_copy = penalty.copy()
+                    penalty_copy['effective_start'] = effective_start
+                    penalty_copy['effective_end'] = effective_end
+                    active_penalties_at_goal.append(penalty_copy)
+                
+                # Aktualisiere die Liste der aktiven Strafen
+                # Entferne abgelaufene Strafen
+                active_team_penalties = [p for p in active_team_penalties if p['effective_end'] > effective_start]
+                
+                # Füge die neue Strafe hinzu
+                active_team_penalties.append({
+                    'effective_start': effective_start,
+                    'effective_end': effective_end,
+                    'penalty': penalty
+                })
+                
+                # Beschränke auf max 2 gleichzeitige Strafen
+                if len(active_team_penalties) > 2:
+                    active_team_penalties = active_team_penalties[:2]
         
         # Analysiere die Powerplay-Situation
         pp_situation = analyze_powerplay_situation(active_penalties_at_goal, goal_team, game_display.team1_code, game_display.team2_code)
@@ -923,10 +968,13 @@ def analyze_powerplay_situation(active_penalties, goal_team, team1_code, team2_c
     """
     Analysiert die Powerplay-Situation basierend auf aktiven Strafen.
     
+    WICHTIG: Die aktiven Strafen wurden bereits korrekt gefiltert unter Berücksichtigung der Regel,
+    dass ein Team maximal 2 Spieler gleichzeitig in der Strafbank haben kann.
+    
     Returns:
         dict mit 'type' ('pp', 'sh', '4on4', 'even') und Details
     """
-    # Zähle Strafen pro Team
+    # Zähle Strafen pro Team (bereits korrekt gefiltert)
     team1_penalties = [p for p in active_penalties if p['team'] == team1_code]
     team2_penalties = [p for p in active_penalties if p['team'] == team2_code]
     
@@ -1023,3 +1071,153 @@ def resolve_fixture_path_local(relative_path, current_app):
         absolute_path = os.path.join(current_app.config['UPLOAD_FOLDER'], relative_path)
     
     return absolute_path
+
+def team_vs_team_view(team1, team2):
+    try:
+        team1 = team1.upper()
+        team2 = team2.upper()
+    except AttributeError:
+        return {"error": "Ungültige Team-Namen"}
+
+    # Import main_routes functions for correct team resolution
+    from routes.main_routes import calculate_complete_final_ranking, get_medal_tally_data
+
+    # Get medal tally data with correct team resolution
+    medal_data = get_medal_tally_data()
+    
+    # Create medal games lookup by year for correctly resolved teams
+    medal_games_by_year = {}
+    for medal_entry in medal_data:
+        year = medal_entry.year_obj.year
+        if medal_entry.gold and medal_entry.silver:
+            # Final game
+            medal_games_by_year.setdefault(year, []).append({
+                'round': 'Finale',
+                'team1': medal_entry.gold,
+                'team2': medal_entry.silver,
+                'result': '4-1',  # Default, will be updated from actual game
+                'game_type': 'Gold Medal Game'
+            })
+        if medal_entry.bronze and medal_entry.fourth:
+            # Bronze game  
+            medal_games_by_year.setdefault(year, []).append({
+                'round': 'Spiel um Platz 3',
+                'team1': medal_entry.bronze,
+                'team2': medal_entry.fourth,
+                'result': '4-2',  # Default, will be updated from actual game
+                'game_type': 'Bronze Medal Game'
+            })
+
+    # Get all regular games from database
+    all_years = Year.query.all()
+    all_games = Game.query.all()
+    
+    games_data = []
+    
+    # Process all years to get correct game results
+    for year_obj in all_years:
+        year = year_obj.year
+        games_this_year = [g for g in all_games if g.year_id == year_obj.id]
+        
+        # Get medal games for this year with correct scores
+        medal_games = [g for g in games_this_year if g.round in ['Gold Medal Game', 'Bronze Medal Game']]
+        
+        for medal_game in medal_games:
+            if (medal_game.team1_score is not None and medal_game.team2_score is not None):
+                # Use calculate_complete_final_ranking to get correctly resolved teams
+                final_ranking = calculate_complete_final_ranking(year_obj, games_this_year, {}, year_obj)
+                
+                # Map the resolved teams to the medal game
+                if medal_game.round == 'Gold Medal Game':
+                    resolved_team1 = final_ranking.get(1)  # Gold
+                    resolved_team2 = final_ranking.get(2)  # Silver
+                    round_name = 'Finale'
+                elif medal_game.round == 'Bronze Medal Game':
+                    resolved_team1 = final_ranking.get(3)  # Bronze
+                    resolved_team2 = final_ranking.get(4)  # Fourth
+                    round_name = 'Spiel um Platz 3'
+                else:
+                    continue
+                
+                # Check if this game involves our target teams
+                if ((resolved_team1 == team1 and resolved_team2 == team2) or 
+                    (resolved_team1 == team2 and resolved_team2 == team1)):
+                    
+                    # Determine which team is team1 and team2 based on resolved order
+                    if resolved_team1 == team1:
+                        team1_score = medal_game.team1_score
+                        team2_score = medal_game.team2_score
+                        typ = medal_game.result_type or 'Regular'
+                    else:
+                        team1_score = medal_game.team2_score 
+                        team2_score = medal_game.team1_score
+                        typ = medal_game.result_type or 'Regular'
+                    
+                    games_data.append(GameDisplay(
+                        year=year,
+                        date=medal_game.date,
+                        round=round_name,
+                        location=medal_game.location,
+                        team1_score=team1_score,
+                        team2_score=team2_score,
+                        result=f"{team1_score}:{team2_score}",
+                        typ=typ,
+                        stats_link=None
+                    ))
+        
+        # Process regular games
+        for game in games_this_year:
+            if game.round not in ['Gold Medal Game', 'Bronze Medal Game']:
+                if ((game.team1_code == team1 and game.team2_code == team2) or 
+                    (game.team1_code == team2 and game.team2_code == team1)):
+                    
+                    if game.team1_code == team1:
+                        team1_score = game.team1_score
+                        team2_score = game.team2_score
+                    else:
+                        team1_score = game.team2_score 
+                        team2_score = game.team1_score
+                    
+                    if team1_score is not None and team2_score is not None:
+                        result = f"{team1_score}:{team2_score}"
+                        typ = game.result_type or 'Regular'
+                        
+                        stats_link = None
+                        if game.game_number:
+                            stats_link = url_for('main.game_stats', 
+                                                year=year, 
+                                                game_number=game.game_number)
+                        
+                        games_data.append(GameDisplay(
+                            year=year,
+                            date=game.date,
+                            round=game.round,
+                            location=game.location,
+                            team1_score=team1_score,
+                            team2_score=team2_score,
+                            result=result,
+                            typ=typ,
+                            stats_link=stats_link
+                        ))
+
+    # Sort by year (newest first)
+    games_data.sort(key=lambda x: x.year, reverse=True)
+    
+    # Calculate statistics
+    team1_wins = len([g for g in games_data if g.team1_score > g.team2_score])
+    team2_wins = len([g for g in games_data if g.team2_score > g.team1_score])
+    total_games = len(games_data)
+    
+    statistics = {
+        'total_games': total_games,
+        f'{team1}_wins': team1_wins,
+        f'{team2}_wins': team2_wins,
+        'series_record': f"{team1_wins}-{team2_wins}"
+    }
+    
+    return {
+        'team1': team1,
+        'team2': team2,
+        'games': games_data,
+        'statistics': statistics
+    }

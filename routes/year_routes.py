@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoal, TeamStats, TeamOverallStats, GameDisplay, GameOverrule
 from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, GOAL_TYPE_DISPLAY_MAP, POWERPLAY_PENALTY_TYPES
 from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final, _apply_head_to_head_tiebreaker
-from routes.main_routes import resolve_fixture_path
+from routes.main_routes import resolve_fixture_path, calculate_complete_final_ranking
 
 year_bp = Blueprint('year_bp', __name__, url_prefix='/year')
 
@@ -1687,329 +1687,81 @@ def team_vs_team_view(year_id, team1, team2):
     # Team-Namen normalisieren für bessere Matcherkennung
     t1, t2 = team1.strip().upper(), team2.strip().upper()
 
-    # Alle Spiele aus der gesamten Datenbank laden (alle Jahre) und nach Jahren gruppieren
-    all_games = Game.query.order_by(Game.year_id, Game.date, Game.start_time, Game.game_number).all()
-    games_by_year = {}
-    years_processed = set()
-    for game in all_games:
-        if game.year_id not in games_by_year:
-            games_by_year[game.year_id] = []
-        games_by_year[game.year_id].append(game)
-        years_processed.add(game.year_id)
-
-    # Alle Jahre für die Platzhalter-Auflösung verarbeiten
-    all_resolved_games = []
+    # Verwende die bewährte get_all_resolved_games() Funktion aus record_routes.py
+    from routes.record_routes import get_all_resolved_games
+    from constants import PIM_MAP, TEAM_ISO_CODES
     
-    for year_id_iter in years_processed:
-        games_raw = games_by_year[year_id_iter]
-        year_obj_iter = db.session.get(ChampionshipYear, year_id_iter)
-        if not year_obj_iter:
-            continue
-            
-        # --- TEAM RESOLUTION LOGIC (adapted from game_stats_view) ---
-        # Build preliminary round standings for playoff resolution
-        teams_stats = {}
-        prelim_games = [g for g in games_raw if g.round == 'Preliminary Round' and g.group]
-        
-        unique_teams_in_prelim_groups = set()
-        for g in prelim_games:
-            if g.team1_code and g.group: 
-                unique_teams_in_prelim_groups.add((g.team1_code, g.group))
-            if g.team2_code and g.group: 
-                unique_teams_in_prelim_groups.add((g.team2_code, g.group))
-
-        for team_code, group_name in unique_teams_in_prelim_groups:
-            if team_code not in teams_stats: 
-                teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
-
-        for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
-            for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
-                                                       (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
-                stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
-                
-                if stats.group == grp: 
-                     stats.gp+=1; stats.gf+=gf; stats.ga+=ga; stats.pts+=pts
-                     if res=='REG': stats.w+=1 if gf>ga else 0; stats.l+=1 if ga>gf else 0 
-                     elif res=='OT': stats.otw+=1 if gf>ga else 0; stats.otl+=1 if ga>gf else 0
-                     elif res=='SO': stats.sow+=1 if gf>ga else 0; stats.sol+=1 if ga>gf else 0
-        
-        standings_by_group = {}
-        if teams_stats:
-            group_full_names = sorted(list(set(s.group for s in teams_stats.values() if s.group))) 
-            for full_group_name_key in group_full_names: 
-                current_group_teams = sorted(
-                    [s for s in teams_stats.values() if s.group == full_group_name_key],
-                    key=lambda x: (x.pts, x.gd, x.gf),
-                    reverse=True
-                )
-                # Apply head-to-head tiebreaker for teams with equal points
-                current_group_teams = _apply_head_to_head_tiebreaker(current_group_teams, prelim_games)
-                for i, team_stat_obj in enumerate(current_group_teams):
-                    team_stat_obj.rank_in_group = i + 1 
-                
-                standings_by_group[full_group_name_key] = current_group_teams
-
-        playoff_team_map = {}
-        for group_display_name, group_standings_list in standings_by_group.items():
-            group_letter_match = re.match(r"Group ([A-D])", group_display_name) 
-            if group_letter_match:
-                group_letter = group_letter_match.group(1)
-                for i, s_team_obj in enumerate(group_standings_list): 
-                    playoff_team_map[f'{group_letter}{i+1}'] = s_team_obj.name 
-
-        games_dict_by_num = {g.game_number: g for g in games_raw}
-        
-        # Load fixture data for playoff game numbers
-        qf_game_numbers = []
-        sf_game_numbers = []
-        bronze_game_number = None
-        gold_game_number = None
-        tournament_hosts = []
-
-        fixture_path_exists = False
-        if year_obj_iter.fixture_path:
-            absolute_fixture_path = resolve_fixture_path(year_obj_iter.fixture_path)
-            fixture_path_exists = absolute_fixture_path and os.path.exists(absolute_fixture_path)
-
-        if year_obj_iter.fixture_path and fixture_path_exists:
-            try:
-                with open(absolute_fixture_path, 'r', encoding='utf-8') as f:
-                    loaded_fixture_data = json.load(f)
-                tournament_hosts = loaded_fixture_data.get("hosts", [])
-                
-                schedule_data = loaded_fixture_data.get("schedule", [])
-                for i, game_data in enumerate(schedule_data):
-                    round_name = game_data.get("round", "").lower()
-                    game_num = game_data.get("gameNumber")
-                    
-                    if "quarterfinal" in round_name: 
-                        qf_game_numbers.append(game_num)
-                    elif "semifinal" in round_name: 
-                        sf_game_numbers.append(game_num)
-                    elif "bronze medal game" in round_name or "bronze" in round_name or "3rd place" in round_name:
-                        bronze_game_number = game_num
-                    elif "gold medal game" in round_name or "final" in round_name or "gold" in round_name:
-                        gold_game_number = game_num
-                sf_game_numbers.sort()
-            except Exception as e: 
-                current_app.logger.error(f"Could not parse fixture {year_obj_iter.fixture_path} for playoff game numbers. Error: {e}") 
-                if year_obj_iter.year == 2025: 
-                    qf_game_numbers = [57, 58, 59, 60]
-                    sf_game_numbers = [61, 62]
-                    bronze_game_number = 63
-                    gold_game_number = 64
-                    tournament_hosts = ["SWE", "DEN"]
-
-        if sf_game_numbers and len(sf_game_numbers) >= 2 and all(isinstance(item, int) for item in sf_game_numbers):
-            playoff_team_map['SF1'] = str(sf_game_numbers[0])
-            playoff_team_map['SF2'] = str(sf_game_numbers[1])
-
-        # Use the same get_resolved_code function as year_view
-        def get_resolved_code(placeholder_code, current_map):
-            max_depth = 5 
-            current_code = placeholder_code
-            for _ in range(max_depth):
-                if current_code in current_map:
-                    next_code = current_map[current_code]
-                    if next_code == current_code: return current_code 
-                    current_code = next_code
-                elif (current_code.startswith('W(') or current_code.startswith('L(')) and current_code.endswith(')'):
-                    match = re.search(r'\(([^()]+)\)', current_code) 
-                    if match:
-                        inner_placeholder = match.group(1)
-                        if inner_placeholder.isdigit():
-                            game_num = int(inner_placeholder)
-                            game = games_dict_by_num.get(game_num)
-                            if game and game.team1_score is not None:
-                                raw_winner = game.team1_code if game.team1_score > game.team2_score else game.team2_code
-                                raw_loser = game.team2_code if game.team1_score > game.team2_score else game.team1_code
-                                outcome_based_code = raw_winner if current_code.startswith('W(') else raw_loser
-                                next_code = current_map.get(outcome_based_code, outcome_based_code)
-                                if next_code == current_code: return next_code 
-                                current_code = next_code 
-                            else: return current_code 
-                        else: 
-                            resolved_inner = current_map.get(inner_placeholder, inner_placeholder)
-                            if resolved_inner == inner_placeholder: return current_code 
-                            if resolved_inner.isdigit():
-                                 current_code = f"{'W' if current_code.startswith('W(') else 'L'}({resolved_inner})"
-                            else: 
-                                 return resolved_inner 
-                    else: return current_code 
-                else: 
-                    return current_code
-            return current_code
-
-        # Create GameDisplay objects and resolve them using the same logic as year_view
-        games_processed = [GameDisplay(id=g.id, year_id=g.year_id, date=g.date, start_time=g.start_time, round=g.round, group=g.group, game_number=g.game_number, location=g.location, venue=g.venue, team1_code=g.team1_code, team2_code=g.team2_code, original_team1_code=g.team1_code, original_team2_code=g.team2_code, team1_score=g.team1_score, team2_score=g.team2_score, result_type=g.result_type, team1_points=g.team1_points, team2_points=g.team2_points) for g in games_raw]
-
-        # Resolution passes (same logic as year_view)
-        for _pass_num in range(max(3, len(games_processed) // 2)): 
-            changes_in_pass = 0
-            for g_disp in games_processed:
-                resolved_t1 = get_resolved_code(g_disp.original_team1_code, playoff_team_map)
-                if g_disp.team1_code != resolved_t1: 
-                    g_disp.team1_code = resolved_t1
-                    changes_in_pass += 1
-                
-                resolved_t2 = get_resolved_code(g_disp.original_team2_code, playoff_team_map)
-                if g_disp.team2_code != resolved_t2: 
-                    g_disp.team2_code = resolved_t2
-                    changes_in_pass += 1
-
-                if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:
-                    is_t1_final = is_code_final(g_disp.team1_code)
-                    is_t2_final = is_code_final(g_disp.team2_code)
-
-                    if is_t1_final and is_t2_final:
-                        actual_winner = g_disp.team1_code if g_disp.team1_score > g_disp.team2_score else g_disp.team2_code
-                        actual_loser  = g_disp.team2_code if g_disp.team1_score > g_disp.team2_score else g_disp.team1_code
-                        
-                        win_key = f'W({g_disp.game_number})'; lose_key = f'L({g_disp.game_number})'
-                        if playoff_team_map.get(win_key) != actual_winner: 
-                            playoff_team_map[win_key] = actual_winner; changes_in_pass +=1
-                        if playoff_team_map.get(lose_key) != actual_loser: 
-                            playoff_team_map[lose_key] = actual_loser; changes_in_pass +=1
-            
-            if changes_in_pass == 0 and _pass_num > 0: 
-                break
-
-        # --- SEMIFINAL AND FINALS PAIRING LOGIC (simplified for team_vs_team) ---
-        if qf_game_numbers and sf_game_numbers and len(sf_game_numbers) == 2:
-            qf_winners_teams = []
-            all_qf_winners_resolved = True
-            for qf_game_num in qf_game_numbers:
-                winner_placeholder = f'W({qf_game_num})'
-                resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
-
-                if is_code_final(resolved_qf_winner):
-                    qf_winners_teams.append(resolved_qf_winner)
-                else:
-                    all_qf_winners_resolved = False; break
-            
-            if all_qf_winners_resolved and len(qf_winners_teams) == 4:
-                qf_winners_stats = []
-                for team_name in qf_winners_teams:
-                    if team_name in teams_stats: 
-                        qf_winners_stats.append(teams_stats[team_name])
-                    else: 
-                        all_qf_winners_resolved = False; break
-                
-                if all_qf_winners_resolved:
-                    qf_winners_stats.sort(key=lambda s: (s.rank_in_group, -s.pts, -s.gd, -s.gf))
-                    if len(qf_winners_stats) >= 4:
-                        # Check for custom seeding for this specific year
-                        custom_seeding = get_custom_seeding_from_db(year_id_iter)
-                        
-                        if custom_seeding:
-                            # Use custom seeding
-                            playoff_team_map['Q1'] = custom_seeding['seed1']
-                            playoff_team_map['Q2'] = custom_seeding['seed2']
-                            playoff_team_map['Q3'] = custom_seeding['seed3']
-                            playoff_team_map['Q4'] = custom_seeding['seed4']
-                            
-                            # Update semifinal game assignments based on custom seeding
-                            # Semifinal 1: seed1 vs seed4, Semifinal 2: seed2 vs seed3
-                            if sf_game_numbers and len(sf_game_numbers) >= 2:
-                                sf1_game_num = sf_game_numbers[0]
-                                sf2_game_num = sf_game_numbers[1]
-                                sf_game_obj_1 = games_dict_by_num.get(sf1_game_num)
-                                sf_game_obj_2 = games_dict_by_num.get(sf2_game_num)
-                                
-                                if sf_game_obj_1:
-                                    playoff_team_map[sf_game_obj_1.team1_code] = custom_seeding['seed1']
-                                    playoff_team_map[sf_game_obj_1.team2_code] = custom_seeding['seed4']
-                                if sf_game_obj_2:
-                                    playoff_team_map[sf_game_obj_2.team1_code] = custom_seeding['seed2']
-                                    playoff_team_map[sf_game_obj_2.team2_code] = custom_seeding['seed3']
-                            
-                        else:
-                            # Use standard IIHF seeding
-                            playoff_team_map['Q1'] = qf_winners_stats[0].name
-                            playoff_team_map['Q2'] = qf_winners_stats[3].name
-                            playoff_team_map['Q3'] = qf_winners_stats[1].name
-                            playoff_team_map['Q4'] = qf_winners_stats[2].name
-
-        # --- FALLBACK Q1-Q4 MAPPING ---
-        if qf_game_numbers and len(qf_game_numbers) == 4 and 'Q1' not in playoff_team_map:
-            for i, qf_game_num in enumerate(qf_game_numbers):
-                winner_placeholder = f'W({qf_game_num})'
-                resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
-                
-                if is_code_final(resolved_qf_winner):
-                    q_code = f'Q{i+1}'  # Q1, Q2, Q3, Q4
-                    playoff_team_map[q_code] = resolved_qf_winner
-
-        # Perform a final resolution pass using the updated playoff_team_map
-        for g_disp_final_pass in games_processed:
-            code_to_resolve_t1 = g_disp_final_pass.original_team1_code 
-            resolved_t1_final = get_resolved_code(code_to_resolve_t1, playoff_team_map)
-            if g_disp_final_pass.team1_code != resolved_t1_final:
-                g_disp_final_pass.team1_code = resolved_t1_final
-
-            code_to_resolve_t2 = g_disp_final_pass.original_team2_code
-            resolved_t2_final = get_resolved_code(code_to_resolve_t2, playoff_team_map)
-            if g_disp_final_pass.team2_code != resolved_t2_final:
-                g_disp_final_pass.team2_code = resolved_t2_final
-
-        # Add resolved games to the collection
-        all_resolved_games.extend(games_processed)
+    # Hole alle aufgelösten Spiele
+    all_resolved_games = get_all_resolved_games()
     
-    # --- END TEAM RESOLUTION LOGIC ---
-    
-    # Jetzt alle direkten Duelle zwischen den beiden Teams finden (mit aufgelösten Teamnamen)
-    direct_duels = []
-    for g in all_resolved_games:
-        if not g.team1_code or not g.team2_code:
-            continue
-        # Alle Kombinationen prüfen (A vs B und B vs A)
-        if (g.team1_code.upper() == t1 and g.team2_code.upper() == t2) or \
-           (g.team1_code.upper() == t2 and g.team2_code.upper() == t1):
-            direct_duels.append(g)
+    # Filtere nach unseren beiden Teams
+    filtered_games = []
+    for resolved_game in all_resolved_games:
+        team1_code = resolved_game['team1_code']
+        team2_code = resolved_game['team2_code']
+        
+        # Prüfe ob dieses Spiel unsere beiden Teams betrifft
+        if ((team1_code == t1 and team2_code == t2) or 
+            (team1_code == t2 and team2_code == t1)):
+            
+            # Bestimme welches Team t1 und t2 ist basierend auf der aufgelösten Reihenfolge
+            if team1_code == t1:
+                t1_score = resolved_game['game'].team1_score
+                t2_score = resolved_game['game'].team2_score
+            else:
+                t1_score = resolved_game['game'].team2_score 
+                t2_score = resolved_game['game'].team1_score
+            
+            filtered_games.append({
+                'game': resolved_game['game'],
+                'team1_code': team1_code,
+                'team2_code': team2_code,
+                't1_score': t1_score,
+                't2_score': t2_score,
+                'year': resolved_game['year']
+            })
 
-    # Statistiken initialisieren
+    # Calculate stats that the template expects
     stats = {
         t1: {'tore': 0, 'pim': 0, 'sog': 0, 'siege': 0, 'spiele': 0, 'ot_siege': 0, 'so_siege': 0, 'niederlagen': 0, 'ot_niederlagen': 0, 'so_niederlagen': 0, 'pp_goals': 0, 'pp_opportunities': 0},
         t2: {'tore': 0, 'pim': 0, 'sog': 0, 'siege': 0, 'spiele': 0, 'ot_siege': 0, 'so_siege': 0, 'niederlagen': 0, 'ot_niederlagen': 0, 'so_niederlagen': 0, 'pp_goals': 0, 'pp_opportunities': 0}
     }
-
+    
     duel_details = []
-
-    for g in direct_duels:
-        # Team-Scores bestimmen (je nach Paarung)
-        if g.team1_code.upper() == t1:
-            t1_score, t2_score = g.team1_score, g.team2_score
-        else:  # g.team1_code.upper() == t2
-            t1_score, t2_score = g.team2_score, g.team1_score
-
+    
+    for resolved_game in filtered_games:
+        game = resolved_game['game']
+        t1_score = resolved_game['t1_score']
+        t2_score = resolved_game['t2_score']
+        
+        # Import required models
+        from models import Penalty, Goal, ShotsOnGoal
+        
         # Strafminuten sammeln
-        penalty_entries = Penalty.query.filter_by(game_id=g.id).all()
+        penalty_entries = Penalty.query.filter_by(game_id=game.id).all()
         penalties_t1 = sum(PIM_MAP.get(p.penalty_type, 0) for p in penalty_entries if p.team_code.upper() == t1)
         penalties_t2 = sum(PIM_MAP.get(p.penalty_type, 0) for p in penalty_entries if p.team_code.upper() == t2)
         stats[t1]['pim'] += penalties_t1
         stats[t2]['pim'] += penalties_t2
 
-        # Powerplay-Gelegenheiten zählen (basierend auf Strafen des Gegners)
-        # Jede Strafe des Gegners ist eine Powerplay-Gelegenheit für das Team
+        # Powerplay-Gelegenheiten zählen
         for penalty in penalty_entries:
             if penalty.team_code.upper() == t1:
-                # t1 bekommt Strafe -> t2 bekommt Powerplay-Gelegenheit
                 stats[t2]['pp_opportunities'] += 1
             elif penalty.team_code.upper() == t2:
-                # t2 bekommt Strafe -> t1 bekommt Powerplay-Gelegenheit
                 stats[t1]['pp_opportunities'] += 1
 
         # Powerplay-Tore sammeln
-        goal_entries = Goal.query.filter_by(game_id=g.id).all()
+        goal_entries = Goal.query.filter_by(game_id=game.id).all()
         for goal in goal_entries:
-            if goal.goal_type == 'PP':  # Powerplay-Tor
+            if goal.goal_type == 'PP':
                 if goal.team_code.upper() == t1:
                     stats[t1]['pp_goals'] += 1
                 elif goal.team_code.upper() == t2:
                     stats[t2]['pp_goals'] += 1
 
         # Schüsse sammeln
-        sog_entries = ShotsOnGoal.query.filter_by(game_id=g.id).all()
+        sog_entries = ShotsOnGoal.query.filter_by(game_id=game.id).all()
         for sog in sog_entries:
             if sog.team_code.upper() == t1:
                 stats[t1]['sog'] += sog.shots
@@ -2021,92 +1773,91 @@ def team_vs_team_view(year_id, team1, team2):
             stats[t2]['tore'] += t2_score
             stats[t1]['spiele'] += 1
             stats[t2]['spiele'] += 1
-            # Siege und Niederlagen zählen nach Typ
+            
+            # Siege und Niederlagen zählen
             if t1_score > t2_score:
-                # t1 gewinnt
-                if g.result_type == 'REG':
+                if game.result_type == 'REG':
                     stats[t1]['siege'] += 1
                     stats[t2]['niederlagen'] += 1
-                elif g.result_type == 'OT':
+                elif game.result_type == 'OT':
                     stats[t1]['ot_siege'] += 1
                     stats[t2]['ot_niederlagen'] += 1
-                elif g.result_type == 'SO':
+                elif game.result_type == 'SO':
                     stats[t1]['so_siege'] += 1
                     stats[t2]['so_niederlagen'] += 1
             elif t2_score > t1_score:
-                # t2 gewinnt
-                if g.result_type == 'REG':
+                if game.result_type == 'REG':
                     stats[t2]['siege'] += 1
                     stats[t1]['niederlagen'] += 1
-                elif g.result_type == 'OT':
+                elif game.result_type == 'OT':
                     stats[t2]['ot_siege'] += 1
                     stats[t1]['ot_niederlagen'] += 1
-                elif g.result_type == 'SO':
+                elif game.result_type == 'SO':
                     stats[t2]['so_siege'] += 1
                     stats[t1]['so_niederlagen'] += 1
 
-        # Für die Tabelle
-        # Runden-Namen für bessere Anzeige
-        round_display = g.round
+        # Für duel_details
+        round_display = game.round
         if round_display == 'Preliminary Round':
             round_display = 'Hauptrunde'
         elif 'Quarter' in round_display:
             round_display = 'Viertelfinale'
         elif 'Semi' in round_display:
             round_display = 'Halbfinale'
-        elif 'Bronze' in round_display:
+        elif 'Bronze' in round_display or round_display == 'Spiel um Platz 3':
             round_display = 'Spiel um Platz 3'
-        elif 'Gold' in round_display or 'Final' in round_display:
+        elif 'Gold' in round_display or 'Final' in round_display or round_display == 'Finale':
             round_display = 'Finale'
         
-        # Ergebnis-Typ für bessere Anzeige
         result_display = ''
-        if g.result_type == 'REG':
+        if game.result_type == 'REG':
             result_display = 'Regulär'
-        elif g.result_type == 'OT':
+        elif game.result_type == 'OT':
             result_display = 'n.V.'
-        elif g.result_type == 'SO':
+        elif game.result_type == 'SO':
             result_display = 'n.P.'
         
         # Jahr des Spiels bestimmen
         year_display = '-'
-        if g.year_id:
-            year_obj_of_game = db.session.get(ChampionshipYear, g.year_id)
+        if game.year_id:
+            year_obj_of_game = db.session.get(ChampionshipYear, game.year_id)
             if year_obj_of_game:
                 year_display = str(year_obj_of_game.year)
         
         duel_details.append({
-            'game': g,
+            'game': game,
             't1_score': t1_score,
             't2_score': t2_score,
-            'date': g.date,
+            'date': game.date,
             'round_display': round_display,
-            'location': g.location,
+            'location': game.location,
             'result_display': result_display,
             'year_display': year_display
         })
 
-    # Durchschnittswerte pro Spiel berechnen
+    # Durchschnittswerte berechnen
     for team in [t1, t2]:
         spiele = stats[team]['spiele'] if stats[team]['spiele'] > 0 else 1
         stats[team]['tore_avg'] = round(stats[team]['tore'] / spiele, 2)
         stats[team]['pim_avg'] = round(stats[team]['pim'] / spiele, 2)
         stats[team]['sog_avg'] = round(stats[team]['sog'] / spiele, 2)
-        # Gesamtsiege berechnen (REG + OT + SO)
         stats[team]['siege_gesamt'] = stats[team]['siege'] + stats[team]['ot_siege'] + stats[team]['so_siege']
         stats[team]['niederlagen_gesamt'] = stats[team]['niederlagen'] + stats[team]['ot_niederlagen'] + stats[team]['so_niederlagen']
         stats[team]['siege_avg'] = round(stats[team]['siege_gesamt'] / spiele, 2)
 
-    # Sortiere Duelle nach Datum (neueste zuerst)
+    # Sortiere nach Datum (neueste zuerst)
     duel_details.sort(key=lambda x: (x['year_display'], x['date'] or ''), reverse=True)
-
+    
+    # DEBUG ENTFERNT - Problem war nicht im Backend
+    
     return render_template('team_vs_team.html',
-                           year=year_obj,
-                           team1=t1,
-                           team2=t2,
-                           stats=stats,
-                           duel_details=duel_details,
-                           team_iso_codes=TEAM_ISO_CODES)
+                         year=year_obj,
+                         team1=t1, team2=t2,
+                         stats=stats,
+                         duel_details=duel_details,
+                         team_iso_codes=TEAM_ISO_CODES)
+
+
 
 
 # === SEMIFINAL SEEDING ROUTES ===
