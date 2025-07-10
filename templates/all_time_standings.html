@@ -299,6 +299,79 @@
     body.dark-mode .loading-indicator {
         color: #a0aec0;
     }
+    
+    /* Position badges styling */
+    .position-badge {
+        font-size: 0.8em;
+        font-weight: bold;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-left: 8px;
+        display: inline-block;
+        min-width: 20px;
+        text-align: center;
+    }
+    
+    .position-gold {
+        background-color: #ffd700;
+        color: #1a202c;
+    }
+    
+    .position-silver {
+        background-color: #c0c0c0;
+        color: #1a202c;
+    }
+    
+    .position-bronze {
+        background-color: #cd7f32;
+        color: #ffffff;
+    }
+    
+    .position-fourth {
+        background-color: #4299e1;
+        color: #1a202c;
+    }
+    
+    .position-top8 {
+        background-color: #48bb78;
+        color: #ffffff;
+    }
+    
+    .position-other {
+        background-color: #e2e8f0;
+        color: #1a202c;
+    }
+    
+    /* Dark mode position badges */
+    body.dark-mode .position-gold {
+        background-color: #ffd700;
+        color: #1a202c;
+    }
+    
+    body.dark-mode .position-silver {
+        background-color: #c0c0c0;
+        color: #1a202c;
+    }
+    
+    body.dark-mode .position-bronze {
+        background-color: #cd7f32;
+        color: #ffffff;
+    }
+    
+    body.dark-mode .position-fourth {
+        background-color: #4299e1;
+        color: #1a202c;
+    }
+    
+    body.dark-mode .position-top8 {
+        background-color: #48bb78;
+        color: #ffffff;
+    }
+    
+    body.dark-mode .position-other {
+        background-color: #4a5568;
+        color: #e2e8f0;
+    }
 </style>
 {% endblock %}
 
@@ -564,7 +637,13 @@ function displayYearlyStats(data, $container) {
     
     data.yearly_stats.forEach(yearStat => {
         html += '<tr>';
-        html += `<td><strong>${yearStat.year}</strong></td>`;
+        
+        // Year column with position badge
+        html += `<td><strong>${yearStat.year}</strong>`;
+        if (yearStat.participated && yearStat.final_position) {
+            html += getPositionBadge(yearStat.final_position);
+        }
+        html += '</td>';
         
         if (yearStat.participated) {
             const stats = yearStat.stats;
@@ -595,6 +674,46 @@ function displayYearlyStats(data, $container) {
     html += '</tbody></table>';
     
     $container.html(html);
+}
+
+function getPositionBadge(position) {
+    if (!position) return '';
+    
+    let badgeClass = '';
+    let symbol = '';
+    let medal = '';
+    
+    switch (position) {
+        case 1:
+            badgeClass = 'position-gold';
+            symbol = '1';
+            medal = ' 🥇';
+            break;
+        case 2:
+            badgeClass = 'position-silver';
+            symbol = '2';
+            medal = ' 🥈';
+            break;
+        case 3:
+            badgeClass = 'position-bronze';
+            symbol = '3';
+            medal = ' 🥉';
+            break;
+        case 4:
+            badgeClass = 'position-fourth';
+            symbol = '4';
+            break;
+        default:
+            if (position <= 8) {
+                badgeClass = 'position-top8';
+                symbol = position.toString();
+            } else {
+                badgeClass = 'position-other';
+                symbol = position.toString();
+            }
+    }
+    
+    return `<span class="position-badge ${badgeClass}">${symbol}</span>${medal}`;
 }
 
 // Native browser tooltips are used via the title attribute - no Bootstrap tooltips needed

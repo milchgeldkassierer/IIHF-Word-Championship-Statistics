@@ -2190,9 +2190,7 @@ def get_team_yearly_stats(team_code):
         for year_obj in all_years:
             year_id = year_obj.id
             
-            # DEBUG: Print info for 2025 and CAN
-            if year_obj.year == 2025 and team_code == 'CAN':
-                print(f"DEBUG: Starting processing for Year {year_obj.year}, Team {team_code}")
+
             
             # Get all games for this year
             games_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
@@ -2203,6 +2201,7 @@ def get_team_yearly_stats(team_code):
                 yearly_stats.append({
                     'year': year_obj.year,
                     'participated': False,
+                    'final_position': None,
                     'stats': {'gp': 0, 'w': 0, 'otw': 0, 'sow': 0, 'l': 0, 'otl': 0, 'sol': 0, 'gf': 0, 'ga': 0, 'gd': 0, 'pts': 0}
                 })
                 continue
@@ -2552,32 +2551,17 @@ def get_team_yearly_stats(team_code):
             # Create games_processed_map
             games_processed_map = {g.id: g for g in games_processed}
             
-            # DEBUG: Print info for 2025 and CAN
-            if year_obj.year == 2025 and team_code == 'CAN':
-                print(f"DEBUG: Year 2025, Team CAN")
-                print(f"DEBUG: Total games_raw: {len(games_raw)}")
-                print(f"DEBUG: Total games_processed: {len(games_processed)}")
-                print(f"DEBUG: Games_processed_map: {len(games_processed_map)}")
-                
-                # Show all games involving CAN
-                can_games = []
-                for game_id, resolved_game in games_processed_map.items():
-                    if resolved_game.team1_code == 'CAN' or resolved_game.team2_code == 'CAN':
-                        raw_game = games_raw_map.get(game_id)
-                        can_games.append({
-                            'id': game_id,
-                            'round': resolved_game.round,
-                            'game_number': resolved_game.game_number,
-                            'team1': resolved_game.team1_code,
-                            'team2': resolved_game.team2_code,
-                            'orig_team1': resolved_game.original_team1_code,
-                            'orig_team2': resolved_game.original_team2_code,
-                            'score': f"{raw_game.team1_score if raw_game else None}-{raw_game.team2_score if raw_game else None}" if raw_game else "No raw game"
-                        })
-                
-                print(f"DEBUG: CAN games found: {len(can_games)}")
-                for i, game in enumerate(can_games, 1):
-                    print(f"  {i}. Game {game['game_number']}: {game['team1']} vs {game['team2']} ({game['orig_team1']} vs {game['orig_team2']}) [{game['round']}] Score: {game['score']}")
+            # Calculate final ranking for this year
+            final_ranking = calculate_complete_final_ranking(year_obj, games_processed, playoff_team_map, year_obj)
+            team_final_position = None
+            if final_ranking:
+                for position, team in final_ranking.items():
+                    if team == team_code:
+                        try:
+                            team_final_position = int(position)
+                            break
+                        except (ValueError, TypeError):
+                            pass
             
             # Find if team participated in this year
             team_participated = False
@@ -2664,6 +2648,7 @@ def get_team_yearly_stats(team_code):
             yearly_stats.append({
                 'year': year_obj.year,
                 'participated': team_participated,
+                'final_position': team_final_position,
                 'stats': {
                     'gp': gp, 'w': w, 'otw': otw, 'sow': sow, 'l': l, 'otl': otl, 'sol': sol,
                     'gf': gf, 'ga': ga, 'gd': gd, 'pts': pts,
