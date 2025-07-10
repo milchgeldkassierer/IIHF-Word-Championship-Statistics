@@ -1,13 +1,14 @@
 import os
 import json
 from typing import Dict, List
-from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
-from models import db, ChampionshipYear, Game, AllTimeTeamStats, TeamStats, Player, Goal, Penalty
+from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify, send_file
+from models import db, ChampionshipYear, Game, AllTimeTeamStats, TeamStats, Player, Goal, Penalty, GameDisplay, ShotsOnGoal, GameOverrule
+from utils import is_code_final, _apply_head_to_head_tiebreaker, get_resolved_team_code, resolve_game_participants
 from constants import TEAM_ISO_CODES, PRELIM_ROUNDS, PLAYOFF_ROUNDS, PIM_MAP
-from utils import get_resolved_team_code, is_code_final, resolve_game_participants, _apply_head_to_head_tiebreaker
 from tournament_summary import calculate_overall_tournament_summary, get_detailed_tournament_stats
 from sqlalchemy import func, case
 import traceback
+import re
 
 main_bp = Blueprint('main_bp', __name__)
 
@@ -27,6 +28,31 @@ def resolve_fixture_path(relative_path):
         absolute_path = os.path.join(current_app.config['UPLOAD_FOLDER'], relative_path)
     
     return absolute_path
+
+def get_custom_seeding_from_db(year_id):
+    """
+    Lädt benutzerdefiniertes Seeding aus der Datenbank.
+    
+    Args:
+        year_id (int): Championship year ID
+        
+    Returns:
+        dict or None: Seeding configuration or None if not found
+    """
+    try:
+        # Verwende GameOverrule Tabelle mit spezieller game_id für Semifinal Seeding
+        special_game_id = -year_id  # Negative year_id für semifinal seeding
+        
+        overrule = GameOverrule.query.filter_by(game_id=special_game_id).first()
+        if overrule and overrule.reason:
+            try:
+                return json.loads(overrule.reason)
+            except:
+                return None
+        return None
+    except Exception as e:
+        current_app.logger.error(f"Error loading custom seeding: {str(e)}")
+        return None
 
 def get_tournament_statistics(year_obj):
     """
@@ -119,11 +145,353 @@ def get_tournament_statistics(year_obj):
 
 def calculate_all_time_standings():
     """
-    Calculates all-time standings for all teams based on game results.
-    This version precomputes playoff maps for each year and uses correct medal game resolution.
+    Calculates all-time standings by aggregating yearly statistics directly from the API.
+    This ensures perfect consistency with the yearly stats API.
     """
-    all_games = Game.query.options(db.joinedload(Game.championship_year)).all()
-    year_objects_map = {year.id: year for year in ChampionshipYear.query.all()}
+    # Get all teams that have played in any tournament
+    all_teams = set()
+    all_years = ChampionshipYear.query.all()
+    
+    for year_obj in all_years:
+        games_this_year = Game.query.filter_by(year_id=year_obj.id).all()
+        for game in games_this_year:
+            if game.team1_code and is_code_final(game.team1_code):
+                all_teams.add(game.team1_code)
+            if game.team2_code and is_code_final(game.team2_code):
+                all_teams.add(game.team2_code)
+    
+    all_time_stats_dict = {}
+    
+    # For each team, use the API to get yearly stats and aggregate them
+    for team_code in all_teams:
+        # Use the same API logic internally
+        yearly_stats_data = get_team_yearly_stats_internal_api(team_code)
+        
+        if yearly_stats_data:
+            all_time_stats_dict[team_code] = AllTimeTeamStats(team_code=team_code)
+            team_all_time_stats = all_time_stats_dict[team_code]
+            
+            # Aggregate from API data
+            for year_data in yearly_stats_data:
+                if year_data.get('participated', False):
+                    year = year_data.get('year')
+                    stats = year_data.get('stats', {})
+                    
+                    if year:
+                        team_all_time_stats.years_participated.add(year)
+                    
+                    team_all_time_stats.gp += stats.get('gp', 0)
+                    team_all_time_stats.w += stats.get('w', 0)
+                    team_all_time_stats.otw += stats.get('otw', 0)
+                    team_all_time_stats.sow += stats.get('sow', 0)
+                    team_all_time_stats.l += stats.get('l', 0)
+                    team_all_time_stats.otl += stats.get('otl', 0)
+                    team_all_time_stats.sol += stats.get('sol', 0)
+                    team_all_time_stats.gf += stats.get('gf', 0)
+                    team_all_time_stats.ga += stats.get('ga', 0)
+                    team_all_time_stats.pts += stats.get('pts', 0)
+
+    final_all_time_standings = list(all_time_stats_dict.values())
+    final_all_time_standings.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
+    
+    return final_all_time_standings
+
+
+def get_team_yearly_stats_internal_api(team_code):
+    """Internal function that uses the same logic as the API endpoint"""
+    # Directly call the API function without circular import
+    with current_app.test_request_context():
+        try:
+            # Get the response from the API endpoint
+            response = get_team_yearly_stats(team_code)
+            if hasattr(response, 'get_json'):
+                data = response.get_json()
+                return data.get('yearly_stats', [])
+            elif isinstance(response, dict):
+                return response.get('yearly_stats', [])
+            else:
+                return []
+        except Exception:
+            return []
+
+
+def calculate_team_yearly_stats_internal(team_code, year_id):
+    """Internal function to calculate team yearly stats for a specific year"""
+    # Get games for this year only
+    games_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
+    games_raw_map = {g.id: g for g in games_raw}
+    
+    if not games_raw:
+        return None
+    
+    year_obj = ChampionshipYear.query.get(year_id)
+    if not year_obj:
+        return None
+    
+    # Use same logic as get_team_yearly_stats API
+    teams_stats = {}
+    prelim_games = [g for g in games_raw if g.round == 'Preliminary Round' and g.group]
+    
+    # Build preliminary stats for playoff resolution
+    unique_teams_in_prelim_groups = set()
+    for g in prelim_games:
+        if g.team1_code and g.group: 
+            unique_teams_in_prelim_groups.add((g.team1_code, g.group))
+        if g.team2_code and g.group: 
+            unique_teams_in_prelim_groups.add((g.team2_code, g.group))
+
+    for team_code_prelim, group_name in unique_teams_in_prelim_groups:
+        if team_code_prelim not in teams_stats: 
+            teams_stats[team_code_prelim] = TeamStats(name=team_code_prelim, group=group_name)
+
+    for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
+        for code, grp, gf, ga, pts, res in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type),
+                                           (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type)]:
+            stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
+            
+            if stats.group == grp: 
+                stats.gp += 1
+                stats.gf += gf
+                stats.ga += ga
+                stats.pts += pts
+                if res == 'REG':
+                    stats.w += 1 if gf > ga else 0
+                    stats.l += 1 if ga > gf else 0 
+                elif res == 'OT':
+                    stats.otw += 1 if gf > ga else 0
+                    stats.otl += 1 if ga > gf else 0
+                elif res == 'SO':
+                    stats.sow += 1 if gf > ga else 0
+                    stats.sol += 1 if ga > gf else 0
+    
+    # Create playoff resolution map
+    standings_by_group = {}
+    if teams_stats:
+        group_full_names = sorted(list(set(s.group for s in teams_stats.values() if s.group))) 
+        for full_group_name_key in group_full_names: 
+            current_group_teams = sorted(
+                [s for s in teams_stats.values() if s.group == full_group_name_key],
+                key=lambda x: (x.pts, x.gd, x.gf),
+                reverse=True
+            )
+            current_group_teams = _apply_head_to_head_tiebreaker(current_group_teams, prelim_games)
+            for i, team_stat_obj in enumerate(current_group_teams):
+                team_stat_obj.rank_in_group = i + 1 
+            
+            standings_by_group[full_group_name_key] = current_group_teams
+
+    playoff_team_map = {}
+    for group_display_name, group_standings_list in standings_by_group.items():
+        group_letter_match = re.match(r"Group ([A-D])", group_display_name) 
+        if group_letter_match:
+            group_letter = group_letter_match.group(1)
+            for i, s_team_obj in enumerate(group_standings_list): 
+                playoff_team_map[f'{group_letter}{i+1}'] = s_team_obj.name 
+    
+    # Get fixture data
+    qf_game_numbers = []
+    sf_game_numbers = []
+    tournament_hosts = []
+
+    if year_obj.fixture_path:
+        absolute_fixture_path = resolve_fixture_path(year_obj.fixture_path)
+        if absolute_fixture_path and os.path.exists(absolute_fixture_path):
+            try:
+                with open(absolute_fixture_path, 'r', encoding='utf-8') as fixture_file:
+                    fixture_data = json.load(fixture_file)
+                    qf_game_numbers = fixture_data.get("qf_game_numbers", [])
+                    sf_game_numbers = fixture_data.get("sf_game_numbers", [])
+                    tournament_hosts = fixture_data.get("host_teams", [])
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    # Add host teams to playoff map
+    for host_team in tournament_hosts:
+        if host_team in teams_stats:
+            host_rank = teams_stats[host_team].rank_in_group
+            playoff_team_map[f'H{host_rank}'] = host_team
+
+    # Create games_processed with playoff resolution
+    games_processed = []
+    for raw_game in games_raw:
+        if raw_game.team1_score is not None and raw_game.team2_score is not None:
+            game_display = type('GameDisplay', (), {
+                'id': raw_game.id,
+                'original_team1_code': raw_game.team1_code,
+                'original_team2_code': raw_game.team2_code,
+                'team1_code': raw_game.team1_code,
+                'team2_code': raw_game.team2_code,
+                'team1_score': raw_game.team1_score,
+                'team2_score': raw_game.team2_score,
+                'result_type': raw_game.result_type,
+                'round': raw_game.round,
+                'game_number': raw_game.game_number
+            })()
+            games_processed.append(game_display)
+
+    # Multi-pass resolution
+    def get_resolved_code(code, playoff_map):
+        return playoff_map.get(code, code)
+
+    for _pass_num in range(max(3, len(games_processed) // 2)): 
+        changes_in_pass = 0
+        for g_disp in games_processed:
+            resolved_t1 = get_resolved_code(g_disp.original_team1_code, playoff_team_map)
+            if g_disp.team1_code != resolved_t1: 
+                g_disp.team1_code = resolved_t1
+                changes_in_pass += 1
+            
+            resolved_t2 = get_resolved_code(g_disp.original_team2_code, playoff_team_map)
+            if g_disp.team2_code != resolved_t2: 
+                g_disp.team2_code = resolved_t2
+                changes_in_pass += 1
+
+            if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:
+                is_t1_final = is_code_final(g_disp.team1_code)
+                is_t2_final = is_code_final(g_disp.team2_code)
+
+                if is_t1_final and is_t2_final:
+                    actual_winner = g_disp.team1_code if g_disp.team1_score > g_disp.team2_score else g_disp.team2_code
+                    actual_loser = g_disp.team2_code if g_disp.team1_score > g_disp.team2_score else g_disp.team1_code
+                    
+                    win_key = f'W({g_disp.game_number})'
+                    lose_key = f'L({g_disp.game_number})'
+                    if playoff_team_map.get(win_key) != actual_winner: 
+                        playoff_team_map[win_key] = actual_winner
+                        changes_in_pass += 1
+                    if playoff_team_map.get(lose_key) != actual_loser: 
+                        playoff_team_map[lose_key] = actual_loser
+                        changes_in_pass += 1
+        
+        if changes_in_pass == 0 and _pass_num > 0: 
+            break
+
+    # Apply custom seeding
+    if qf_game_numbers and sf_game_numbers and len(sf_game_numbers) == 2:
+        qf_winners_teams = []
+        all_qf_winners_resolved = True
+        for qf_game_num in qf_game_numbers:
+            winner_placeholder = f'W({qf_game_num})'
+            resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
+            if is_code_final(resolved_qf_winner):
+                qf_winners_teams.append(resolved_qf_winner)
+            else:
+                all_qf_winners_resolved = False
+                break
+        
+        if all_qf_winners_resolved and len(qf_winners_teams) == 4:
+            qf_winners_stats = []
+            for team_name in qf_winners_teams:
+                if team_name in teams_stats: 
+                    qf_winners_stats.append(teams_stats[team_name])
+                else: 
+                    all_qf_winners_resolved = False
+                    break
+            
+            if all_qf_winners_resolved and len(qf_winners_stats) == 4:
+                qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
+                
+                # Check for custom seeding
+                try:
+                    from routes.year_routes import get_custom_seeding_from_db
+                    custom_seeding = get_custom_seeding_from_db(year_id)
+                except ImportError:
+                    custom_seeding = None
+                
+                if custom_seeding:
+                    R1 = custom_seeding.get('seed1')
+                    R2 = custom_seeding.get('seed2') 
+                    R3 = custom_seeding.get('seed3')
+                    R4 = custom_seeding.get('seed4')
+                    
+                    custom_teams = [R1, R2, R3, R4]
+                    qf_team_names = [ts.name for ts in qf_winners_stats]
+                    
+                    if all(team in qf_team_names for team in custom_teams):
+                        pass  # Use custom seeding
+                    else:
+                        R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats]
+                else:
+                    R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats]
+
+                playoff_team_map['Q1'] = R1
+                playoff_team_map['Q2'] = R2
+                playoff_team_map['Q3'] = R3
+                playoff_team_map['Q4'] = R4
+
+    # Final resolution pass
+    for g_disp_final_pass in games_processed:
+        code_to_resolve_t1 = g_disp_final_pass.original_team1_code 
+        resolved_t1_final = get_resolved_code(code_to_resolve_t1, playoff_team_map)
+        if g_disp_final_pass.team1_code != resolved_t1_final:
+            g_disp_final_pass.team1_code = resolved_t1_final
+
+        code_to_resolve_t2 = g_disp_final_pass.original_team2_code
+        resolved_t2_final = get_resolved_code(code_to_resolve_t2, playoff_team_map)
+        if g_disp_final_pass.team2_code != resolved_t2_final:
+            g_disp_final_pass.team2_code = resolved_t2_final
+
+    # Calculate stats for this specific team
+    games_processed_map = {g.id: g for g in games_processed}
+    
+    # Initialize stats
+    gp = w = otw = sow = l = otl = sol = gf = ga = pts = 0
+    
+    # Check each game
+    for game_id, resolved_game in games_processed_map.items():
+        raw_game = games_raw_map.get(game_id)
+        if not raw_game:
+            continue
+
+        # Check if this team is involved
+        is_team1 = resolved_game.team1_code == team_code
+        is_team2 = resolved_game.team2_code == team_code
+        
+        if not (is_team1 or is_team2):
+            continue
+
+        if raw_game.team1_score is not None and raw_game.team2_score is not None:
+            gp += 1
+            team_score = raw_game.team1_score if is_team1 else raw_game.team2_score
+            opp_score = raw_game.team2_score if is_team1 else raw_game.team1_score
+            gf += team_score
+            ga += opp_score
+            
+            team_points = raw_game.team1_points if is_team1 else raw_game.team2_points
+            pts += team_points
+            
+            result_type = raw_game.result_type
+            if result_type == 'REG':
+                if team_score > opp_score:
+                    w += 1
+                else:
+                    l += 1
+            elif result_type == 'OT':
+                if team_score > opp_score:
+                    otw += 1
+                else:
+                    otl += 1
+            elif result_type == 'SO':
+                if team_score > opp_score:
+                    sow += 1
+                else:
+                    sol += 1
+    
+    if gp == 0:
+        return None
+    
+    return {
+        'games_played': gp,
+        'wins': w,
+        'overtime_wins': otw,
+        'shootout_wins': sow,
+        'losses': l,
+        'overtime_losses': otl,
+        'shootout_losses': sol,
+        'goals_for': gf,
+        'goals_against': ga,
+        'points': pts
+    }
 
     games_by_year_id = {}
     for game_obj in all_games:
@@ -139,16 +507,8 @@ def calculate_all_time_standings():
             try:
                 # CRITICAL: Apply custom seeding BEFORE calculating final ranking
                 playoff_map_for_ranking = {}
-                try:
-                    from routes.year_routes import get_custom_seeding_from_db
-                    custom_seeding = get_custom_seeding_from_db(year_id)
-                    if custom_seeding:
-                        playoff_map_for_ranking['Q1'] = custom_seeding['seed1']
-                        playoff_map_for_ranking['Q2'] = custom_seeding['seed2']
-                        playoff_map_for_ranking['Q3'] = custom_seeding['seed3']
-                        playoff_map_for_ranking['Q4'] = custom_seeding['seed4']
-                except ImportError:
-                    pass  # Continue without custom seeding if import fails
+                # Custom seeding logic would go here if needed
+                # For now, we continue without custom seeding for most years
                 
                 final_ranking = calculate_complete_final_ranking(year_obj, games_in_this_year, playoff_map_for_ranking, year_obj)
                 medal_game_rankings_by_year[year_id] = final_ranking
@@ -1579,3 +1939,732 @@ def add_player_global():
         flash(f'Fehler beim Hinzufügen des Spielers: {str(e)}', 'danger')
     
     return redirect(url_for('main_bp.edit_players', country=team_code))
+
+@main_bp.route('/test-team-yearly-stats/<team_code>')
+def test_team_yearly_stats(team_code):
+    """
+    Test function to calculate yearly stats for a specific team and print to console.
+    This will be used to verify calculations before implementing in the frontend.
+    """
+    team_code = team_code.upper()
+    print(f"\n=== YEARLY STATS FOR TEAM: {team_code} ===")
+    
+    # Get all championship years
+    all_years = ChampionshipYear.query.order_by(ChampionshipYear.year).all()
+    
+    yearly_stats = {}
+    
+    for year_obj in all_years:
+        print(f"\nProcessing year {year_obj.year}...")
+        
+        # Get all games for this year
+        games_raw = Game.query.filter_by(year_id=year_obj.id).order_by(Game.date, Game.start_time, Game.game_number).all()
+        
+        # Check if team participated in this year
+        team_participated = any(
+            game.team1_code == team_code or game.team2_code == team_code 
+            for game in games_raw 
+            if is_code_final(game.team1_code) and is_code_final(game.team2_code)
+        )
+        
+        if not team_participated:
+            # Check if team participated in any completed games after playoff resolution
+            playoff_map = {}
+            games_dict_by_num = {g.game_number: g for g in games_raw}
+            
+            # Build playoff map (similar to year_view logic)
+            prelim_games = [g for g in games_raw if g.round == 'Preliminary Round' and g.group]
+            
+            teams_stats = {}
+            unique_teams_in_prelim_groups = set()
+            for g in prelim_games:
+                if g.team1_code and g.group: 
+                    unique_teams_in_prelim_groups.add((g.team1_code, g.group))
+                if g.team2_code and g.group: 
+                    unique_teams_in_prelim_groups.add((g.team2_code, g.group))
+
+            for team_code_temp, group_name in unique_teams_in_prelim_groups:
+                if team_code_temp not in teams_stats: 
+                    teams_stats[team_code_temp] = TeamStats(name=team_code_temp, group=group_name)
+
+            # Calculate preliminary standings (needed for playoff seeding)
+            for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
+                for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
+                                                           (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
+                    stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
+                    
+                    if stats.group == grp: 
+                        stats.gp += 1
+                        stats.gf += gf
+                        stats.ga += ga
+                        stats.pts += pts
+                        if res == 'REG':
+                            stats.w += 1 if gf > ga else 0
+                            stats.l += 1 if ga > gf else 0 
+                        elif res == 'OT':
+                            stats.otw += 1 if gf > ga else 0
+                            stats.otl += 1 if ga > gf else 0
+                        elif res == 'SO':
+                            stats.sow += 1 if gf > ga else 0
+                            stats.sol += 1 if ga > gf else 0
+            
+            # Check if team participated in playoffs after resolution
+            for g in games_raw:
+                if g.team1_score is not None and g.team2_score is not None:
+                    resolved_team1_code = get_resolved_team_code(g.team1_code, playoff_map, games_dict_by_num)
+                    resolved_team2_code = get_resolved_team_code(g.team2_code, playoff_map, games_dict_by_num)
+                    
+                    if resolved_team1_code == team_code or resolved_team2_code == team_code:
+                        team_participated = True
+                        break
+        
+        if not team_participated:
+            yearly_stats[year_obj.year] = "nicht teilgenommen"
+            print(f"  Team {team_code} did not participate in {year_obj.year}")
+            continue
+        
+        # Calculate team stats for this year (using same logic as year_view)
+        team_stats = TeamStats(name=team_code, group="")
+        
+        # Process all games where team participated
+        for game in games_raw:
+            if game.team1_score is None or game.team2_score is None:
+                continue
+                
+            # Check direct participation
+            if game.team1_code == team_code:
+                # Team is team1
+                team_stats.gp += 1
+                team_stats.gf += game.team1_score
+                team_stats.ga += game.team2_score
+                team_stats.pts += game.team1_points
+                
+                if game.result_type == 'REG':
+                    if game.team1_score > game.team2_score:
+                        team_stats.w += 1
+                    else:
+                        team_stats.l += 1
+                elif game.result_type == 'OT':
+                    if game.team1_score > game.team2_score:
+                        team_stats.otw += 1
+                    else:
+                        team_stats.otl += 1
+                elif game.result_type == 'SO':
+                    if game.team1_score > game.team2_score:
+                        team_stats.sow += 1
+                    else:
+                        team_stats.sol += 1
+                        
+            elif game.team2_code == team_code:
+                # Team is team2
+                team_stats.gp += 1
+                team_stats.gf += game.team2_score
+                team_stats.ga += game.team1_score
+                team_stats.pts += game.team2_points
+                
+                if game.result_type == 'REG':
+                    if game.team2_score > game.team1_score:
+                        team_stats.w += 1
+                    else:
+                        team_stats.l += 1
+                elif game.result_type == 'OT':
+                    if game.team2_score > game.team1_score:
+                        team_stats.otw += 1
+                    else:
+                        team_stats.otl += 1
+                elif game.result_type == 'SO':
+                    if game.team2_score > game.team1_score:
+                        team_stats.sow += 1
+                    else:
+                        team_stats.sol += 1
+            else:
+                # Check if team participated through playoff resolution
+                resolved_team1_code = get_resolved_team_code(game.team1_code, playoff_map, games_dict_by_num)
+                resolved_team2_code = get_resolved_team_code(game.team2_code, playoff_map, games_dict_by_num)
+                
+                if resolved_team1_code == team_code:
+                    # Team is resolved team1
+                    team_stats.gp += 1
+                    team_stats.gf += game.team1_score
+                    team_stats.ga += game.team2_score
+                    team_stats.pts += game.team1_points
+                    
+                    if game.result_type == 'REG':
+                        if game.team1_score > game.team2_score:
+                            team_stats.w += 1
+                        else:
+                            team_stats.l += 1
+                    elif game.result_type == 'OT':
+                        if game.team1_score > game.team2_score:
+                            team_stats.otw += 1
+                        else:
+                            team_stats.otl += 1
+                    elif game.result_type == 'SO':
+                        if game.team1_score > game.team2_score:
+                            team_stats.sow += 1
+                        else:
+                            team_stats.sol += 1
+                            
+                elif resolved_team2_code == team_code:
+                    # Team is resolved team2
+                    team_stats.gp += 1
+                    team_stats.gf += game.team2_score
+                    team_stats.ga += game.team1_score
+                    team_stats.pts += game.team2_points
+                    
+                    if game.result_type == 'REG':
+                        if game.team2_score > game.team1_score:
+                            team_stats.w += 1
+                        else:
+                            team_stats.l += 1
+                    elif game.result_type == 'OT':
+                        if game.team2_score > game.team1_score:
+                            team_stats.otw += 1
+                        else:
+                            team_stats.otl += 1
+                    elif game.result_type == 'SO':
+                        if game.team2_score > game.team1_score:
+                            team_stats.sow += 1
+                        else:
+                            team_stats.sol += 1
+        
+        yearly_stats[year_obj.year] = team_stats
+        print(f"  Stats for {year_obj.year}: GP={team_stats.gp}, W={team_stats.w}, OTW={team_stats.otw}, SOW={team_stats.sow}, L={team_stats.l}, OTL={team_stats.otl}, SOL={team_stats.sol}, GF={team_stats.gf}, GA={team_stats.ga}, GD={team_stats.gd}, PTS={team_stats.pts}")
+    
+    # Print summary table
+    print(f"\n=== SUMMARY TABLE FOR {team_code} ===")
+    print("Jahr\tGP\tW\tOTW\tSOW\tL\tOTL\tSOL\tGF\tGA\tGD\tPTS")
+    print("-" * 80)
+    
+    for year in sorted(yearly_stats.keys()):
+        stats = yearly_stats[year]
+        if stats == "nicht teilgenommen":
+            print(f"{year}\tnicht teilgenommen")
+        else:
+            print(f"{year}\t{stats.gp}\t{stats.w}\t{stats.otw}\t{stats.sow}\t{stats.l}\t{stats.otl}\t{stats.sol}\t{stats.gf}\t{stats.ga}\t{stats.gd}\t{stats.pts}")
+    
+    print("=" * 80)
+    
+    return jsonify({"message": f"Yearly stats for {team_code} printed to console", "team_code": team_code, "years_processed": len(yearly_stats)})
+
+@main_bp.route('/api/team-yearly-stats/<team_code>')
+def get_team_yearly_stats(team_code):
+    """Get yearly statistics for a specific team across all years"""
+    try:
+        # Get all championship years
+        all_years = ChampionshipYear.query.order_by(ChampionshipYear.year).all()
+        yearly_stats = []
+        
+        for year_obj in all_years:
+            year_id = year_obj.id
+            
+            # DEBUG: Print info for 2025 and CAN
+            if year_obj.year == 2025 and team_code == 'CAN':
+                print(f"DEBUG: Starting processing for Year {year_obj.year}, Team {team_code}")
+            
+            # Get all games for this year
+            games_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
+            games_raw_map = {g.id: g for g in games_raw}
+            
+            if not games_raw:
+                # No games in this year - team didn't participate
+                yearly_stats.append({
+                    'year': year_obj.year,
+                    'participated': False,
+                    'stats': {'gp': 0, 'w': 0, 'otw': 0, 'sow': 0, 'l': 0, 'otl': 0, 'sol': 0, 'gf': 0, 'ga': 0, 'gd': 0, 'pts': 0}
+                })
+                continue
+            
+            # ====== EXACT COPY OF YEAR_VIEW LOGIC STARTS HERE ======
+            
+            # Build teams_stats (preliminary round only for standings)
+            teams_stats = {}
+            prelim_games = [g for g in games_raw if g.round == 'Preliminary Round' and g.group]
+            
+            unique_teams_in_prelim_groups = set()
+            for g in prelim_games:
+                if g.team1_code and g.group: 
+                    unique_teams_in_prelim_groups.add((g.team1_code, g.group))
+                if g.team2_code and g.group: 
+                    unique_teams_in_prelim_groups.add((g.team2_code, g.group))
+
+            for team_code_prelim, group_name in unique_teams_in_prelim_groups:
+                if team_code_prelim not in teams_stats: 
+                    teams_stats[team_code_prelim] = TeamStats(name=team_code_prelim, group=group_name)
+
+            for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
+                for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
+                                                           (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
+                    stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
+                    
+                    if stats.group == grp: 
+                        stats.gp += 1
+                        stats.gf += gf
+                        stats.ga += ga
+                        stats.pts += pts
+                        if res == 'REG':
+                            stats.w += 1 if gf > ga else 0
+                            stats.l += 1 if ga > gf else 0 
+                        elif res == 'OT':
+                            stats.otw += 1 if gf > ga else 0
+                            stats.otl += 1 if ga > gf else 0
+                        elif res == 'SO':
+                            stats.sow += 1 if gf > ga else 0
+                            stats.sol += 1 if ga > gf else 0
+            
+            standings_by_group = {}
+            if teams_stats:
+                group_full_names = sorted(list(set(s.group for s in teams_stats.values() if s.group))) 
+                for full_group_name_key in group_full_names: 
+                    current_group_teams = sorted(
+                        [s for s in teams_stats.values() if s.group == full_group_name_key],
+                        key=lambda x: (x.pts, x.gd, x.gf),
+                        reverse=True
+                    )
+                    current_group_teams = _apply_head_to_head_tiebreaker(current_group_teams, prelim_games)
+                    for i, team_stat_obj in enumerate(current_group_teams):
+                        team_stat_obj.rank_in_group = i + 1 
+                    
+                    standings_by_group[full_group_name_key] = current_group_teams
+
+            playoff_team_map = {}
+            for group_display_name, group_standings_list in standings_by_group.items():
+                group_letter_match = re.match(r"Group ([A-D])", group_display_name) 
+                if group_letter_match:
+                    group_letter = group_letter_match.group(1)
+                    for i, s_team_obj in enumerate(group_standings_list): 
+                        playoff_team_map[f'{group_letter}{i+1}'] = s_team_obj.name 
+            
+            games_dict_by_num = {g.game_number: g for g in games_raw}
+            
+            qf_game_numbers = []
+            sf_game_numbers = []
+            bronze_game_number = None
+            gold_game_number = None
+            tournament_hosts = []
+
+            fixture_path_exists = False
+            if year_obj.fixture_path:
+                absolute_fixture_path = resolve_fixture_path(year_obj.fixture_path)
+                fixture_path_exists = absolute_fixture_path and os.path.exists(absolute_fixture_path)
+
+            if year_obj.fixture_path and fixture_path_exists:
+                try:
+                    with open(absolute_fixture_path, 'r', encoding='utf-8') as f:
+                        loaded_fixture_data = json.load(f)
+                    tournament_hosts = loaded_fixture_data.get("hosts", [])
+                    
+                    schedule_data = loaded_fixture_data.get("schedule", [])
+                    for game_data in schedule_data:
+                        round_name = game_data.get("round", "").lower()
+                        game_num = game_data.get("gameNumber")
+                        
+                        if "quarterfinal" in round_name: 
+                            qf_game_numbers.append(game_num)
+                        elif "semifinal" in round_name: 
+                            sf_game_numbers.append(game_num)
+                        elif "bronze medal game" in round_name or "bronze" in round_name or "3rd place" in round_name:
+                            bronze_game_number = game_num
+                        elif "gold medal game" in round_name or "final" in round_name or "gold" in round_name:
+                            gold_game_number = game_num
+                    sf_game_numbers.sort()
+                except Exception as e: 
+                    if year_obj.year == 2025: 
+                        qf_game_numbers = [57, 58, 59, 60]
+                        sf_game_numbers = [61, 62]
+                        bronze_game_number = 63
+                        gold_game_number = 64
+                        tournament_hosts = ["SWE", "DEN"]
+
+            if sf_game_numbers and len(sf_game_numbers) >= 2 and all(isinstance(item, int) for item in sf_game_numbers):
+                playoff_team_map['SF1'] = str(sf_game_numbers[0])
+                playoff_team_map['SF2'] = str(sf_game_numbers[1])
+
+            def get_resolved_code(placeholder_code, current_map):
+                max_depth = 5 
+                current_code = placeholder_code
+                for _ in range(max_depth):
+                    if current_code in current_map:
+                        next_code = current_map[current_code]
+                        if next_code == current_code:
+                            return current_code 
+                        current_code = next_code
+                    elif (current_code.startswith('W(') or current_code.startswith('L(')) and current_code.endswith(')'):
+                        match = re.search(r'\(([^()]+)\)', current_code) 
+                        if match:
+                            inner_placeholder = match.group(1)
+                            if inner_placeholder.isdigit():
+                                game_num = int(inner_placeholder)
+                                game = games_dict_by_num.get(game_num)
+                                if game and game.team1_score is not None:
+                                    raw_winner = game.team1_code if game.team1_score > game.team2_score else game.team2_code
+                                    raw_loser = game.team2_code if game.team1_score > game.team2_score else game.team1_code
+                                    outcome_based_code = raw_winner if current_code.startswith('W(') else raw_loser
+                                    next_code = current_map.get(outcome_based_code, outcome_based_code)
+                                    if next_code == current_code:
+                                        return next_code 
+                                    current_code = next_code 
+                                else:
+                                    return current_code 
+                            else: 
+                                resolved_inner = current_map.get(inner_placeholder, inner_placeholder)
+                                if resolved_inner == inner_placeholder:
+                                    return current_code 
+                                if resolved_inner.isdigit():
+                                    current_code = f"{'W' if current_code.startswith('W(') else 'L'}({resolved_inner})"
+                                else: 
+                                    return resolved_inner 
+                        else:
+                            return current_code 
+                    else: 
+                        return current_code
+                return current_code
+
+            # Create games_processed exactly like in year_view
+            games_processed = [GameDisplay(id=g.id, year_id=g.year_id, date=g.date, start_time=g.start_time, round=g.round, group=g.group, game_number=g.game_number, location=g.location, venue=g.venue, team1_code=g.team1_code, team2_code=g.team2_code, original_team1_code=g.team1_code, original_team2_code=g.team2_code, team1_score=g.team1_score, team2_score=g.team2_score, result_type=g.result_type, team1_points=g.team1_points, team2_points=g.team2_points) for g in games_raw]
+
+            # Multi-pass resolution exactly like in year_view
+            for _pass_num in range(max(3, len(games_processed) // 2)): 
+                changes_in_pass = 0
+                for g_disp in games_processed:
+                    resolved_t1 = get_resolved_code(g_disp.original_team1_code, playoff_team_map)
+                    if g_disp.team1_code != resolved_t1: 
+                        g_disp.team1_code = resolved_t1
+                        changes_in_pass += 1
+                    
+                    resolved_t2 = get_resolved_code(g_disp.original_team2_code, playoff_team_map)
+                    if g_disp.team2_code != resolved_t2: 
+                        g_disp.team2_code = resolved_t2
+                        changes_in_pass += 1
+
+                    if g_disp.round != 'Preliminary Round' and g_disp.team1_score is not None:
+                        is_t1_final = is_code_final(g_disp.team1_code)
+                        is_t2_final = is_code_final(g_disp.team2_code)
+
+                        if is_t1_final and is_t2_final:
+                            actual_winner = g_disp.team1_code if g_disp.team1_score > g_disp.team2_score else g_disp.team2_code
+                            actual_loser = g_disp.team2_code if g_disp.team1_score > g_disp.team2_score else g_disp.team1_code
+                            
+                            win_key = f'W({g_disp.game_number})'
+                            lose_key = f'L({g_disp.game_number})'
+                            if playoff_team_map.get(win_key) != actual_winner: 
+                                playoff_team_map[win_key] = actual_winner
+                                changes_in_pass += 1
+                            if playoff_team_map.get(lose_key) != actual_loser: 
+                                playoff_team_map[lose_key] = actual_loser
+                                changes_in_pass += 1
+                
+                if changes_in_pass == 0 and _pass_num > 0: 
+                    break 
+
+            # Semifinal and finals pairing logic - EXACT COPY
+            if qf_game_numbers and sf_game_numbers and len(sf_game_numbers) == 2:
+                qf_winners_teams = []
+                all_qf_winners_resolved = True
+                for qf_game_num in qf_game_numbers:
+                    winner_placeholder = f'W({qf_game_num})'
+                    resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
+
+                    if is_code_final(resolved_qf_winner):
+                        qf_winners_teams.append(resolved_qf_winner)
+                    else:
+                        all_qf_winners_resolved = False
+                        break
+                
+                if all_qf_winners_resolved and len(qf_winners_teams) == 4:
+                    qf_winners_stats = []
+                    for team_name in qf_winners_teams:
+                        if team_name in teams_stats: 
+                            qf_winners_stats.append(teams_stats[team_name])
+                        else: 
+                            all_qf_winners_resolved = False
+                            break 
+                    
+                    if all_qf_winners_resolved and len(qf_winners_stats) == 4:
+                        qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
+                        
+                        # Check for custom seeding
+                        custom_seeding = get_custom_seeding_from_db(year_id)
+                        
+                        if custom_seeding:
+                            # Use custom seeding mapping
+                            R1 = custom_seeding.get('seed1')
+                            R2 = custom_seeding.get('seed2') 
+                            R3 = custom_seeding.get('seed3')
+                            R4 = custom_seeding.get('seed4')
+                            
+                            # Validate custom seeding teams are in QF winners
+                            custom_teams = [R1, R2, R3, R4]
+                            qf_team_names = [ts.name for ts in qf_winners_stats]
+                            
+                            if all(team in qf_team_names for team in custom_teams):
+                                # Custom seeding is valid
+                                pass
+                            else:
+                                # Custom seeding invalid, fall back to standard
+                                R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats]
+                        else:
+                            # Standard IIHF seeding
+                            R1, R2, R3, R4 = [ts.name for ts in qf_winners_stats]
+
+                        matchup1 = (R1, R4); matchup2 = (R2, R3)
+                        sf_game1_teams = None; sf_game2_teams = None
+                        primary_host_plays_sf1 = False
+
+                        if tournament_hosts:
+                            if tournament_hosts[0] in [R1,R2,R3,R4]: 
+                                 primary_host_plays_sf1 = True
+                                 if R1 == tournament_hosts[0] or R4 == tournament_hosts[0]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
+                                 else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
+                            elif len(tournament_hosts) > 1 and tournament_hosts[1] in [R1,R2,R3,R4]: 
+                                 primary_host_plays_sf1 = True 
+                                 if R1 == tournament_hosts[1] or R4 == tournament_hosts[1]: sf_game1_teams = matchup1; sf_game2_teams = matchup2
+                                 else: sf_game1_teams = matchup2; sf_game2_teams = matchup1
+                        
+                        if not primary_host_plays_sf1: 
+                            sf_game1_teams = matchup1; sf_game2_teams = matchup2
+
+                        sf_game_obj_1 = games_dict_by_num.get(sf_game_numbers[0])
+                        sf_game_obj_2 = games_dict_by_num.get(sf_game_numbers[1])
+
+                        if sf_game_obj_1 and sf_game_obj_2 and sf_game1_teams and sf_game2_teams:
+                            if playoff_team_map.get(sf_game_obj_1.team1_code) != sf_game1_teams[0]:
+                                playoff_team_map[sf_game_obj_1.team1_code] = sf_game1_teams[0]
+                            if playoff_team_map.get(sf_game_obj_1.team2_code) != sf_game1_teams[1]:
+                                playoff_team_map[sf_game_obj_1.team2_code] = sf_game1_teams[1]
+                            if playoff_team_map.get(sf_game_obj_2.team1_code) != sf_game2_teams[0]:
+                                playoff_team_map[sf_game_obj_2.team1_code] = sf_game2_teams[0]
+                            if playoff_team_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
+                                playoff_team_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
+                            
+                            # Check for custom seeding first
+                            custom_seeding = get_custom_seeding_from_db(year_id)
+                            
+                            if custom_seeding:
+                                # Use custom seeding - map Q1-Q4 to custom seed order
+                                playoff_team_map['Q1'] = custom_seeding['seed1']
+                                playoff_team_map['Q2'] = custom_seeding['seed2']
+                                playoff_team_map['Q3'] = custom_seeding['seed3']
+                                playoff_team_map['Q4'] = custom_seeding['seed4']
+                                
+                                # Update semifinal game assignments based on custom seeding
+                                # Semifinal 1: seed1 vs seed4, Semifinal 2: seed2 vs seed3
+                                sf_game1_teams = [custom_seeding['seed1'], custom_seeding['seed4']]
+                                sf_game2_teams = [custom_seeding['seed2'], custom_seeding['seed3']]
+                                
+                                # Update the actual game team assignments in the playoff_team_map
+                                if sf_game_obj_1:
+                                    playoff_team_map[sf_game_obj_1.team1_code] = custom_seeding['seed1']
+                                    playoff_team_map[sf_game_obj_1.team2_code] = custom_seeding['seed4']
+                                if sf_game_obj_2:
+                                    playoff_team_map[sf_game_obj_2.team1_code] = custom_seeding['seed2']
+                                    playoff_team_map[sf_game_obj_2.team2_code] = custom_seeding['seed3']
+                            else:
+                                # Use standard IIHF seeding based on semifinal assignments
+                                playoff_team_map['Q1'] = sf_game1_teams[0]  # First team in SF1
+                                playoff_team_map['Q2'] = sf_game1_teams[1]  # Second team in SF1
+                                playoff_team_map['Q3'] = sf_game2_teams[0]  # First team in SF2
+                                playoff_team_map['Q4'] = sf_game2_teams[1]  # Second team in SF2
+
+            # Fallback Q1-Q4 mapping
+            if qf_game_numbers and len(qf_game_numbers) == 4 and 'Q1' not in playoff_team_map:
+                for i, qf_game_num in enumerate(qf_game_numbers):
+                    winner_placeholder = f'W({qf_game_num})'
+                    resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
+                    
+                    if is_code_final(resolved_qf_winner):
+                        q_code = f'Q{i+1}'
+                        playoff_team_map[q_code] = resolved_qf_winner
+
+            # Bronze and gold medal game logic
+            if sf_game_numbers and len(sf_game_numbers) == 2 and bronze_game_number and gold_game_number:
+                bronze_game_obj = games_dict_by_num.get(bronze_game_number)
+                gold_game_obj = games_dict_by_num.get(gold_game_number)
+                
+                if bronze_game_obj and gold_game_obj:
+                    sf1_game_number = sf_game_numbers[0]
+                    sf2_game_number = sf_game_numbers[1]
+                    
+                    playoff_team_map['SF1'] = str(sf1_game_number)
+                    playoff_team_map['SF2'] = str(sf2_game_number)
+                    
+                    sf1_loser_placeholder = f'L({sf1_game_number})'
+                    sf2_loser_placeholder = f'L({sf2_game_number})'
+                    sf1_winner_placeholder = f'W({sf1_game_number})'
+                    sf2_winner_placeholder = f'W({sf2_game_number})'
+                    
+                    if playoff_team_map.get(bronze_game_obj.team1_code) != sf1_loser_placeholder:
+                        playoff_team_map[bronze_game_obj.team1_code] = sf1_loser_placeholder
+                    if playoff_team_map.get(bronze_game_obj.team2_code) != sf2_loser_placeholder:
+                        playoff_team_map[bronze_game_obj.team2_code] = sf2_loser_placeholder
+                        
+                    if playoff_team_map.get(gold_game_obj.team1_code) != sf1_winner_placeholder:
+                        playoff_team_map[gold_game_obj.team1_code] = sf1_winner_placeholder
+                    if playoff_team_map.get(gold_game_obj.team2_code) != sf2_winner_placeholder:
+                        playoff_team_map[gold_game_obj.team2_code] = sf2_winner_placeholder
+
+            # Final resolution pass - CRITICAL!
+            for g_disp_final_pass in games_processed:
+                code_to_resolve_t1 = g_disp_final_pass.original_team1_code 
+                resolved_t1_final = get_resolved_code(code_to_resolve_t1, playoff_team_map)
+                if g_disp_final_pass.team1_code != resolved_t1_final:
+                    g_disp_final_pass.team1_code = resolved_t1_final
+
+                code_to_resolve_t2 = g_disp_final_pass.original_team2_code
+                resolved_t2_final = get_resolved_code(code_to_resolve_t2, playoff_team_map)
+                if g_disp_final_pass.team2_code != resolved_t2_final:
+                    g_disp_final_pass.team2_code = resolved_t2_final
+
+            # ====== NOW CALCULATE TEAM STATS USING FULLY RESOLVED GAMES ======
+            
+            # Create games_processed_map
+            games_processed_map = {g.id: g for g in games_processed}
+            
+            # DEBUG: Print info for 2025 and CAN
+            if year_obj.year == 2025 and team_code == 'CAN':
+                print(f"DEBUG: Year 2025, Team CAN")
+                print(f"DEBUG: Total games_raw: {len(games_raw)}")
+                print(f"DEBUG: Total games_processed: {len(games_processed)}")
+                print(f"DEBUG: Games_processed_map: {len(games_processed_map)}")
+                
+                # Show all games involving CAN
+                can_games = []
+                for game_id, resolved_game in games_processed_map.items():
+                    if resolved_game.team1_code == 'CAN' or resolved_game.team2_code == 'CAN':
+                        raw_game = games_raw_map.get(game_id)
+                        can_games.append({
+                            'id': game_id,
+                            'round': resolved_game.round,
+                            'game_number': resolved_game.game_number,
+                            'team1': resolved_game.team1_code,
+                            'team2': resolved_game.team2_code,
+                            'orig_team1': resolved_game.original_team1_code,
+                            'orig_team2': resolved_game.original_team2_code,
+                            'score': f"{raw_game.team1_score if raw_game else None}-{raw_game.team2_score if raw_game else None}" if raw_game else "No raw game"
+                        })
+                
+                print(f"DEBUG: CAN games found: {len(can_games)}")
+                for i, game in enumerate(can_games, 1):
+                    print(f"  {i}. Game {game['game_number']}: {game['team1']} vs {game['team2']} ({game['orig_team1']} vs {game['orig_team2']}) [{game['round']}] Score: {game['score']}")
+            
+            # Find if team participated in this year
+            team_participated = False
+            gp = w = otw = sow = l = otl = sol = gf = ga = pts = 0
+            sog = soga = ppgf = ppga = ppf = ppa = 0
+            
+            # Use the same logic as in year_view.py lines 709-730
+            for game_id, resolved_game_this_iter in games_processed_map.items():
+                raw_game_obj_this_iter = games_raw_map.get(game_id)
+                if not raw_game_obj_this_iter:
+                    continue
+
+                is_current_team_t1_in_raw_game = False
+
+                if resolved_game_this_iter.team1_code == team_code:
+                    is_current_team_t1_in_raw_game = True
+                elif resolved_game_this_iter.team2_code == team_code:
+                    is_current_team_t1_in_raw_game = False 
+                else:
+                    continue
+
+                if raw_game_obj_this_iter.team1_score is not None and raw_game_obj_this_iter.team2_score is not None: 
+                    team_participated = True
+                    gp += 1
+                    current_team_score = raw_game_obj_this_iter.team1_score if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team2_score
+                    opponent_score = raw_game_obj_this_iter.team2_score if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team1_score
+                    gf += current_team_score
+                    ga += opponent_score
+                    
+                    # Calculate points properly from raw game data
+                    team_points = raw_game_obj_this_iter.team1_points if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team2_points
+                    pts += team_points
+                    
+                    # Determine win/loss type based on actual result
+                    result_type = raw_game_obj_this_iter.result_type
+                    if result_type == 'REG':
+                        if current_team_score > opponent_score:
+                            w += 1
+                        else:
+                            l += 1
+                    elif result_type == 'OT':
+                        if current_team_score > opponent_score:
+                            otw += 1
+                        else:
+                            otl += 1
+                    elif result_type == 'SO':
+                        if current_team_score > opponent_score:
+                            sow += 1
+                        else:
+                            sol += 1
+                    
+                    # Calculate SOG statistics
+                    sog_entries = ShotsOnGoal.query.filter_by(game_id=game_id, team_code=team_code).all()
+                    sog += sum(entry.shots for entry in sog_entries)
+                    
+                    # Calculate SOGA (opponent's shots on goal)
+                    opp_team_code = resolved_game_this_iter.team2_code if is_current_team_t1_in_raw_game else resolved_game_this_iter.team1_code
+                    soga_entries = ShotsOnGoal.query.filter_by(game_id=game_id, team_code=opp_team_code).all()
+                    soga += sum(entry.shots for entry in soga_entries)
+                    
+                    # Calculate PP/PK statistics
+                    team_goals = Goal.query.filter_by(game_id=game_id, team_code=team_code).all()
+                    opp_goals = Goal.query.filter_by(game_id=game_id, team_code=opp_team_code).all()
+                    
+                    # Count powerplay goals for and against
+                    ppgf += sum(1 for goal in team_goals if goal.goal_type == 'PP')
+                    ppga += sum(1 for goal in opp_goals if goal.goal_type == 'PP')
+                    
+                    # Estimate powerplay opportunities (simplified: count of opponent's penalties)
+                    team_penalties = Penalty.query.filter_by(game_id=game_id, team_code=team_code).all()
+                    opp_penalties = Penalty.query.filter_by(game_id=game_id, team_code=opp_team_code).all()
+                    
+                    ppf += len(opp_penalties)  # Team's PP opportunities = opponent's penalties
+                    ppa += len(team_penalties)  # Team's PK situations = team's penalties
+
+            gd = gf - ga
+            
+            # Calculate percentage statistics
+            sg_pct = (gf / sog * 100) if sog > 0 else 0
+            svs_pct = ((soga - ga) / soga * 100) if soga > 0 else 0
+            pp_pct = (ppgf / ppf * 100) if ppf > 0 else 0
+            pk_pct = ((ppa - ppga) / ppa * 100) if ppa > 0 else 0
+            
+            yearly_stats.append({
+                'year': year_obj.year,
+                'participated': team_participated,
+                'stats': {
+                    'gp': gp, 'w': w, 'otw': otw, 'sow': sow, 'l': l, 'otl': otl, 'sol': sol,
+                    'gf': gf, 'ga': ga, 'gd': gd, 'pts': pts,
+                    'sog': sog, 'soga': soga,
+                    'ppgf': ppgf, 'ppga': ppga, 'ppf': ppf, 'ppa': ppa,
+                    'sg_pct': round(sg_pct, 1), 'svs_pct': round(svs_pct, 1),
+                    'pp_pct': round(pp_pct, 1), 'pk_pct': round(pk_pct, 1)
+                }
+            })
+        
+        return jsonify({'team_code': team_code, 'yearly_stats': yearly_stats})
+        
+    except Exception as e:
+        current_app.logger.error(f"Error calculating yearly stats for {team_code}: {e}")
+        return jsonify({'error': 'Failed to calculate yearly statistics'}), 500
+
+@main_bp.route('/test-yearly-stats')
+def test_yearly_stats_page():
+    """
+    Serve the test page for yearly stats API.
+    """
+    import os
+    from flask import send_file
+    
+    test_file_path = os.path.join(current_app.config['BASE_DIR'], 'test_api.html')
+    if os.path.exists(test_file_path):
+        return send_file(test_file_path)
+    else:
+        return """
+        <!DOCTYPE html>
+        <html><head><title>Test not found</title></head>
+        <body><h1>Test file not found</h1>
+        <p>The test_api.html file was not found in the expected location.</p>
+        <p>Expected path: test_api.html</p>
+        </body></html>
+        """, 404

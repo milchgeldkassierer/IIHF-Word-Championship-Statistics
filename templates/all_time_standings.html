@@ -52,6 +52,166 @@
         font-weight: 600;
     }
     
+    /* Team row styling for clickability */
+    .team-row {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+    
+    .team-row:hover {
+        background-color: rgba(0, 123, 255, 0.1) !important;
+    }
+    
+    .team-row.expanded {
+        background-color: rgba(0, 123, 255, 0.05) !important;
+    }
+    
+    /* Yearly stats table styling */
+    .yearly-stats-container {
+        display: none;
+        background-color: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+    }
+    
+    .yearly-stats-container.show {
+        display: block;
+        animation: slideDown 0.3s ease;
+    }
+    
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            max-height: 0;
+            padding: 0;
+        }
+        to {
+            opacity: 1;
+            max-height: 500px;
+            padding: 15px;
+        }
+    }
+    
+    .yearly-stats-table {
+        margin: 0;
+        font-size: 0.85em;
+        width: 100%;
+        table-layout: fixed;
+        border-collapse: collapse;
+    }
+    
+    .yearly-stats-table th {
+        background-color: #e9ecef;
+        color: #495057;
+        font-size: 0.8em;
+        padding: 3px 1px;
+        white-space: nowrap;
+        text-align: center;
+        border: 1px solid #dee2e6;
+    }
+    
+    .yearly-stats-table td {
+        padding: 3px 1px;
+        border: 1px solid #dee2e6;
+        text-align: center;
+        font-size: 0.8em;
+        white-space: nowrap;
+    }
+    
+    .yearly-stats-table td:first-child {
+        text-align: left;
+        font-weight: bold;
+    }
+    
+        /* Spaltenbreiten optimieren - kompakter für bessere Lesbarkeit */
+    .yearly-stats-table th:nth-child(1) { width: 7%; }   /* Jahr */
+    .yearly-stats-table th:nth-child(2) { width: 4%; }   /* GP */
+    .yearly-stats-table th:nth-child(3) { width: 3.5%; } /* W */
+    .yearly-stats-table th:nth-child(4) { width: 4%; }   /* OTW */
+    .yearly-stats-table th:nth-child(5) { width: 4%; }   /* SOW */
+    .yearly-stats-table th:nth-child(6) { width: 3.5%; } /* L */
+    .yearly-stats-table th:nth-child(7) { width: 4%; }   /* OTL */
+    .yearly-stats-table th:nth-child(8) { width: 4%; }   /* SOL */
+    .yearly-stats-table th:nth-child(9) { width: 4.5%; } /* GF */
+    .yearly-stats-table th:nth-child(10) { width: 4.5%; }/* GA */
+    .yearly-stats-table th:nth-child(11) { width: 4.5%; }/* GD */
+    .yearly-stats-table th:nth-child(12) { width: 4.5%; }/* PTS */
+    .yearly-stats-table th:nth-child(13) { width: 4.5%; }/* SOG */
+    .yearly-stats-table th:nth-child(14) { width: 4.5%; }/* SOGA */
+    .yearly-stats-table th:nth-child(15) { width: 5.5%; }/* SG% */
+    .yearly-stats-table th:nth-child(16) { width: 5.5%; }/* SVS% */
+    .yearly-stats-table th:nth-child(17) { width: 5.5%; }/* PP% */
+    .yearly-stats-table th:nth-child(18) { width: 5.5%; }/* PK% */
+    
+    /* Responsive Anpassungen für kleinere Bildschirme */
+    @media (max-width: 1200px) {
+        .yearly-stats-table {
+            font-size: 0.75em;
+        }
+        
+        .yearly-stats-table th {
+            font-size: 0.7em;
+            padding: 2px 1px;
+        }
+        
+        .yearly-stats-table td {
+            font-size: 0.7em;
+            padding: 2px 1px;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .yearly-stats-table {
+            font-size: 0.65em;
+        }
+        
+        .yearly-stats-table th {
+            font-size: 0.6em;
+            padding: 1px;
+        }
+        
+        .yearly-stats-table td {
+            font-size: 0.6em;
+            padding: 1px;
+        }
+    }
+    
+    
+    .loading-indicator {
+        text-align: center;
+        padding: 20px;
+        color: #6c757d;
+        font-style: italic;
+    }
+    
+    .error-message {
+        text-align: center;
+        padding: 15px;
+        color: #dc3545;
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        border-radius: 4px;
+        margin: 10px 0;
+    }
+    
+    .team-summary {
+        font-size: 0.9em;
+        color: #6c757d;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #dee2e6;
+    }
+    
+    .expand-indicator {
+        font-size: 0.8em;
+        color: #6c757d;
+        margin-left: 5px;
+        transition: transform 0.2s ease;
+    }
+    
+    .team-row.expanded .expand-indicator {
+        transform: rotate(180deg);
+    }
+    
     /* Dark mode improvements */
     body.dark-mode .stats-section {
         background-color: #2d3748;
@@ -104,6 +264,41 @@
     body.dark-mode .sortable.desc::after {
         color: #4299e1;
     }
+    
+    body.dark-mode .team-row:hover {
+        background-color: rgba(66, 153, 225, 0.2) !important;
+    }
+    
+    body.dark-mode .team-row.expanded {
+        background-color: rgba(66, 153, 225, 0.1) !important;
+    }
+    
+    body.dark-mode .yearly-stats-container {
+        background-color: #1a202c;
+        border-top-color: #4a5568;
+    }
+    
+    body.dark-mode .yearly-stats-table th {
+        background-color: #2d3748;
+        color: #e2e8f0;
+    }
+    
+
+    
+    body.dark-mode .error-message {
+        color: #f56565;
+        background-color: #fed7d7;
+        border-color: #feb2b2;
+    }
+    
+    body.dark-mode .team-summary {
+        color: #a0aec0;
+        border-top-color: #4a5568;
+    }
+    
+    body.dark-mode .loading-indicator {
+        color: #a0aec0;
+    }
 </style>
 {% endblock %}
 
@@ -111,6 +306,7 @@
 <div class="container mt-4">
     <div class="stats-section">
         <h1 class="stats-title text-center">All-Time Standings (Hauptrunde und Playoffs)</h1>
+        <p class="text-center text-muted mb-4">Klicke auf einen Teamnamen, um die jährlichen Statistiken anzuzeigen</p>
 
         {% if standings_data %}
         <div class="table-responsive">
@@ -136,7 +332,7 @@
                 </thead>
                 <tbody>
                     {% for stat_entry in standings_data %}
-                    <tr>
+                    <tr class="team-row" data-team-code="{{ stat_entry.team_code }}" onclick="toggleTeamDetails(this)">
                         <td>{{ loop.index }}</td>
                         <td>
                             {% set team_iso = team_iso_codes.get(stat_entry.team_code.upper()) %}
@@ -147,7 +343,10 @@
                                      alt="{{ stat_entry.team_code }}">
                             {% endif %}
                         </td>
-                        <td>{{ stat_entry.team_code }}</td>
+                        <td>
+                            {{ stat_entry.team_code }}
+                            <span class="expand-indicator">▼</span>
+                        </td>
                         <td data-value="{{ stat_entry.num_years_participated }}">{{ stat_entry.num_years_participated }}</td>
                         <td data-value="{{ stat_entry.gp }}">{{ stat_entry.gp }}</td>
                         <td data-value="{{ stat_entry.w }}">{{ stat_entry.w }}</td>
@@ -162,6 +361,14 @@
                         <td data-value="{{ stat_entry.ga }}">{{ stat_entry.ga }}</td>
                         <td data-value="{{ stat_entry.gd }}">{{ stat_entry.gd }}</td>
                         <td data-value="{{ stat_entry.pts }}"><strong>{{ stat_entry.pts }}</strong></td>
+                    </tr>
+                    <!-- Yearly stats container row (initially hidden) -->
+                    <tr class="yearly-stats-row" data-team-code="{{ stat_entry.team_code }}" style="display: none;">
+                        <td colspan="16" class="p-0">
+                            <div class="yearly-stats-container" id="yearly-stats-{{ stat_entry.team_code }}">
+                                <!-- Yearly stats content will be loaded here -->
+                            </div>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -182,16 +389,19 @@ $(document).ready(function() {
     
     // Function to update ranking numbers after sorting
     function updateRankingNumbers() {
-        $('#allTimeStandingsTable tbody tr').each(function(index) {
+        $('#allTimeStandingsTable tbody tr.team-row').each(function(index) {
             $(this).find('td:first').text(index + 1);
         });
     }
     
     // Sorting functionality
-    $('#allTimeStandingsTable .sortable').on('click', function() {
+    $('#allTimeStandingsTable .sortable').on('click', function(e) {
+        e.stopPropagation(); // Prevent team row expansion when clicking on sortable headers
+        
         const column = $(this).data('column');
         const table = $('#allTimeStandingsTable tbody');
-        const rows = table.find('tr').toArray();
+        const teamRows = table.find('tr.team-row').toArray();
+        const yearlyRows = table.find('tr.yearly-stats-row').toArray();
         
         // Determine sort direction
         if (currentSort.column === column) {
@@ -210,8 +420,8 @@ $(document).ready(function() {
         $('#allTimeStandingsTable .sortable').removeClass('asc desc');
         $(this).addClass(currentSort.direction);
         
-        // Sort rows
-        rows.sort(function(a, b) {
+        // Sort team rows
+        teamRows.sort(function(a, b) {
             let aVal, bVal;
             
             // Map column names to their actual column indices (accounting for colspan)
@@ -266,8 +476,18 @@ $(document).ready(function() {
             return result;
         });
         
-        // Re-append sorted rows and update ranking numbers
-        table.empty().append(rows);
+        // Re-append sorted rows and their corresponding yearly stats rows
+        table.empty();
+        teamRows.forEach(function(teamRow) {
+            const teamCode = $(teamRow).data('team-code');
+            const correspondingYearlyRow = yearlyRows.find(row => $(row).data('team-code') === teamCode);
+            
+            table.append(teamRow);
+            if (correspondingYearlyRow) {
+                table.append(correspondingYearlyRow);
+            }
+        });
+        
         updateRankingNumbers();
     });
     
@@ -276,6 +496,106 @@ $(document).ready(function() {
         $('#allTimeStandingsTable th[data-column="pts"]').click();
     }, 100);
 });
+
+// Global variable to track loaded team data
+const loadedTeamData = {};
+
+function toggleTeamDetails(row) {
+    const $row = $(row);
+    const teamCode = $row.data('team-code');
+    const $yearlyStatsRow = $(`.yearly-stats-row[data-team-code="${teamCode}"]`);
+    const $yearlyStatsContainer = $(`#yearly-stats-${teamCode}`);
+    
+    // Check if already expanded
+    if ($row.hasClass('expanded')) {
+        // Collapse
+        $row.removeClass('expanded');
+        $yearlyStatsContainer.removeClass('show');
+        setTimeout(() => {
+            $yearlyStatsRow.hide();
+        }, 300);
+    } else {
+        // Expand
+        $row.addClass('expanded');
+        $yearlyStatsRow.show();
+        
+        // Load data if not already loaded
+        if (!loadedTeamData[teamCode]) {
+            loadTeamYearlyStats(teamCode, $yearlyStatsContainer);
+        } else {
+            $yearlyStatsContainer.addClass('show');
+        }
+    }
+}
+
+async function loadTeamYearlyStats(teamCode, $container) {
+    // Show loading indicator
+    $container.html('<div class="loading-indicator">Lade Daten für ' + teamCode + '...</div>');
+    $container.addClass('show');
+    
+    try {
+        const response = await fetch(`/api/team-yearly-stats/${teamCode}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Check if data has the expected structure
+        if (data && data.team_code && data.yearly_stats) {
+            loadedTeamData[teamCode] = data;
+            displayYearlyStats(data, $container);
+        } else {
+            // Handle API error response
+            const errorMsg = data && data.error ? data.error : 'Unbekannter Fehler bei der Datenverarbeitung';
+            $container.html('<div class="error-message">Fehler beim Laden der Daten: ' + errorMsg + '</div>');
+        }
+    } catch (error) {
+        console.error('Error loading team yearly stats:', error);
+        $container.html('<div class="error-message">Netzwerkfehler: ' + error.message + '</div>');
+    }
+}
+
+function displayYearlyStats(data, $container) {
+    let html = '<table class="table table-sm yearly-stats-table">';
+    html += '<thead><tr><th>Jahr</th><th>GP</th><th>W</th><th>OTW</th><th>SOW</th><th>L</th><th>OTL</th><th>SOL</th><th>GF</th><th>GA</th><th>GD</th><th>PTS</th><th>SOG</th><th>SOGA</th><th>SG%</th><th>SVS%</th><th>PP%</th><th>PK%</th></tr></thead>';
+    html += '<tbody>';
+    
+    data.yearly_stats.forEach(yearStat => {
+        html += '<tr>';
+        html += `<td><strong>${yearStat.year}</strong></td>`;
+        
+        if (yearStat.participated) {
+            const stats = yearStat.stats;
+            html += `<td>${stats.gp}</td>`;
+            html += `<td>${stats.w}</td>`;
+            html += `<td>${stats.otw}</td>`;
+            html += `<td>${stats.sow}</td>`;
+            html += `<td>${stats.l}</td>`;
+            html += `<td>${stats.otl}</td>`;
+            html += `<td>${stats.sol}</td>`;
+            html += `<td>${stats.gf}</td>`;
+            html += `<td>${stats.ga}</td>`;
+            html += `<td>${stats.gd}</td>`;
+            html += `<td><strong>${stats.pts}</strong></td>`;
+            html += `<td>${stats.sog || 0}</td>`;
+            html += `<td>${stats.soga || 0}</td>`;
+            html += `<td>${stats.sg_pct || 0}%</td>`;
+            html += `<td>${stats.svs_pct || 0}%</td>`;
+            html += `<td>${stats.pp_pct || 0}%</td>`;
+            html += `<td>${stats.pk_pct || 0}%</td>`;
+        } else {
+            html += '<td colspan="17" style="text-align: center; font-style: italic; color: #6c757d;">nicht teilgenommen</td>';
+        }
+        
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    
+    $container.html(html);
+}
 
 // Native browser tooltips are used via the title attribute - no Bootstrap tooltips needed
 </script>
