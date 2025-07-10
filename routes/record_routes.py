@@ -34,7 +34,7 @@ def get_all_resolved_games():
         
         # Apply custom seeding if it exists
         try:
-            from routes.year_routes import get_custom_seeding_from_db
+            from routes.year.seeding import get_custom_seeding_from_db
             custom_seeding = get_custom_seeding_from_db(year_obj.id)
             if custom_seeding:
                 temp_playoff_map['Q1'] = custom_seeding['seed1']
@@ -241,7 +241,7 @@ def get_all_resolved_games():
                         qf_winners_stats.sort(key=lambda ts: (ts.rank_in_group, -ts.pts, -ts.gd, -ts.gf))
                         
                         # Check for custom seeding for this specific year
-                        from routes.year_routes import get_custom_seeding_from_db
+                        from routes.year.seeding import get_custom_seeding_from_db
                         custom_seeding = get_custom_seeding_from_db(year_obj.id)
                         
                         if custom_seeding:
@@ -290,7 +290,7 @@ def get_all_resolved_games():
             # Apply custom seeding after all team resolution is complete (like in get_medal_tally_data)
             # This ensures that custom seeding overrides any previous Q1-Q4 mappings
             try:
-                from routes.year_routes import get_custom_seeding_from_db
+                from routes.year.seeding import get_custom_seeding_from_db
                 custom_seeding = get_custom_seeding_from_db(year_obj.id)
                 if custom_seeding:
                     # Override Q1-Q4 mappings with custom seeding
@@ -334,7 +334,7 @@ def get_all_resolved_games():
                             elif game.round == 'Semifinals':
                                 # Check if custom seeding exists for this year first
                                 try:
-                                    from routes.year_routes import get_custom_seeding_from_db
+                                    from routes.year.seeding import get_custom_seeding_from_db
                                     custom_seeding = get_custom_seeding_from_db(year_obj.id)
                                     
                                     if custom_seeding:

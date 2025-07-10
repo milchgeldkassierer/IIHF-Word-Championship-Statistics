@@ -393,7 +393,7 @@ def calculate_team_yearly_stats_internal(team_code, year_id):
                 
                 # Check for custom seeding
                 try:
-                    from routes.year_routes import get_custom_seeding_from_db
+                    from routes.year.seeding import get_custom_seeding_from_db
                     custom_seeding = get_custom_seeding_from_db(year_id)
                 except ImportError:
                     custom_seeding = None
@@ -692,7 +692,7 @@ def calculate_team_yearly_stats_internal(team_code, year_id):
         # Apply custom seeding after all team resolution is complete
         # Import here to avoid circular imports
         try:
-            from routes.year_routes import get_custom_seeding_from_db
+            from routes.year.seeding import get_custom_seeding_from_db
             custom_seeding = get_custom_seeding_from_db(year_id)
             if custom_seeding:
                 # Override Q1-Q4 mappings with custom seeding
@@ -751,7 +751,7 @@ def calculate_team_yearly_stats_internal(team_code, year_id):
                     # CRITICAL: Use same logic as get_all_resolved_games() for semifinals
                     # Check for custom seeding first
                     try:
-                        from routes.year_routes import get_custom_seeding_from_db
+                        from routes.year.seeding import get_custom_seeding_from_db
                         custom_seeding = get_custom_seeding_from_db(year_id)
                         if custom_seeding:
                             # Direct assignment based on custom seeding and game number
@@ -783,7 +783,7 @@ def calculate_team_yearly_stats_internal(team_code, year_id):
             # Apply custom seeding for this specific year if it exists
             # Import here to avoid circular imports
             try:
-                from routes.year_routes import get_custom_seeding_from_db
+                from routes.year.seeding import get_custom_seeding_from_db
                 custom_seeding = get_custom_seeding_from_db(year_id)
                 if custom_seeding:
                     # Create a copy of the playoff map and override Q1-Q4 with custom seeding
@@ -1240,7 +1240,7 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
     # Prüfe ob Custom Seeding verwendet wird
     has_custom_seeding = False
     try:
-        from routes.year_routes import get_custom_seeding_from_db
+        from routes.year.seeding import get_custom_seeding_from_db
         custom_seeding = get_custom_seeding_from_db(year_obj_for_map.id)
         has_custom_seeding = custom_seeding is not None
     except Exception as e:
@@ -1499,7 +1499,7 @@ def get_medal_tally_data():
         
         # Apply custom seeding if it exists (wie in record_routes.py)
         try:
-            from routes.year_routes import get_custom_seeding_from_db
+            from routes.year.seeding import get_custom_seeding_from_db
             custom_seeding = get_custom_seeding_from_db(year_obj.id)
             if custom_seeding:
                 temp_playoff_map['Q1'] = custom_seeding['seed1']
@@ -1688,7 +1688,7 @@ def get_medal_tally_data():
         # Apply custom seeding after all team resolution is complete
         # Import here to avoid circular imports
         try:
-            from routes.year_routes import get_custom_seeding_from_db
+            from routes.year.seeding import get_custom_seeding_from_db
             custom_seeding = get_custom_seeding_from_db(year_id_iter)
             if custom_seeding:
                 # Override Q1-Q4 mappings with custom seeding
