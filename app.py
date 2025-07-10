@@ -6,7 +6,7 @@ from models import db
 # Import blueprints
 from routes.main_routes import main_bp
 from routes.year import year_bp
-from routes.record_routes import record_bp
+from routes.records import record_bp
 
 # --- Configuration ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
