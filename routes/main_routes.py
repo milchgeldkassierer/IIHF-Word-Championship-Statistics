@@ -1487,6 +1487,35 @@ def get_medal_tally_data():
     for game_obj in all_games:
         games_by_year_id.setdefault(game_obj.year_id, []).append(game_obj)
 
+    # KRITISCH: Pre-calculate correct medal game rankings (wie in record_routes.py)
+    # Diese bewährte Methode funktioniert korrekt
+    medal_game_rankings_by_year = {}
+    
+    for year_obj in completed_years:
+        games_this_year = games_by_year_id.get(year_obj.id, [])
+        
+        # Build a basic playoff map for this year including custom seeding (wie in record_routes.py)
+        temp_playoff_map = {}
+        
+        # Apply custom seeding if it exists (wie in record_routes.py)
+        try:
+            from routes.year_routes import get_custom_seeding_from_db
+            custom_seeding = get_custom_seeding_from_db(year_obj.id)
+            if custom_seeding:
+                temp_playoff_map['Q1'] = custom_seeding['seed1']
+                temp_playoff_map['Q2'] = custom_seeding['seed2']
+                temp_playoff_map['Q3'] = custom_seeding['seed3']
+                temp_playoff_map['Q4'] = custom_seeding['seed4']
+        except:
+            pass
+        
+        # Pre-calculate final ranking for this year (wie in record_routes.py)
+        try:
+            final_ranking = calculate_complete_final_ranking(year_obj, games_this_year, temp_playoff_map, year_obj)
+            medal_game_rankings_by_year[year_obj.id] = final_ranking
+        except Exception as e:
+            medal_game_rankings_by_year[year_obj.id] = {}
+
     resolved_playoff_maps_by_year_id = {}
 
     for year_obj_for_map in completed_years:
@@ -1672,10 +1701,13 @@ def get_medal_tally_data():
                     
         resolved_playoff_maps_by_year_id[year_id_iter] = current_year_playoff_map
 
+    # KRITISCH: Verwende die vorberechneten Medal Rankings (wie in record_routes.py)
+    # Diese bewährte Methode liefert die korrekten Ergebnisse
     for year_obj_medal_calc in completed_years:
         year_id_current = year_obj_medal_calc.id
-        current_playoff_map = resolved_playoff_maps_by_year_id.get(year_id_current, {})
-        final_ranking = calculate_complete_final_ranking(year_obj_medal_calc, games_by_year_id.get(year_id_current, []), current_playoff_map, year_obj_medal_calc)
+        
+        # Verwende die vorberechneten korrekten Medal Rankings
+        final_ranking = medal_game_rankings_by_year.get(year_id_current, {})
         
         gold = final_ranking.get(1)
         silver = final_ranking.get(2)
