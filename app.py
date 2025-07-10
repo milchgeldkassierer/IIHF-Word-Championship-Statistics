@@ -5,7 +5,7 @@ from models import db
 
 # Import blueprints
 from routes.main_routes import main_bp
-from routes.year_routes import year_bp
+from routes.year import year_bp
 from routes.record_routes import record_bp
 
 # --- Configuration ---
