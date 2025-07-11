@@ -371,17 +371,44 @@ def get_team_yearly_stats(team_code):
             # Create games_processed_map
             games_processed_map = {g.id: g for g in games_processed}
             
-            # Calculate final ranking for this year
-            final_ranking = calculate_complete_final_ranking(year_obj, games_processed, playoff_team_map, year_obj)
+            # Check if tournament is completed before calculating final ranking
             team_final_position = None
-            if final_ranking:
-                for position, team in final_ranking.items():
-                    if team == team_code:
-                        try:
-                            team_final_position = int(position)
-                            break
-                        except (ValueError, TypeError):
-                            pass
+            try:
+                from routes.tournament.management import get_tournament_statistics
+                tournament_stats = get_tournament_statistics(year_obj)
+                is_completed = (tournament_stats['total_games'] > 0 and 
+                               tournament_stats['completed_games'] == tournament_stats['total_games'])
+                
+                if is_completed:
+                    # Calculate final ranking for this year using the same approach as medal_tally
+                    # Build a basic playoff map for final ranking calculation (like in medal_tally.py)
+                    temp_playoff_map = {}
+                    
+                    # Apply custom seeding if it exists (using medal_tally approach)
+                    try:
+                        custom_seeding = get_custom_seeding_from_db(year_id)
+                        if custom_seeding:
+                            temp_playoff_map['Q1'] = custom_seeding['seed1']
+                            temp_playoff_map['Q2'] = custom_seeding['seed2']
+                            temp_playoff_map['Q3'] = custom_seeding['seed3']
+                            temp_playoff_map['Q4'] = custom_seeding['seed4']
+                    except:
+                        pass
+                    
+                    # Calculate final ranking (like in medal_tally.py) - use original games, not processed ones
+                    final_ranking = calculate_complete_final_ranking(year_obj, games_raw, temp_playoff_map, year_obj)
+                    if final_ranking:
+                        for position, team in final_ranking.items():
+                            if team == team_code:
+                                try:
+                                    team_final_position = int(position)
+                                    break
+                                except (ValueError, TypeError):
+                                    pass
+                # If tournament is not completed, team_final_position remains None
+            except Exception as e:
+                # If there's an error checking completion, don't show position
+                pass
             
             # Find if team participated in this year - COMPLETE LOGIC FROM YEAR_VIEW
             team_participated = False
