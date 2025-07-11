@@ -1,5 +1,5 @@
 from typing import Tuple
-from constants import PIM_MAP
+from constants import PIM_MAP, GOAL_TYPE_DISPLAY_MAP
 from .time_helpers import convert_time_to_seconds
 
 
@@ -135,8 +135,8 @@ def check_game_data_consistency(game_display, sog_data=None):
         missing_sog_periods = []
         
         for period in required_periods:
-            team1_has_sog = period in team1_sog and team1_sog[period] > 0
-            team2_has_sog = period in team2_sog and team2_sog[period] > 0
+            team1_has_sog = period in team1_sog and team1_sog[period] is not None and team1_sog[period] >= 0
+            team2_has_sog = period in team2_sog and team2_sog[period] is not None and team2_sog[period] >= 0
             
             if not (team1_has_sog and team2_has_sog):
                 missing_sog_periods.append(period)
@@ -213,6 +213,7 @@ def check_powerplay_penalty_consistency(game_display):
     penalties.sort(key=lambda x: x['time_seconds'])
     
     # Überprüfe jedes Tor auf Powerplay-Konsistenz
+    # WICHTIG: Sequenzielle Verarbeitung um PP-Tor-Regeln korrekt zu handhaben
     for goal in goals:
         goal_time = goal['time_seconds']
         goal_team = goal['team']
@@ -284,33 +285,48 @@ def check_powerplay_penalty_consistency(game_display):
         # Überprüfe, ob der Tortyp zur Situation passt
         expected_goal_types = get_expected_goal_types(pp_situation)
         
-        if expected_goal_types and goal_type not in expected_goal_types:
+        # Convert display type back to database type for comparison
+        goal_type_for_validation = goal_type
+        for db_type, display_type in GOAL_TYPE_DISPLAY_MAP.items():
+            if goal_type == display_type:
+                goal_type_for_validation = db_type
+                break
+        
+        if expected_goal_types and goal_type_for_validation not in expected_goal_types:
             situation_desc = describe_powerplay_situation(pp_situation, active_penalties_at_goal)
             warnings.append(f"Spiel {game_display.id}: Tor von {goal_team} um {goal['time_str']} ist als '{goal_type}' markiert, aber bei {situation_desc} sollte es '{'/'.join(expected_goal_types)}' sein")
         
-        # Spezielle Behandlung von Strafen bei PP-Toren
+        # KRITISCH: Spezielle Behandlung von Strafen bei PP-Toren
+        # Diese Änderungen müssen PERSISTENT sein für nachfolgende Tore!
         if goal_type == 'PP':
-            for penalty in active_penalties_at_goal:
+            for penalty in penalties:  # Verwende die ursprüngliche penalties Liste
+                if not penalty['is_active']:
+                    continue
                 if penalty['team'] != goal_team:  # Strafe des Gegners
                     penalty_type = penalty['penalty_type']
-                    time_since_penalty_start = goal_time - penalty['time_seconds']
+                    penalty_start = penalty['time_seconds']
+                    penalty_duration = penalty['duration_minutes'] * 60
+                    penalty_end = penalty_start + penalty_duration
                     
-                    if penalty_type == '5 Min + Spieldauer':
-                        # Bei 5+Spieldauer: PP-Tor beendet die Strafe NICHT (Major Penalty)
-                        # Die Strafe läuft weiter
-                        pass
-                    elif penalty_type == '2+2 Min':
-                        # Bei 2+2 Min: PP-Tor in den ersten 2 Minuten reduziert auf 2 Min
-                        if time_since_penalty_start <= 120:  # Ersten 2 Minuten (120 Sekunden)
-                            # Strafe wird auf 2 Minuten reduziert
-                            penalty['duration_minutes'] = 2
-                        else:
-                            # Nach den ersten 2 Minuten: Strafe endet normal
+                    # Prüfe, ob diese Strafe zum Zeitpunkt des PP-Tors aktiv war
+                    if penalty_start <= goal_time <= penalty_end:
+                        if penalty_type == '5 Min + Spieldauer':
+                            # Bei 5+Spieldauer: PP-Tor beendet die Strafe NICHT (Major Penalty)
+                            # Die Strafe läuft weiter
+                            pass
+                        elif penalty_type == '2+2 Min':
+                            # Bei 2+2 Min: PP-Tor in den ersten 2 Minuten reduziert auf 2 Min
+                            time_since_penalty_start = goal_time - penalty_start
+                            if time_since_penalty_start <= 120:  # Ersten 2 Minuten (120 Sekunden)
+                                # Strafe wird auf 2 Minuten reduziert
+                                penalty['duration_minutes'] = 2
+                            else:
+                                # Nach den ersten 2 Minuten: Strafe endet normal
+                                penalty['is_active'] = False
+                        elif penalty['duration_minutes'] < 5:
+                            # Minor Penalties (< 5 Min): Strafe endet bei PP-Tor
                             penalty['is_active'] = False
-                    elif penalty['duration_minutes'] < 5:
-                        # Minor Penalties (< 5 Min): Strafe endet bei PP-Tor
-                        penalty['is_active'] = False
-                    # Major Penalties (>= 5 Min aber nicht 5+Spieldauer): Strafe läuft weiter
+                        # Major Penalties (>= 5 Min aber nicht 5+Spieldauer): Strafe läuft weiter
     
     return warnings
 

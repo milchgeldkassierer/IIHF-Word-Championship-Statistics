@@ -4,7 +4,7 @@ import re
 from flask import request, jsonify, current_app
 from models import db, ChampionshipYear, Game, TeamStats, GameOverrule
 from utils import _apply_head_to_head_tiebreaker, is_code_final
-from routes.main_routes import resolve_fixture_path
+from utils.fixture_helpers import resolve_fixture_path
 
 # Import the blueprint from the parent package
 from . import year_bp

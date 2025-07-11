@@ -138,11 +138,6 @@ def _build_playoff_team_map_for_year(
 
         # This is where specific SF placeholder mapping based on qf_winners_details would go.
         # E.g., if fixture has SF games with placeholders like "SF_R1_vs_R4_T1", "SF_R1_vs_R4_T2"
-        # if len(qf_winners_details) == 4:
-        #     playoff_team_map["SF_R1_TEAM"] = qf_winners_details[0]["code"]
-        #     playoff_team_map["SF_R4_TEAM"] = qf_winners_details[3]["code"]
-        #     playoff_team_map["SF_R2_TEAM"] = qf_winners_details[1]["code"]
-        #     playoff_team_map["SF_R3_TEAM"] = qf_winners_details[2]["code"]
         # This is highly dependent on game data placeholders. The W(X) system is more common.
         # Also, host team adjustments for SF pairings would be applied here.
 

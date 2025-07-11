@@ -3,8 +3,6 @@ from unittest.mock import patch, MagicMock
 
 # Assuming the app structure allows these imports
 # If running tests from the root directory:
-# from models import Game, ChampionshipYear, AllTimeTeamStats, db # db might not be needed if fully mocking
-# from routes.main_routes import calculate_all_time_standings
 
 # For the environment where this code will be executed, let's assume direct import works
 # or that PYTHONPATH is set up correctly.
@@ -56,9 +54,6 @@ class TestAllTimeStandings(unittest.TestCase):
         mock_file_open.side_effect = FileNotFoundError 
 
         # Constants from constants.py (assuming these are the fallbacks if fixture fails)
-        # QF_GAME_NUMBERS_BY_YEAR = {2023: [57, 58, 59, 60]}
-        # SF_GAME_NUMBERS_BY_YEAR = {2023: [61, 62]}
-        # FINAL_BRONZE_GAME_NUMBERS_BY_YEAR = {2023: [63, 64]}
         # These numbers are illustrative. The test will use whatever is in your actual constants.py for 2023.
         # For this example, let's use game numbers starting from 13 for playoffs for clarity in test data.
         qf_nums = [13, 14, 15, 16]
@@ -271,9 +266,6 @@ class TestAllTimeStandings(unittest.TestCase):
         # The exact log message depends on where the None code is caught first.
         # If get_resolved_team_code('') returns '', then is_code_final('') is False.
         mock_logger.warning.assert_any_call(unittest.mock.ANY) # Check if any warning was logged
-        # A more specific check could be:
-        # self.assertTrue(any("Skipping for all-time stats due to non-final team codes" in call_args[0][0] 
-        #                     for call_args in mock_logger.warning.call_args_list if "Game ID 1" in call_args[0][0]))
 
 
     @patch('routes.main_routes.current_app.logger', mock_logger)

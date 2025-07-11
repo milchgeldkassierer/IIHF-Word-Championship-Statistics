@@ -5,7 +5,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify, c
 from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoal, TeamStats, TeamOverallStats, GameDisplay, GameOverrule
 from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, POWERPLAY_PENALTY_TYPES
 from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final, _apply_head_to_head_tiebreaker
-from routes.main_routes import resolve_fixture_path
+from utils.fixture_helpers import resolve_fixture_path
 from routes.records.utils import get_all_resolved_games
 
 # Import the blueprint from the parent package

@@ -112,7 +112,7 @@ def get_all_resolved_games():
             fixture_path_exists = False
             if year_obj.fixture_path:
                 try:
-                    from routes.main_routes import resolve_fixture_path
+                    from utils.fixture_helpers import resolve_fixture_path
                     absolute_fixture_path = resolve_fixture_path(year_obj.fixture_path)
                     fixture_path_exists = absolute_fixture_path and os.path.exists(absolute_fixture_path)
                 except:
