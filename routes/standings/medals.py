@@ -64,6 +64,9 @@ def get_medal_tally_data():
             final_ranking = calculate_complete_final_ranking(year_obj, games_this_year, temp_playoff_map, year_obj)
             medal_game_rankings_by_year[year_obj.id] = final_ranking
         except Exception as e:
+            current_app.logger.error(f"Error calculating final ranking for year {year_obj.year}: {str(e)}")
+            import traceback
+            current_app.logger.error(traceback.format_exc())
             medal_game_rankings_by_year[year_obj.id] = {}
 
     resolved_playoff_maps_by_year_id = {}

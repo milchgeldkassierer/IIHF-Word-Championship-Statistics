@@ -441,14 +441,29 @@
         }
     </style>
     <script>
-        var all_players_by_team_json_str = '{{ all_players_by_team_json|tojson|safe }}';
-        var all_players_by_team_json = JSON.parse(all_players_by_team_json_str);
-        var current_year_id_str = '{{ year.id|tojson|safe }}';
-        var current_year_id = JSON.parse(current_year_id_str);
+        try {
+            // Initialize all_players_by_team_json with proper error handling
+            var all_players_by_team_json = {{ all_players_by_team_json|tojson|safe }};
+            window.all_players_by_team_json = all_players_by_team_json || {};
+        } catch (e) {
+            console.error('Error initializing all_players_by_team_json:', e);
+            window.all_players_by_team_json = {};
+        }
         
-        // Make TEAM_ISO_CODES available to JavaScript
-        var team_iso_codes_str = '{{ team_iso_codes|tojson|safe }}';
-        window.TEAM_ISO_CODES_FROM_TEMPLATE = JSON.parse(team_iso_codes_str);
+        try {
+            var current_year_id = {{ year.id|tojson|safe }};
+        } catch (e) {
+            console.error('Error initializing current_year_id:', e);
+            var current_year_id = null;
+        }
+        
+        try {
+            // Make TEAM_ISO_CODES available to JavaScript
+            window.TEAM_ISO_CODES_FROM_TEMPLATE = {{ team_iso_codes|tojson|safe }};
+        } catch (e) {
+            console.error('Error initializing TEAM_ISO_CODES:', e);
+            window.TEAM_ISO_CODES_FROM_TEMPLATE = {};
+        }
     </script>
 {% endblock %}
 
@@ -2123,6 +2138,10 @@ $(document).ready(function(){
     // Original Player selection population logic for GOALS (3 dropdowns)
     function populatePlayers(teamSelectElement, scorerSelectId, assist1SelectId, assist2SelectId) {
         var selectedTeamCode = $(teamSelectElement).val();
+        if (!window.all_players_by_team_json) {
+            console.error('all_players_by_team_json is not initialized');
+            window.all_players_by_team_json = {};
+        }
         var players = window.all_players_by_team_json[selectedTeamCode] || [];
         
         players.sort((a, b) => {
@@ -2157,6 +2176,10 @@ $(document).ready(function(){
     // Player selection population logic for PENALTIES (single dropdown with team penalty option)
     function populatePlayerForPenalty(teamSelectElement, playerSelectElementId, includeTeamPenaltyOption = true) {
         var selectedTeamCode = $(teamSelectElement).val();
+        if (!window.all_players_by_team_json) {
+            console.error('all_players_by_team_json is not initialized');
+            window.all_players_by_team_json = {};
+        }
         var players = window.all_players_by_team_json[selectedTeamCode] || [];
         
         players.sort((a, b) => {
@@ -2691,17 +2714,35 @@ $(document).ready(function(){
     // Open team vs team comparison in a new window
     $(document).on('click', 'button.team-vs-team-link', function(event) {
         event.preventDefault();
+        event.stopPropagation();
+        console.log('Team vs team button clicked');
         var url = $(this).data('url');
         var windowName = $(this).data('window-name');
+        console.log('URL:', url);
+        console.log('Window name:', windowName);
+        
+        if (!url) {
+            console.error('No URL found for team vs team comparison');
+            alert('Error: No URL found for team comparison');
+            return;
+        }
+        
         var windowFeatures = 'width=1200,height=800,scrollbars=yes,resizable=yes,menubar=no,toolbar=no';
-        window.open(url, windowName, windowFeatures);
+        try {
+            var newWindow = window.open(url, windowName, windowFeatures);
+            if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
+                alert('Pop-up blocked! Please allow pop-ups for this site.');
+            }
+        } catch (e) {
+            console.error('Error opening window:', e);
+            alert('Error opening team comparison window: ' + e.message);
+        }
     });
 
     // AJAX for Player Stats Team Filter
     $('#stats_team_filter').on('change', function() {
         var selectedTeam = $(this).val();
-        var yearIdStr = '{{ year.id|tojson|safe }}'; 
-        var yearId = JSON.parse(yearIdStr); 
+        var yearId = {{ year.id|tojson|safe }}; 
         var statsDataUrl = `/year/${yearId}/stats_data?stats_team_filter=${selectedTeam}`;
 
         // Show some loading indicator if you have one
@@ -2790,8 +2831,7 @@ $(document).ready(function(){
     }
     // Make team_iso_codes available globally for JS if needed by updateStatsTable
     // This assumes TEAM_ISO_CODES is passed to the main year_view render_template context
-    var teamIsoCodesStr = '{{ team_iso_codes|tojson|safe }}';
-    window.TEAM_ISO_CODES_FROM_TEMPLATE = JSON.parse(teamIsoCodesStr);
+    // Already initialized in head_scripts block above
 
     // --- Team Stats Table Sorting ---
     function sortTeamStatsTable(columnIndex, thElement) {

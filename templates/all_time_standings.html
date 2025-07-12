@@ -471,6 +471,11 @@ $(document).ready(function() {
     $('#allTimeStandingsTable .sortable').on('click', function(e) {
         e.stopPropagation(); // Prevent team row expansion when clicking on sortable headers
         
+        // Save current scroll position
+        const scrollContainer = $('.table-responsive');
+        const scrollTop = scrollContainer.scrollTop();
+        const scrollLeft = scrollContainer.scrollLeft();
+        
         const column = $(this).data('column');
         const table = $('#allTimeStandingsTable tbody');
         const teamRows = table.find('tr.team-row').toArray();
@@ -562,6 +567,12 @@ $(document).ready(function() {
         });
         
         updateRankingNumbers();
+        
+        // Restore scroll position after sorting
+        setTimeout(function() {
+            scrollContainer.scrollTop(scrollTop);
+            scrollContainer.scrollLeft(scrollLeft);
+        }, 0);
     });
     
     // Initial sort by points (descending)
