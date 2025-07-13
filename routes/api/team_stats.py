@@ -306,10 +306,24 @@ def get_team_yearly_stats(team_code):
                             
                             # Apply custom seeding to Q1-Q4 mappings
                             if custom_seeding:
-                                playoff_team_map['Q1'] = custom_seeding['seed1']
-                                playoff_team_map['Q2'] = custom_seeding['seed2']
-                                playoff_team_map['Q3'] = custom_seeding['seed3']
-                                playoff_team_map['Q4'] = custom_seeding['seed4']
+                                # CRITICAL FIX: Custom seeding should still follow IIHF semifinal structure
+                                # IIHF: SF1 = R1 vs R4, SF2 = R2 vs R3
+                                # But games are structured as Q1 vs Q2, Q3 vs Q4
+                                # So we need: Q1=R1, Q2=R4, Q3=R2, Q4=R3
+                                R1 = custom_seeding['seed1']  # CZE
+                                R2 = custom_seeding['seed2']  # CAN  
+                                R3 = custom_seeding['seed3']  # USA
+                                R4 = custom_seeding['seed4']  # GER
+                                
+                                # Map to create proper IIHF semifinals:
+                                # Game 61 (Q1 vs Q2) should be R1 vs R4 = CZE vs GER
+                                # Game 62 (Q3 vs Q4) should be R2 vs R3 = CAN vs USA
+                                playoff_team_map['Q1'] = R1  # CZE
+                                playoff_team_map['Q2'] = R4  # GER
+                                playoff_team_map['Q3'] = R2  # CAN  
+                                playoff_team_map['Q4'] = R3  # USA
+                                
+                                # Logging removed for production
                             else:
                                 # Use standard IIHF seeding based on semifinal assignments
                                 playoff_team_map['Q1'] = sf_game1_teams[0]
@@ -416,18 +430,27 @@ def get_team_yearly_stats(team_code):
             sog = soga = ppgf = ppga = ppf = ppa = 0
             
             # Use the EXACT same logic as year_view lines 714-779 - this includes ALL games (preliminary + playoffs)
+            # Debug logging for 2016 - removed for now
+            
             for game_id, resolved_game_this_iter in games_processed_map.items():
                 raw_game_obj_this_iter = games_raw_map.get(game_id)
                 if not raw_game_obj_this_iter:
                     continue
 
+                # CRITICAL FIX: The logic needs to determine which team (team1 or team2) in the RAW game
+                # corresponds to our target team. We do this by checking which resolved team matches our target.
                 is_current_team_t1_in_raw_game = False
+                team_found_in_game = False
 
-                if resolved_game_this_iter.team1_code == team_code:
+                # Case-insensitive comparison to be safe
+                if resolved_game_this_iter.team1_code.upper() == team_code.upper():
                     is_current_team_t1_in_raw_game = True
-                elif resolved_game_this_iter.team2_code == team_code:
-                    is_current_team_t1_in_raw_game = False 
-                else:
+                    team_found_in_game = True
+                elif resolved_game_this_iter.team2_code.upper() == team_code.upper():
+                    is_current_team_t1_in_raw_game = False
+                    team_found_in_game = True
+                
+                if not team_found_in_game:
                     continue
 
                 if raw_game_obj_this_iter.team1_score is not None and raw_game_obj_this_iter.team2_score is not None: 
@@ -437,6 +460,8 @@ def get_team_yearly_stats(team_code):
                     opponent_score = raw_game_obj_this_iter.team2_score if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team1_score
                     gf += current_team_score
                     ga += opponent_score
+                    
+                    # Debug logging removed
                     
                     # Calculate points properly from raw game data
                     team_points = raw_game_obj_this_iter.team1_points if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team2_points
@@ -485,6 +510,8 @@ def get_team_yearly_stats(team_code):
                     ppa += len(team_penalties)  # Team's PK situations = team's penalties
 
             gd = gf - ga
+            
+            # Debug logging removed
             
             # Calculate percentage statistics
             sg_pct = (gf / sog * 100) if sog > 0 else 0
