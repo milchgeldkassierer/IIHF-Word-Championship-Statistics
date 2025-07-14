@@ -1198,6 +1198,7 @@
                                                     </tbody>
                                                 </table>
                                             </div>
+                                            <p class="text-muted"><small>Die Überprüfung der SOG findet nur statt, falls mindestens in einem Drittel eine Eingabe stattfindet</small></p>
                                             <button type="submit" class="btn btn-primary btn-sm mt-2 mb-3">SOG Speichern</button>
                                         </form>
                                         {% else %}
@@ -1256,6 +1257,7 @@
                                                 </tbody>
                                             </table>
                                         </div>
+                                        <p class="text-muted"><small>Die Überprüfung der SOG findet nur statt, falls mindestens in einem Drittel eine Eingabe stattfindet</small></p>
                                         <p class="text-muted"><small>SOG-Eingabe ist für Spiele mit noch nicht aufgelösten Platzhalter-Teams (z.B. A1 vs B2) nicht verfügbar. Bitte erst Spielergebnisse eintragen, die zur Auflösung führen.</small></p>
                                         {% endif %}
                                         {# --- END OF SHOTS ON GOAL (SOG) SECTION (Old form removed) --- #}
@@ -1543,7 +1545,7 @@
                                 <td class="text-center">{{ team.gf }}</td>
                                 <td class="text-center">{{ team.sog }}</td>
                                 <td class="text-center">
-                                    {% if team.sog > 0 %}{{ "%.1f"|format(team.gf * 100 / team.sog) }}%{% else %}0.0%{% endif %}
+                                    {% if team.sog > 0 %}{{ "%.1f"|format(team.gf * 100 / team.sog) }}%{% else %}N/A{% endif %}
                                 </td>
                             </tr>
                             {% endif %} {# <-- ADDED THIS ENDIF #}
@@ -1575,7 +1577,7 @@
                                 <td class="text-center">{{ team.ga }}</td>
                                 <td class="text-center">{{ team.soga }}</td>
                                 <td class="text-center">
-                                    {% if team.soga > 0 %}{{ "%.1f"|format((team.soga - team.ga) * 100 / team.soga) }}%{% else %}0.0%{% endif %}
+                                    {% if team.soga > 0 %}{{ "%.1f"|format((team.soga - team.ga) * 100 / team.soga) }}%{% else %}N/A{% endif %}
                                 </td>
                             </tr>
                             {% endif %} {# <-- ADDED THIS ENDIF #}

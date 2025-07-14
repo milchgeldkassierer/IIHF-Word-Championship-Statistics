@@ -671,8 +671,8 @@ function displayYearlyStats(data, $container) {
             html += `<td><strong>${stats.pts}</strong></td>`;
             html += `<td>${stats.sog || 0}</td>`;
             html += `<td>${stats.soga || 0}</td>`;
-            html += `<td>${stats.sg_pct || 0}%</td>`;
-            html += `<td>${stats.svs_pct || 0}%</td>`;
+            html += `<td>${(stats.sog && stats.sog > 0) ? (stats.sg_pct || 0) + '%' : 'N/A'}</td>`;
+            html += `<td>${(stats.soga && stats.soga > 0) ? (stats.svs_pct || 0) + '%' : 'N/A'}</td>`;
             html += `<td>${stats.pp_pct || 0}%</td>`;
             html += `<td>${stats.pk_pct || 0}%</td>`;
         } else {
