@@ -4,7 +4,7 @@ from flask import Flask
 from models import db
 
 # Import blueprints
-from routes.main_routes import main_bp
+from routes.blueprints import main_bp
 from routes.year import year_bp
 from routes.records import record_bp
 

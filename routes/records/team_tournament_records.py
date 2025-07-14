@@ -52,7 +52,7 @@ def get_most_goals_team_tournament():
 
 def get_fewest_goals_against_tournament():
     """Wenigste Gegentore eines Teams in einem Turnier - nur beendete Turniere"""
-    from routes.main_routes import get_tournament_statistics
+    from .utils import get_tournament_statistics
     
     all_years = db.session.query(ChampionshipYear).all()
     completed_years = []

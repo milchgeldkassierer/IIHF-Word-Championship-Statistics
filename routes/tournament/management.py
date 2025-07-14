@@ -4,101 +4,13 @@ import traceback
 from flask import render_template, request, redirect, url_for, flash, current_app
 from models import db, ChampionshipYear, Game, Penalty
 from utils.fixture_helpers import resolve_fixture_path
-from tournament_summary import calculate_overall_tournament_summary
+from .summary import calculate_overall_tournament_summary
 from utils import resolve_game_participants
 from constants import TEAM_ISO_CODES, PIM_MAP
 from sqlalchemy import func, case
-from routes.main_routes import main_bp
+from routes.blueprints import main_bp
+from routes.records.utils import get_tournament_statistics
 # Import locally to avoid circular imports
-
-
-def get_tournament_statistics(year_obj):
-    """
-    Calculate tournament statistics: games completed, total games, goals, penalties and winner
-    Returns dict with: total_games, completed_games, goals, penalties, avg_goals_per_game, avg_penalties_per_game, winner
-    """
-    if not year_obj:
-        return {
-            'total_games': 0, 
-            'completed_games': 0, 
-            'goals': 0, 
-            'penalties': 0, 
-            'avg_goals_per_game': 0.0,
-            'avg_penalties_per_game': 0.0,
-            'winner': None
-        }
-    
-    all_games = Game.query.filter_by(year_id=year_obj.id).all()
-    total_games = len(all_games)
-    
-    completed_games_list = [game for game in all_games if game.team1_score is not None and game.team2_score is not None]
-    completed_games = len(completed_games_list)
-    
-    # Calculate goals and penalties for completed games only
-    goals_count = 0
-    penalties_count = 0
-    
-    if completed_games > 0:
-        # Calculate goals from game scores (same method as records.html)
-        goals_count = sum(game.team1_score + game.team2_score for game in completed_games_list)
-        
-        # Calculate PIM from penalty types (same method as records.html)
-        penalties_count = db.session.query(
-            func.sum(
-                case(
-                    *[(Penalty.penalty_type == penalty_type, pim_value) for penalty_type, pim_value in PIM_MAP.items()],
-                    else_=2  # Default for unknown penalty types
-                )
-            )
-        ).join(Game, Penalty.game_id == Game.id).filter(
-            Game.year_id == year_obj.id,
-            Game.team1_score.isnot(None),
-            Game.team2_score.isnot(None)
-        ).scalar() or 0
-    
-    # Calculate averages
-    avg_goals_per_game = round(goals_count / completed_games, 2) if completed_games > 0 else 0.0
-    avg_penalties_per_game = round(penalties_count / completed_games, 2) if completed_games > 0 else 0.0
-    
-    winner = None
-    if completed_games == total_games and total_games > 0:
-        final_game = None
-        
-        for game in all_games:
-            if game.round and ('final' in game.round.lower() or 'gold medal' in game.round.lower() or 'gold' in game.round.lower()):
-                final_game = game
-                break
-        
-        if not final_game and all_games:
-            max_game_number = max(game.game_number for game in all_games if game.game_number is not None)
-            for game in all_games:
-                if game.game_number == max_game_number:
-                    final_game = game
-                    break
-                    
-        if final_game and final_game.team1_score is not None and final_game.team2_score is not None:
-            try:
-                resolved_team1, resolved_team2 = resolve_game_participants(final_game, year_obj, all_games)
-                
-                if final_game.team1_score > final_game.team2_score:
-                    winner = resolved_team1
-                elif final_game.team2_score > final_game.team1_score:
-                    winner = resolved_team2
-            except Exception:
-                if final_game.team1_score > final_game.team2_score:
-                    winner = final_game.team1_code
-                elif final_game.team2_score > final_game.team1_score:
-                    winner = final_game.team2_code
-    
-    return {
-        'total_games': total_games,
-        'completed_games': completed_games,
-        'goals': goals_count,
-        'penalties': penalties_count,
-        'avg_goals_per_game': avg_goals_per_game,
-        'avg_penalties_per_game': avg_penalties_per_game,
-        'winner': winner
-    }
 
 
 @main_bp.route('/', methods=['GET', 'POST'])

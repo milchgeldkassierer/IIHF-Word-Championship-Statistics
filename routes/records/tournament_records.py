@@ -165,7 +165,7 @@ def get_record_champion():
 
 def get_tournament_with_most_goals():
     """Turnier mit den meisten Toren - nur beendete Turniere"""
-    from routes.main_routes import get_tournament_statistics
+    from .utils import get_tournament_statistics
     
     all_years = db.session.query(ChampionshipYear).all()
     completed_years = []
@@ -213,7 +213,7 @@ def get_tournament_with_most_goals():
 
 def get_tournament_with_least_goals():
     """Turnier mit den wenigsten Toren - nur beendete Turniere"""
-    from routes.main_routes import get_tournament_statistics
+    from .utils import get_tournament_statistics
     
     all_years = db.session.query(ChampionshipYear).all()
     completed_years = []
@@ -261,7 +261,7 @@ def get_tournament_with_least_goals():
 
 def get_tournament_with_most_penalty_minutes():
     """Turnier mit den meisten Strafminuten - nur beendete Turniere"""
-    from routes.main_routes import get_tournament_statistics
+    from .utils import get_tournament_statistics
     
     all_years = db.session.query(ChampionshipYear).all()
     completed_years = []

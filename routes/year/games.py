@@ -7,7 +7,7 @@ from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoa
 from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, GOAL_TYPE_DISPLAY_MAP, POWERPLAY_PENALTY_TYPES
 from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final, _apply_head_to_head_tiebreaker
 from utils.fixture_helpers import resolve_fixture_path
-from routes.main_routes import calculate_complete_final_ranking
+from utils.standings import calculate_complete_final_ranking
 
 # Import the blueprint from the parent package
 from . import year_bp
@@ -325,11 +325,11 @@ def game_stats_view(year_id, game_id):
                     custom_seeding = get_custom_seeding_from_db(year_id)
                     
                     if custom_seeding:
-                        # Use custom seeding - map Q1-Q4 to custom seed order
-                        playoff_team_map['Q1'] = custom_seeding['seed1']
-                        playoff_team_map['Q2'] = custom_seeding['seed2']
-                        playoff_team_map['Q3'] = custom_seeding['seed3']
-                        playoff_team_map['Q4'] = custom_seeding['seed4']
+                        # Use custom seeding - map seed1-seed4 directly to custom seed order
+                        playoff_team_map['seed1'] = custom_seeding['seed1']
+                        playoff_team_map['seed2'] = custom_seeding['seed2']
+                        playoff_team_map['seed3'] = custom_seeding['seed3']
+                        playoff_team_map['seed4'] = custom_seeding['seed4']
                         
                         # Update semifinal game assignments based on custom seeding
                         # Semifinal 1: seed1 vs seed4, Semifinal 2: seed2 vs seed3
@@ -345,10 +345,10 @@ def game_stats_view(year_id, game_id):
                             playoff_team_map[sf_game_obj_2.team2_code] = custom_seeding['seed3']
                     else:
                         # Use standard IIHF seeding based on semifinal assignments
-                        playoff_team_map['Q1'] = sf_game1_teams[0]  # First team in SF1
-                        playoff_team_map['Q2'] = sf_game1_teams[1]  # Second team in SF1
-                        playoff_team_map['Q3'] = sf_game2_teams[0]  # First team in SF2
-                        playoff_team_map['Q4'] = sf_game2_teams[1]  # Second team in SF2
+                        playoff_team_map['seed1'] = sf_game1_teams[0]  # First team in SF1
+                        playoff_team_map['seed4'] = sf_game1_teams[1]  # Second team in SF1
+                        playoff_team_map['seed2'] = sf_game2_teams[0]  # First team in SF2
+                        playoff_team_map['seed3'] = sf_game2_teams[1]  # Second team in SF2
                     
                 else:
                     pass  # Empty else block
@@ -359,16 +359,16 @@ def game_stats_view(year_id, game_id):
     else:
         pass  # Empty else block
 
-    # --- FALLBACK Q1-Q4 MAPPING ---
-    # If the full semifinal logic didn't run, try to map Q1-Q4 to available QF winners
-    if qf_game_numbers and len(qf_game_numbers) == 4 and 'Q1' not in playoff_team_map:
+    # --- FALLBACK seed1-seed4 MAPPING ---
+    # If the full semifinal logic didn't run, try to map seed1-seed4 to available QF winners
+    if qf_game_numbers and len(qf_game_numbers) == 4 and 'seed1' not in playoff_team_map:
         for i, qf_game_num in enumerate(qf_game_numbers):
             winner_placeholder = f'W({qf_game_num})'
             resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
             
             
             if is_code_final(resolved_qf_winner):
-                q_code = f'Q{i+1}'  # Q1, Q2, Q3, Q4
+                q_code = f'seed{i+1}'  # seed1, seed2, seed3, seed4
                 playoff_team_map[q_code] = resolved_qf_winner
             else:
                 pass  # Empty else block
@@ -418,7 +418,7 @@ def game_stats_view(year_id, game_id):
     for g_disp_final_pass in games_processed:
         # Resolve from original placeholder if current is still a placeholder, 
         # or re-resolve current if it might have been an intermediate placeholder.
-        # Prioritizing original_teamX_code ensures we pick up changes from playoff_team_map like Q1->CAN directly.
+        # Prioritizing original_teamX_code ensures we pick up changes from playoff_team_map like seed1->CAN directly.
         code_to_resolve_t1 = g_disp_final_pass.original_team1_code 
         resolved_t1_final = get_resolved_code(code_to_resolve_t1, playoff_team_map)
         if g_disp_final_pass.team1_code != resolved_t1_final:

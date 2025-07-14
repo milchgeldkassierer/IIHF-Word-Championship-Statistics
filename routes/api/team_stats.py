@@ -3,18 +3,12 @@ import json
 import re
 from flask import jsonify, current_app
 from models import db, ChampionshipYear, Game, TeamStats, GameDisplay, ShotsOnGoal, Goal, Penalty
-from routes.main_routes import main_bp
+from routes.blueprints import main_bp
 from utils import is_code_final, _apply_head_to_head_tiebreaker, get_resolved_team_code
 from utils.fixture_helpers import resolve_fixture_path
 from utils.seeding_helpers import get_custom_seeding_from_db
 from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES
 
-
-def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, year_obj_for_map):
-    """This is a large function that calculates final rankings - will be imported from main_routes.py for now"""
-    # Import here to avoid circular imports
-    from routes.main_routes import calculate_complete_final_ranking as main_calculate_complete_final_ranking
-    return main_calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, year_obj_for_map)
 
 
 @main_bp.route('/api/team-yearly-stats/<team_code>')
@@ -304,35 +298,25 @@ def get_team_yearly_stats(team_code):
                             if playoff_team_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
                                 playoff_team_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
                             
-                            # Apply custom seeding to Q1-Q4 mappings
+                            # Apply custom seeding to seed1-seed4 mappings
                             if custom_seeding:
-                                # CRITICAL FIX: Custom seeding should still follow IIHF semifinal structure
-                                # IIHF: SF1 = R1 vs R4, SF2 = R2 vs R3
-                                # But games are structured as Q1 vs Q2, Q3 vs Q4
-                                # So we need: Q1=R1, Q2=R4, Q3=R2, Q4=R3
-                                R1 = custom_seeding['seed1']  # CZE
-                                R2 = custom_seeding['seed2']  # CAN  
-                                R3 = custom_seeding['seed3']  # USA
-                                R4 = custom_seeding['seed4']  # GER
-                                
-                                # Map to create proper IIHF semifinals:
-                                # Game 61 (Q1 vs Q2) should be R1 vs R4 = CZE vs GER
-                                # Game 62 (Q3 vs Q4) should be R2 vs R3 = CAN vs USA
-                                playoff_team_map['Q1'] = R1  # CZE
-                                playoff_team_map['Q2'] = R4  # GER
-                                playoff_team_map['Q3'] = R2  # CAN  
-                                playoff_team_map['Q4'] = R3  # USA
+                                # IIHF format: SF1 = seed1 vs seed4, SF2 = seed2 vs seed3
+                                # Database now directly stores this format
+                                playoff_team_map['seed1'] = custom_seeding['seed1']
+                                playoff_team_map['seed2'] = custom_seeding['seed2']
+                                playoff_team_map['seed3'] = custom_seeding['seed3']
+                                playoff_team_map['seed4'] = custom_seeding['seed4']
                                 
                                 # Logging removed for production
                             else:
                                 # Use standard IIHF seeding based on semifinal assignments
-                                playoff_team_map['Q1'] = sf_game1_teams[0]
-                                playoff_team_map['Q2'] = sf_game1_teams[1]
-                                playoff_team_map['Q3'] = sf_game2_teams[0]
-                                playoff_team_map['Q4'] = sf_game2_teams[1]
+                                playoff_team_map['seed1'] = sf_game1_teams[0]
+                                playoff_team_map['seed4'] = sf_game1_teams[1]
+                                playoff_team_map['seed2'] = sf_game2_teams[0]
+                                playoff_team_map['seed3'] = sf_game2_teams[1]
 
-            # Fallback Q1-Q4 mapping
-            if qf_game_numbers and len(qf_game_numbers) == 4 and 'Q1' not in playoff_team_map:
+            # Fallback seed1-seed4 mapping
+            if qf_game_numbers and len(qf_game_numbers) == 4 and 'seed1' not in playoff_team_map:
                 for i, qf_game_num in enumerate(qf_game_numbers):
                     winner_placeholder = f'W({qf_game_num})'
                     resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
@@ -388,7 +372,7 @@ def get_team_yearly_stats(team_code):
             # Check if tournament is completed before calculating final ranking
             team_final_position = None
             try:
-                from routes.tournament.management import get_tournament_statistics
+                from routes.records.utils import get_tournament_statistics
                 tournament_stats = get_tournament_statistics(year_obj)
                 is_completed = (tournament_stats['total_games'] > 0 and 
                                tournament_stats['completed_games'] == tournament_stats['total_games'])
@@ -402,14 +386,15 @@ def get_team_yearly_stats(team_code):
                     try:
                         custom_seeding = get_custom_seeding_from_db(year_id)
                         if custom_seeding:
-                            temp_playoff_map['Q1'] = custom_seeding['seed1']
-                            temp_playoff_map['Q2'] = custom_seeding['seed2']
-                            temp_playoff_map['Q3'] = custom_seeding['seed3']
-                            temp_playoff_map['Q4'] = custom_seeding['seed4']
+                            temp_playoff_map['seed1'] = custom_seeding['seed1']
+                            temp_playoff_map['seed2'] = custom_seeding['seed2']
+                            temp_playoff_map['seed3'] = custom_seeding['seed3']
+                            temp_playoff_map['seed4'] = custom_seeding['seed4']
                     except:
                         pass
                     
                     # Calculate final ranking (like in medal_tally.py) - use original games, not processed ones
+                    from utils.standings import calculate_complete_final_ranking
                     final_ranking = calculate_complete_final_ranking(year_obj, games_raw, temp_playoff_map, year_obj)
                     if final_ranking:
                         for position, team in final_ranking.items():

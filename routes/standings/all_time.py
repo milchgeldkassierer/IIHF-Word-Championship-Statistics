@@ -1,6 +1,6 @@
 from flask import render_template, current_app
 from models import ChampionshipYear, Game, AllTimeTeamStats
-from routes.main_routes import main_bp
+from routes.blueprints import main_bp
 from utils import is_code_final
 from constants import TEAM_ISO_CODES
 

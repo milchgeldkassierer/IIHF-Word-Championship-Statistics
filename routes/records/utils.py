@@ -1,8 +1,98 @@
 from models import db, Game, Goal, Player, ChampionshipYear, Penalty, TeamStats
 from collections import defaultdict
 import re, os, json
-from constants import TEAM_ISO_CODES
+from constants import TEAM_ISO_CODES, PIM_MAP
 from utils import resolve_game_participants, get_resolved_team_code, is_code_final, _apply_head_to_head_tiebreaker
+from sqlalchemy import func, case
+
+
+def get_tournament_statistics(year_obj):
+    """
+    Calculate tournament statistics: games completed, total games, goals, penalties and winner
+    Returns dict with: total_games, completed_games, goals, penalties, avg_goals_per_game, avg_penalties_per_game, winner
+    """
+    if not year_obj:
+        return {
+            'total_games': 0, 
+            'completed_games': 0, 
+            'goals': 0, 
+            'penalties': 0, 
+            'avg_goals_per_game': 0.0,
+            'avg_penalties_per_game': 0.0,
+            'winner': None
+        }
+    
+    all_games = Game.query.filter_by(year_id=year_obj.id).all()
+    total_games = len(all_games)
+    
+    completed_games_list = [game for game in all_games if game.team1_score is not None and game.team2_score is not None]
+    completed_games = len(completed_games_list)
+    
+    # Calculate goals and penalties for completed games only
+    goals_count = 0
+    penalties_count = 0
+    
+    if completed_games > 0:
+        # Calculate goals from game scores (same method as records.html)
+        goals_count = sum(game.team1_score + game.team2_score for game in completed_games_list)
+        
+        # Calculate PIM from penalty types (same method as records.html)
+        penalties_count = db.session.query(
+            func.sum(
+                case(
+                    *[(Penalty.penalty_type == penalty_type, pim_value) for penalty_type, pim_value in PIM_MAP.items()],
+                    else_=2  # Default for unknown penalty types
+                )
+            )
+        ).join(Game, Penalty.game_id == Game.id).filter(
+            Game.year_id == year_obj.id,
+            Game.team1_score.isnot(None),
+            Game.team2_score.isnot(None)
+        ).scalar() or 0
+    
+    # Calculate averages
+    avg_goals_per_game = round(goals_count / completed_games, 2) if completed_games > 0 else 0.0
+    avg_penalties_per_game = round(penalties_count / completed_games, 2) if completed_games > 0 else 0.0
+    
+    winner = None
+    if completed_games == total_games and total_games > 0:
+        final_game = None
+        
+        for game in all_games:
+            if game.round and ('final' in game.round.lower() or 'gold medal' in game.round.lower() or 'gold' in game.round.lower()):
+                final_game = game
+                break
+        
+        if not final_game and all_games:
+            max_game_number = max(game.game_number for game in all_games if game.game_number is not None)
+            for game in all_games:
+                if game.game_number == max_game_number:
+                    final_game = game
+                    break
+                    
+        if final_game and final_game.team1_score is not None and final_game.team2_score is not None:
+            try:
+                resolved_team1, resolved_team2 = resolve_game_participants(final_game, year_obj, all_games)
+                
+                if final_game.team1_score > final_game.team2_score:
+                    winner = resolved_team1
+                elif final_game.team2_score > final_game.team1_score:
+                    winner = resolved_team2
+            except Exception:
+                if final_game.team1_score > final_game.team2_score:
+                    winner = final_game.team1_code
+                elif final_game.team2_score > final_game.team1_score:
+                    winner = final_game.team2_code
+    
+    return {
+        'total_games': total_games,
+        'completed_games': completed_games,
+        'goals': goals_count,
+        'penalties': penalties_count,
+        'avg_goals_per_game': avg_goals_per_game,
+        'avg_penalties_per_game': avg_penalties_per_game,
+        'winner': winner
+    }
 
 
 def get_all_resolved_games():
@@ -31,16 +121,16 @@ def get_all_resolved_games():
             from routes.year.seeding import get_custom_seeding_from_db
             custom_seeding = get_custom_seeding_from_db(year_obj.id)
             if custom_seeding:
-                temp_playoff_map['Q1'] = custom_seeding['seed1']
-                temp_playoff_map['Q2'] = custom_seeding['seed2']
-                temp_playoff_map['Q3'] = custom_seeding['seed3']
-                temp_playoff_map['Q4'] = custom_seeding['seed4']
+                temp_playoff_map['seed1'] = custom_seeding['seed1']
+                temp_playoff_map['seed2'] = custom_seeding['seed2']
+                temp_playoff_map['seed3'] = custom_seeding['seed3']
+                temp_playoff_map['seed4'] = custom_seeding['seed4']
         except:
             pass
         
         # Pre-calculate final ranking for this year
         try:
-            from routes.main_routes import calculate_complete_final_ranking
+            from utils.standings import calculate_complete_final_ranking
             final_ranking = calculate_complete_final_ranking(year_obj, games_this_year, temp_playoff_map, year_obj)
             medal_game_rankings_by_year[year_obj.id] = final_ranking
         except Exception as e:
@@ -276,22 +366,22 @@ def get_all_resolved_games():
                                 if playoff_team_map.get(sf_game_obj_2.team2_code) != sf_game2_teams[1]:
                                     playoff_team_map[sf_game_obj_2.team2_code] = sf_game2_teams[1]
                                 
-                                playoff_team_map['Q1'] = sf_game1_teams[0]
-                                playoff_team_map['Q2'] = sf_game1_teams[1]
-                                playoff_team_map['Q3'] = sf_game2_teams[0]
-                                playoff_team_map['Q4'] = sf_game2_teams[1]
+                                playoff_team_map['seed1'] = sf_game1_teams[0]
+                                playoff_team_map['seed4'] = sf_game1_teams[1]
+                                playoff_team_map['seed2'] = sf_game2_teams[0]
+                                playoff_team_map['seed3'] = sf_game2_teams[1]
 
             # Apply custom seeding after all team resolution is complete (like in get_medal_tally_data)
-            # This ensures that custom seeding overrides any previous Q1-Q4 mappings
+            # This ensures that custom seeding overrides any previous seed1-seed4 mappings
             try:
                 from routes.year.seeding import get_custom_seeding_from_db
                 custom_seeding = get_custom_seeding_from_db(year_obj.id)
                 if custom_seeding:
-                    # Override Q1-Q4 mappings with custom seeding
-                    playoff_team_map['Q1'] = custom_seeding['seed1']
-                    playoff_team_map['Q2'] = custom_seeding['seed2']
-                    playoff_team_map['Q3'] = custom_seeding['seed3']
-                    playoff_team_map['Q4'] = custom_seeding['seed4']
+                    # Override seed1-seed4 mappings with custom seeding
+                    playoff_team_map['seed1'] = custom_seeding['seed1']
+                    playoff_team_map['seed2'] = custom_seeding['seed2']
+                    playoff_team_map['seed3'] = custom_seeding['seed3']
+                    playoff_team_map['seed4'] = custom_seeding['seed4']
             except ImportError:
                 pass  # If import fails, continue without custom seeding
 

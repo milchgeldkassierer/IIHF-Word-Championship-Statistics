@@ -1,6 +1,6 @@
 from flask import render_template, request, jsonify, current_app
 from models import db, Player, Goal, Penalty
-from routes.main_routes import main_bp
+from routes.blueprints import main_bp
 from constants import TEAM_ISO_CODES, PIM_MAP
 from sqlalchemy import func, case
 

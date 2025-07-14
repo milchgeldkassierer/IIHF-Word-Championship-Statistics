@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 # Let's try to mock db.joinedload if it becomes an issue, or mock the full 'options' chain.
 
 from models import Game, ChampionshipYear, AllTimeTeamStats, TeamStats, db as actual_db_object # Added TeamStats
-from routes.main_routes import calculate_all_time_standings
+from routes.standings.all_time import calculate_all_time_standings
 import json # For mocking fixture open
 
 # Mock for current_app.logger

@@ -13,7 +13,8 @@ from .standings import (
     _apply_head_to_head_tiebreaker,
     _sort_teams_by_head_to_head,
     _sort_two_teams_by_head_to_head,
-    _sort_multiple_teams_by_head_to_head
+    _sort_multiple_teams_by_head_to_head,
+    calculate_complete_final_ranking
 )
 
 from .playoff_mapping import (
@@ -48,8 +49,9 @@ def team_vs_team_view(team1, team2):
     except AttributeError:
         return {"error": "Ungültige Team-Namen"}
 
-    # Import main_routes functions for correct team resolution
-    from routes.main_routes import calculate_complete_final_ranking, get_medal_tally_data
+    # Import functions for correct team resolution
+    from .standings import calculate_complete_final_ranking
+    from routes.standings.medals import get_medal_tally_data
 
     # Get medal tally data with correct team resolution
     medal_data = get_medal_tally_data()
@@ -221,6 +223,7 @@ __all__ = [
     '_sort_teams_by_head_to_head',
     '_sort_two_teams_by_head_to_head',
     '_sort_multiple_teams_by_head_to_head',
+    'calculate_complete_final_ranking',
     
     # Playoff mapping
     '_build_playoff_team_map_for_year',

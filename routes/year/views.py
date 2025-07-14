@@ -333,11 +333,11 @@ def year_view(year_id):
                     custom_seeding = get_custom_seeding_from_db(year_id)
                     
                     if custom_seeding:
-                        # Use custom seeding - map Q1-Q4 to custom seed order
-                        playoff_team_map['Q1'] = custom_seeding['seed1']
-                        playoff_team_map['Q2'] = custom_seeding['seed2']
-                        playoff_team_map['Q3'] = custom_seeding['seed3']
-                        playoff_team_map['Q4'] = custom_seeding['seed4']
+                        # Use custom seeding - map seed1-seed4 directly to custom seed order
+                        playoff_team_map['seed1'] = custom_seeding['seed1']
+                        playoff_team_map['seed2'] = custom_seeding['seed2']
+                        playoff_team_map['seed3'] = custom_seeding['seed3']
+                        playoff_team_map['seed4'] = custom_seeding['seed4']
                         
                         # Update semifinal game assignments based on custom seeding
                         # Semifinal 1: seed1 vs seed4, Semifinal 2: seed2 vs seed3
@@ -352,14 +352,34 @@ def year_view(year_id):
                             playoff_team_map[sf_game_obj_2.team1_code] = custom_seeding['seed2']
                             playoff_team_map[sf_game_obj_2.team2_code] = custom_seeding['seed3']
                     else:
-                        # Use standard IIHF seeding based on semifinal assignments
-                        playoff_team_map['Q1'] = sf_game1_teams[0]  # First team in SF1
-                        playoff_team_map['Q2'] = sf_game1_teams[1]  # Second team in SF1
-                        playoff_team_map['Q3'] = sf_game2_teams[0]  # First team in SF2
-                        playoff_team_map['Q4'] = sf_game2_teams[1]  # Second team in SF2
+                        # Use standard IIHF seeding based on QF winners ranking by preliminary standings
+                        # First get all QF winners and sort them by preliminary standings
+                        qf_winners_for_seeding = []
+                        all_qf_winners = sf_game1_teams + sf_game2_teams
+                        
+                        # Get preliminary stats for QF winners
+                        for team_code in all_qf_winners:
+                            if team_code in teams_stats:
+                                qf_winners_for_seeding.append(teams_stats[team_code])
+                        
+                        # Sort by preliminary standings: points, goal difference, goals for  
+                        qf_winners_for_seeding.sort(key=lambda x: (-x.pts, -x.gd, -x.gf))
+                        
+                        # Assign seeds based on ranking
+                        if len(qf_winners_for_seeding) == 4:
+                            playoff_team_map['seed1'] = qf_winners_for_seeding[0].name
+                            playoff_team_map['seed2'] = qf_winners_for_seeding[1].name
+                            playoff_team_map['seed3'] = qf_winners_for_seeding[2].name
+                            playoff_team_map['seed4'] = qf_winners_for_seeding[3].name
+                        else:
+                            # Fallback to position-based assignment if stats not available
+                            playoff_team_map['seed1'] = sf_game1_teams[0]  # First team in SF1
+                            playoff_team_map['seed4'] = sf_game1_teams[1]  # Second team in SF1
+                            playoff_team_map['seed2'] = sf_game2_teams[0]  # First team in SF2
+                            playoff_team_map['seed3'] = sf_game2_teams[1]  # Second team in SF2
 
-    # Fallback Q1-Q4 mapping
-    if qf_game_numbers and len(qf_game_numbers) == 4 and 'Q1' not in playoff_team_map:
+    # Fallback seed1-seed4 mapping
+    if qf_game_numbers and len(qf_game_numbers) == 4 and 'seed1' not in playoff_team_map:
         for i, qf_game_num in enumerate(qf_game_numbers):
             winner_placeholder = f'W({qf_game_num})'
             resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)

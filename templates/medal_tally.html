@@ -132,7 +132,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for medal_entry in medal_data | sort(attribute='year_obj.year') %}
+                    {% for medal_entry in medal_data | sort(attribute='year_obj.year', reverse=True) %}
                     <tr>
                         <td>{{ medal_entry.year_obj.year }}</td>
                         <td>

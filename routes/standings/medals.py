@@ -2,18 +2,14 @@ import os
 import json
 from flask import render_template, current_app
 from models import db, ChampionshipYear, Game, TeamStats
-from routes.main_routes import main_bp
+from routes.blueprints import main_bp
 # Import function locally to avoid circular imports
 from utils import is_code_final, get_resolved_team_code, _apply_head_to_head_tiebreaker
 from utils.fixture_helpers import resolve_fixture_path
+from utils.standings import calculate_complete_final_ranking
 from constants import TEAM_ISO_CODES, PRELIM_ROUNDS, PLAYOFF_ROUNDS
 
 
-def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, year_obj_for_map):
-    """This is a large function that calculates final rankings - will be imported from main_routes.py for now"""
-    # Import here to avoid circular imports
-    from routes.main_routes import calculate_complete_final_ranking as main_calculate_complete_final_ranking
-    return main_calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, year_obj_for_map)
 
 
 def get_medal_tally_data():
@@ -26,7 +22,7 @@ def get_medal_tally_data():
     completed_years = []
     for year_obj in all_years:
         # Import locally to avoid circular imports
-        from routes.tournament.management import get_tournament_statistics
+        from routes.records.utils import get_tournament_statistics
         tournament_stats = get_tournament_statistics(year_obj)
         is_completed = (tournament_stats['total_games'] > 0 and 
                        tournament_stats['completed_games'] == tournament_stats['total_games'])
@@ -37,37 +33,8 @@ def get_medal_tally_data():
     for game_obj in all_games:
         games_by_year_id.setdefault(game_obj.year_id, []).append(game_obj)
 
-    # KRITISCH: Pre-calculate correct medal game rankings (wie in record_routes.py)
-    # Diese bewährte Methode funktioniert korrekt
+    # We'll calculate medal game rankings after building the full playoff maps
     medal_game_rankings_by_year = {}
-    
-    for year_obj in completed_years:
-        games_this_year = games_by_year_id.get(year_obj.id, [])
-        
-        # Build a basic playoff map for this year including custom seeding (wie in record_routes.py)
-        temp_playoff_map = {}
-        
-        # Apply custom seeding if it exists (wie in record_routes.py)
-        try:
-            from utils.seeding_helpers import get_custom_seeding_from_db
-            custom_seeding = get_custom_seeding_from_db(year_obj.id)
-            if custom_seeding:
-                temp_playoff_map['Q1'] = custom_seeding['seed1']
-                temp_playoff_map['Q2'] = custom_seeding['seed2']
-                temp_playoff_map['Q3'] = custom_seeding['seed3']
-                temp_playoff_map['Q4'] = custom_seeding['seed4']
-        except:
-            pass
-        
-        # Pre-calculate final ranking for this year (wie in record_routes.py)
-        try:
-            final_ranking = calculate_complete_final_ranking(year_obj, games_this_year, temp_playoff_map, year_obj)
-            medal_game_rankings_by_year[year_obj.id] = final_ranking
-        except Exception as e:
-            current_app.logger.error(f"Error calculating final ranking for year {year_obj.year}: {str(e)}")
-            import traceback
-            current_app.logger.error(traceback.format_exc())
-            medal_game_rankings_by_year[year_obj.id] = {}
 
     resolved_playoff_maps_by_year_id = {}
 
@@ -193,10 +160,10 @@ def get_medal_tally_data():
                 sf_game_2_obj = all_games_this_year_map_by_number_local.get(sf_gns[1])
                 
                 if sf_game_1_obj and sf_game_2_obj:
-                    q1_team = current_year_playoff_map.get('Q1')
-                    q2_team = current_year_playoff_map.get('Q2') 
-                    q3_team = current_year_playoff_map.get('Q3')
-                    q4_team = current_year_playoff_map.get('Q4')
+                    q1_team = current_year_playoff_map.get('seed1')
+                    q2_team = current_year_playoff_map.get('seed2') 
+                    q3_team = current_year_playoff_map.get('seed3')
+                    q4_team = current_year_playoff_map.get('seed4')
                     
                     # Various Q team resolution logic...
                     # (The full logic is quite long, keeping abbreviated for now)
@@ -206,15 +173,30 @@ def get_medal_tally_data():
             from utils.seeding_helpers import get_custom_seeding_from_db
             custom_seeding = get_custom_seeding_from_db(year_id_iter)
             if custom_seeding:
-                # Override Q1-Q4 mappings with custom seeding
-                current_year_playoff_map['Q1'] = custom_seeding['seed1']
-                current_year_playoff_map['Q2'] = custom_seeding['seed2']
-                current_year_playoff_map['Q3'] = custom_seeding['seed3']
-                current_year_playoff_map['Q4'] = custom_seeding['seed4']
+                # Override seed1-seed4 mappings with custom seeding
+                current_year_playoff_map['seed1'] = custom_seeding['seed1']
+                current_year_playoff_map['seed2'] = custom_seeding['seed2']
+                current_year_playoff_map['seed3'] = custom_seeding['seed3']
+                current_year_playoff_map['seed4'] = custom_seeding['seed4']
         except ImportError:
             pass  # If import fails, continue without custom seeding
                     
         resolved_playoff_maps_by_year_id[year_id_iter] = current_year_playoff_map
+
+    # Calculate medal game rankings using the fully resolved playoff maps
+    for year_obj in completed_years:
+        games_this_year = games_by_year_id.get(year_obj.id, [])
+        full_playoff_map = resolved_playoff_maps_by_year_id.get(year_obj.id, {})
+        
+        # Calculate final ranking with the complete playoff map
+        try:
+            final_ranking = calculate_complete_final_ranking(year_obj, games_this_year, full_playoff_map, year_obj)
+            medal_game_rankings_by_year[year_obj.id] = final_ranking
+        except Exception as e:
+            current_app.logger.error(f"Error calculating final ranking for year {year_obj.year}: {str(e)}")
+            import traceback
+            current_app.logger.error(traceback.format_exc())
+            medal_game_rankings_by_year[year_obj.id] = {}
 
     # KRITISCH: Verwende die vorberechneten Medal Rankings (wie in record_routes.py)
     # Diese bewährte Methode liefert die korrekten Ergebnisse

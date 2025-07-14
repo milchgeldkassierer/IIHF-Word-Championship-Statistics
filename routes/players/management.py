@@ -1,6 +1,6 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app
 from models import db, Player
-from routes.main_routes import main_bp
+from routes.blueprints import main_bp
 from constants import TEAM_ISO_CODES
 from sqlalchemy import func
 

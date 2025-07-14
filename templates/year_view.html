@@ -793,7 +793,7 @@
                                 {# Condition to show the original placeholder in (parentheses) #}
                                 {% set show_p1_original_placeholder = False %}
                                 {% if p1_original_code != p1_display_name %} {# If there was a change #}
-                                    {% if (p1_original_code in ['Q1', 'Q2', 'Q3', 'Q4'] or
+                                    {% if (p1_original_code in ['seed1', 'seed2', 'seed3', 'seed4'] or
                                            (p1_original_code|string).startswith('W(') or
                                            (p1_original_code|string).startswith('L(')) %}
                                         {# For QF/WL placeholders, if it changed, we DON'T show the original #}
@@ -832,7 +832,7 @@
                                 {# Condition to show the original placeholder in (parentheses) #}
                                 {% set show_p2_original_placeholder = False %}
                                 {% if p2_original_code != p2_display_name %} {# If there was a change #}
-                                    {% if (p2_original_code in ['Q1', 'Q2', 'Q3', 'Q4'] or
+                                    {% if (p2_original_code in ['seed1', 'seed2', 'seed3', 'seed4'] or
                                            (p2_original_code|string).startswith('W(') or
                                            (p2_original_code|string).startswith('L(')) %}
                                         {# For QF/WL placeholders, if it changed, we DON'T show the original #}
