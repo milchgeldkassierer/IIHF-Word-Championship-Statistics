@@ -1,6 +1,39 @@
 from typing import Tuple
 from constants import PIM_MAP, GOAL_TYPE_DISPLAY_MAP
 from .time_helpers import convert_time_to_seconds
+from models import db, Game, Penalty
+from sqlalchemy import func, case
+
+
+def calculate_tournament_penalty_minutes(year_id, completed_games_only=True):
+    """
+    Centralized function to calculate penalty minutes for a tournament.
+    
+    Args:
+        year_id: The tournament year ID
+        completed_games_only: Whether to only count completed games (default: True)
+    
+    Returns:
+        Total penalty minutes for the tournament
+    """
+    query = db.session.query(
+        func.sum(
+            case(
+                *[(Penalty.penalty_type == penalty_type, pim_value) for penalty_type, pim_value in PIM_MAP.items()],
+                else_=2  # Default for unknown penalty types
+            )
+        )
+    ).join(Game, Penalty.game_id == Game.id).filter(
+        Game.year_id == year_id
+    )
+    
+    if completed_games_only:
+        query = query.filter(
+            Game.team1_score.isnot(None),
+            Game.team2_score.isnot(None)
+        )
+    
+    return query.scalar() or 0
 
 
 def check_game_data_consistency(game_display, sog_data=None):

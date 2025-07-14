@@ -3,6 +3,7 @@ from collections import defaultdict
 import re, os, json
 from constants import TEAM_ISO_CODES, PIM_MAP
 from utils import resolve_game_participants, get_resolved_team_code, is_code_final, _apply_head_to_head_tiebreaker
+from utils.data_validation import calculate_tournament_penalty_minutes
 from sqlalchemy import func, case
 
 
@@ -36,19 +37,8 @@ def get_tournament_statistics(year_obj):
         # Calculate goals from game scores (same method as records.html)
         goals_count = sum(game.team1_score + game.team2_score for game in completed_games_list)
         
-        # Calculate PIM from penalty types (same method as records.html)
-        penalties_count = db.session.query(
-            func.sum(
-                case(
-                    *[(Penalty.penalty_type == penalty_type, pim_value) for penalty_type, pim_value in PIM_MAP.items()],
-                    else_=2  # Default for unknown penalty types
-                )
-            )
-        ).join(Game, Penalty.game_id == Game.id).filter(
-            Game.year_id == year_obj.id,
-            Game.team1_score.isnot(None),
-            Game.team2_score.isnot(None)
-        ).scalar() or 0
+        # Calculate PIM using centralized function
+        penalties_count = calculate_tournament_penalty_minutes(year_obj.id, completed_games_only=True)
     
     # Calculate averages
     avg_goals_per_game = round(goals_count / completed_games, 2) if completed_games > 0 else 0.0

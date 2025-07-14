@@ -2,6 +2,7 @@ from collections import defaultdict
 from models import db, Game, ChampionshipYear, Penalty
 from sqlalchemy import func, case, desc, asc
 from utils import is_code_final
+from utils.data_validation import calculate_tournament_penalty_minutes
 from .utils import get_all_resolved_games
 
 
@@ -280,23 +281,8 @@ def get_tournament_with_most_penalty_minutes():
     tournament_pim_data = []
     
     for year_obj in completed_years:
-        # Summe aller Strafminuten für dieses Turnier
-        total_pim = db.session.query(
-            func.sum(
-                case(
-                    (Penalty.penalty_type == '2', 2),
-                    (Penalty.penalty_type == '4', 4),
-                    (Penalty.penalty_type == '5', 5),
-                    (Penalty.penalty_type == '10', 10),
-                    (Penalty.penalty_type == '20', 20),
-                    else_=2  # Default für unbekannte Strafarten
-                )
-            )
-        ).join(Game, Penalty.game_id == Game.id).filter(
-            Game.year_id == year_obj.id,
-            Game.team1_score.isnot(None),
-            Game.team2_score.isnot(None)
-        ).scalar() or 0
+        # Berechne Strafminuten mit zentraler Funktion
+        total_pim = calculate_tournament_penalty_minutes(year_obj.id, completed_games_only=True)
         
         # Anzahl der gespielten Spiele
         games_count = db.session.query(func.count(Game.id)).filter(
@@ -325,6 +311,64 @@ def get_tournament_with_most_penalty_minutes():
     results = []
     for data in tournament_pim_data:
         if data['total_pim'] == max_pim:
+            results.append(data)
+        else:
+            break
+    
+    return results
+
+
+def get_tournament_with_least_penalty_minutes():
+    """Turnier mit den wenigsten Strafminuten - nur beendete Turniere"""
+    from .utils import get_tournament_statistics
+    
+    all_years = db.session.query(ChampionshipYear).all()
+    completed_years = []
+    
+    for year_obj in all_years:
+        tournament_stats = get_tournament_statistics(year_obj)
+        is_completed = (tournament_stats['total_games'] > 0 and 
+                       tournament_stats['completed_games'] == tournament_stats['total_games'])
+        if is_completed:
+            completed_years.append(year_obj)
+    
+    if not completed_years:
+        return []
+    
+    # Berechne Strafminuten pro Turnier
+    tournament_pim_data = []
+    
+    for year_obj in completed_years:
+        # Berechne Strafminuten mit zentraler Funktion
+        total_pim = calculate_tournament_penalty_minutes(year_obj.id, completed_games_only=True)
+        
+        # Anzahl der gespielten Spiele
+        games_count = db.session.query(func.count(Game.id)).filter(
+            Game.year_id == year_obj.id,
+            Game.team1_score.isnot(None),
+            Game.team2_score.isnot(None)
+        ).scalar() or 0
+        
+        if games_count > 0:
+            tournament_pim_data.append({
+                'tournament': year_obj.name,
+                'year': year_obj.year,
+                'total_pim': total_pim,
+                'games': games_count,
+                'pim_per_game': round(total_pim / games_count, 2) if games_count > 0 else 0
+            })
+    
+    if not tournament_pim_data:
+        return []
+    
+    # Sortiere nach wenigsten Strafminuten
+    tournament_pim_data.sort(key=lambda x: x['total_pim'])
+    min_pim = tournament_pim_data[0]['total_pim']
+    
+    # Gib alle Turniere mit den wenigsten Strafminuten zurück
+    results = []
+    for data in tournament_pim_data:
+        if data['total_pim'] == min_pim:
             results.append(data)
         else:
             break

@@ -1,13 +1,14 @@
 from typing import Dict, Any
 from models import db, ChampionshipYear, Game, Goal, Penalty
-from sqlalchemy import func
+from sqlalchemy import func, case
+from constants import PIM_MAP
 
 def calculate_overall_tournament_summary() -> Dict[str, Any]:
     """
     Berechnet die Gesamtstatistiken aller Turniere:
     - Gesamtanzahl der Spiele (eingetragen/gesamt)
     - Gesamtanzahl der Tore
-    - Gesamtanzahl der Penalties
+    - Gesamtanzahl der Strafminuten (PIM)
     - Anzahl der Turniere
     """
     
@@ -38,7 +39,16 @@ def calculate_overall_tournament_summary() -> Dict[str, Any]:
         
         if completed_game_ids:
             year_goals = Goal.query.filter(Goal.game_id.in_(completed_game_ids)).count()
-            year_penalties = Penalty.query.filter(Penalty.game_id.in_(completed_game_ids)).count()
+            
+            # Calculate actual penalty minutes (PIM) instead of just counting penalty records
+            pim_case_statement = case(
+                *[(Penalty.penalty_type == penalty_type, pim_value) for penalty_type, pim_value in PIM_MAP.items()],
+                else_=2  # Default for unknown penalty types
+            )
+            
+            year_penalties = db.session.query(func.sum(pim_case_statement)).filter(
+                Penalty.game_id.in_(completed_game_ids)
+            ).scalar() or 0
             
             total_goals += year_goals
             total_penalties += year_penalties

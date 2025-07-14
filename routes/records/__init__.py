@@ -27,7 +27,8 @@ from .tournament_records import (
     get_record_champion,
     get_tournament_with_most_goals,
     get_tournament_with_least_goals,
-    get_tournament_with_most_penalty_minutes
+    get_tournament_with_most_penalty_minutes,
+    get_tournament_with_least_penalty_minutes
 )
 
 from .team_tournament_records import (
@@ -73,6 +74,7 @@ def records_view():
     tournament_most_goals = get_tournament_with_most_goals()
     tournament_least_goals = get_tournament_with_least_goals()
     tournament_most_penalty_minutes = get_tournament_with_most_penalty_minutes()
+    tournament_least_penalty_minutes = get_tournament_with_least_penalty_minutes()
     
     most_goals_team_tournament = get_most_goals_team_tournament()
     fewest_goals_against_tournament = get_fewest_goals_against_tournament()
@@ -101,6 +103,7 @@ def records_view():
                            tournament_most_goals=tournament_most_goals,
                            tournament_least_goals=tournament_least_goals,
                            tournament_most_penalty_minutes=tournament_most_penalty_minutes,
+                           tournament_least_penalty_minutes=tournament_least_penalty_minutes,
                            most_goals_team_tournament=most_goals_team_tournament,
                            fewest_goals_against_tournament=fewest_goals_against_tournament,
                            most_shutouts_tournament=most_shutouts_tournament,
@@ -138,6 +141,7 @@ __all__ = [
     'get_tournament_with_most_goals',
     'get_tournament_with_least_goals',
     'get_tournament_with_most_penalty_minutes',
+    'get_tournament_with_least_penalty_minutes',
     
     # Team tournament records
     'get_most_goals_team_tournament',

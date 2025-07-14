@@ -340,7 +340,7 @@
 
         <div class="row">
             <!-- Turnier mit den meisten Toren -->
-            <div class="col-md-4 mb-4">
+            <div class="col-md-3 mb-4">
                 <div class="card">
                     <div class="card-header">
                         <h5><i class="fas fa-arrow-up text-success"></i> Turnier mit den meisten Toren</h5>
@@ -362,7 +362,7 @@
             </div>
 
             <!-- Turnier mit den wenigsten Toren -->
-            <div class="col-md-4 mb-4">
+            <div class="col-md-3 mb-4">
                 <div class="card">
                     <div class="card-header">
                         <h5><i class="fas fa-arrow-down text-danger"></i> Turnier mit den wenigsten Toren</h5>
@@ -384,7 +384,7 @@
             </div>
 
             <!-- Turnier mit den meisten Strafminuten -->
-            <div class="col-md-4 mb-4">
+            <div class="col-md-3 mb-4">
                 <div class="card">
                     <div class="card-header">
                         <h5><i class="fas fa-exclamation-triangle text-warning"></i> Turnier mit den meisten Strafminuten</h5>
@@ -392,6 +392,28 @@
                     <div class="card-body">
                         {% if tournament_most_penalty_minutes %}
                             {% for tournament in tournament_most_penalty_minutes %}
+                                <div class="record-item">
+                                    <strong>{{ tournament.tournament }} {{ tournament.year }}</strong><br>
+                                    {{ tournament.total_pim }} PIM in {{ tournament.games }} Spielen 
+                                    ({{ tournament.pim_per_game }} PIM/Spiel)
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">Keine Daten verfügbar</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Turnier mit den wenigsten Strafminuten -->
+            <div class="col-md-3 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-check-circle text-success"></i> Turnier mit den wenigsten Strafminuten</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if tournament_least_penalty_minutes %}
+                            {% for tournament in tournament_least_penalty_minutes %}
                                 <div class="record-item">
                                     <strong>{{ tournament.tournament }} {{ tournament.year }}</strong><br>
                                     {{ tournament.total_pim }} PIM in {{ tournament.games }} Spielen 
