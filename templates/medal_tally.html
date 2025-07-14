@@ -132,7 +132,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for medal_entry in medal_data | sort(attribute='year_obj.year', reverse=True) %}
+                    {% for medal_entry in medal_data | sort(attribute='year_obj.year') %}
                     <tr>
                         <td>{{ medal_entry.year_obj.year }}</td>
                         <td>
@@ -197,6 +197,7 @@
             <table class="table table-striped table-hover">
                 <thead class="thead-dark">
                     <tr>
+                        <th>Platz</th>
                         <th>Team</th>
                         <th class="text-center">🥇 1.</th>
                         <th class="text-center">🥈 2.</th>
@@ -286,6 +287,9 @@
 
                     {% for sort_key, team_code, position_counts, position_years, avg_ranking in final_rankings | sort(attribute='0') %}
                         <tr>
+                            <td class="text-center">
+                                <strong>{{ loop.index }}</strong>
+                            </td>
                             <td>
                                 {% if team_iso_codes.get(team_code) %}
                                     <img src="https://flagcdn.com/w20/{{ team_iso_codes[team_code] }}.png" alt="{{ team_code }}" class="me-2"> 

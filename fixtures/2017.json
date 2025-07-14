@@ -730,8 +730,8 @@
         "round": "Semifinals",
         "group": null,
         "gameNumber": 61,
-        "team1": "Q1",
-        "team2": "Q2",
+        "team1": "seed1",
+        "team2": "seed4",
         "location": "Cologne",
         "venue": "LANXESS arena",
         "fullGameDescription": "Semifinals, Game 61 SF vs SF"
@@ -742,8 +742,8 @@
         "round": "Semifinals",
         "group": null,
         "gameNumber": 62,
-        "team1": "Q3",
-        "team2": "Q4",
+        "team1": "seed2",
+        "team2": "seed3",
         "location": "Cologne",
         "venue": "LANXESS arena",
         "fullGameDescription": "Semifinals, Game 62 SF vs SF"
