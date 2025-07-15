@@ -17,7 +17,7 @@ PLAYOFF_ROUNDS = ["Quarterfinals", "Semifinals", "Final", "Bronze Medal Game", "
 MAX_PRELIM_GAMES_PER_TEAM = 7  # Maximale Anzahl der Hauptrundenspiele pro Team
 
 # Define penalty choices
-PENALTY_TYPES_CHOICES = ["2 Min", "2+2 Min", "5 Min + Spieldauer", "10 Min Disziplinar", "Spieldauer Disziplinar"]
+PENALTY_TYPES_CHOICES = ["2 Min", "2+2 Min", "5 Min Disziplinar", "5 Min + Spieldauer", "10 Min Disziplinar"]
 PENALTY_REASONS_CHOICES = [
     "Bandencheck",
     "Behinderung",
@@ -42,9 +42,9 @@ PENALTY_REASONS_CHOICES = [
 PIM_MAP = {
     "2 Min": 2,
     "2+2 Min": 4,
+    "5 Min Disziplinar": 5,
     "5 Min + Spieldauer": 5, # The 20 min for game misconduct is often tracked separately or implied
     "10 Min Disziplinar": 10,
-    "Spieldauer Disziplinar": 20 # This is a common equivalent for a game misconduct
 }
 
 # Penalty types that result in powerplay opportunities

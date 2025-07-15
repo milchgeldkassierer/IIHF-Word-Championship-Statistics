@@ -378,8 +378,23 @@
 {% block content %}
 <div class="container mt-4">
     <div class="stats-section">
-        <h1 class="stats-title text-center">All-Time Standings (Hauptrunde und Playoffs)</h1>
+        <h1 class="stats-title text-center">{{ page_title }}</h1>
         <p class="text-center text-muted mb-4">Klicke auf einen Teamnamen, um die jährlichen Statistiken anzuzeigen</p>
+        
+        <!-- Game Type Filter -->
+        <div class="text-center mb-4">
+            <div class="btn-group" role="group" aria-label="Game Type Filter">
+                <button type="button" class="btn {{ 'btn-primary' if current_filter == 'all' else 'btn-outline-primary' }}" onclick="filterStandings('all')">
+                    Alle Spiele
+                </button>
+                <button type="button" class="btn {{ 'btn-primary' if current_filter == 'preliminary' else 'btn-outline-primary' }}" onclick="filterStandings('preliminary')">
+                    Hauptrunde
+                </button>
+                <button type="button" class="btn {{ 'btn-primary' if current_filter == 'playoffs' else 'btn-outline-primary' }}" onclick="filterStandings('playoffs')">
+                    Playoff
+                </button>
+            </div>
+        </div>
 
         {% if standings_data %}
         <div class="table-responsive">
@@ -618,7 +633,11 @@ async function loadTeamYearlyStats(teamCode, $container) {
     $container.addClass('show');
     
     try {
-        const response = await fetch(`/api/team-yearly-stats/${teamCode}`);
+        // Get current game type filter from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameType = urlParams.get('game_type') || 'all';
+        
+        const response = await fetch(`/api/team-yearly-stats/${teamCode}?game_type=${gameType}`);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -726,6 +745,22 @@ function getPositionBadge(position) {
     
     return `<span class="position-badge ${badgeClass}">${symbol}</span>${medal}`;
 }
+
+// Function to handle filter changes
+function filterStandings(gameType) {
+    // Update URL with new filter
+    const url = new URL(window.location);
+    url.searchParams.set('game_type', gameType);
+    
+    // Reload page with new filter
+    window.location.href = url.toString();
+}
+
+// Clear loaded team data when filter changes (this ensures fresh data loading)
+window.addEventListener('beforeunload', function() {
+    // Reset loaded team data to ensure fresh data on page reload
+    Object.keys(loadedTeamData).forEach(key => delete loadedTeamData[key]);
+});
 
 // Native browser tooltips are used via the title attribute - no Bootstrap tooltips needed
 </script>

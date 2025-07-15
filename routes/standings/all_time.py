@@ -1,17 +1,17 @@
-from flask import render_template, current_app
+from flask import render_template, request, current_app
 from models import ChampionshipYear, Game, AllTimeTeamStats
 from routes.blueprints import main_bp
 from utils import is_code_final
-from constants import TEAM_ISO_CODES
+from constants import TEAM_ISO_CODES, PRELIM_ROUNDS, PLAYOFF_ROUNDS
 
 
-def get_team_yearly_stats_internal_api(team_code):
+def get_team_yearly_stats_internal_api(team_code, game_type='all'):
     """Internal function that uses the same logic as the API endpoint"""
     # Import here to avoid circular imports
     from routes.api.team_stats import get_team_yearly_stats
     
     # Directly call the API function without circular import
-    with current_app.test_request_context():
+    with current_app.test_request_context(query_string=f'game_type={game_type}'):
         try:
             # Get the response from the API endpoint
             response = get_team_yearly_stats(team_code)
@@ -26,10 +26,13 @@ def get_team_yearly_stats_internal_api(team_code):
             return []
 
 
-def calculate_all_time_standings():
+def calculate_all_time_standings(game_type='all'):
     """
     Calculates all-time standings by aggregating yearly statistics directly from the API.
     This ensures perfect consistency with the yearly stats API.
+    
+    Args:
+        game_type (str): Filter games by type - 'all', 'preliminary', or 'playoffs'
     """
     # Get all teams that have played in any tournament
     all_teams = set()
@@ -48,7 +51,7 @@ def calculate_all_time_standings():
     # For each team, use the API to get yearly stats and aggregate them
     for team_code in all_teams:
         # Use the same API logic internally
-        yearly_stats_data = get_team_yearly_stats_internal_api(team_code)
+        yearly_stats_data = get_team_yearly_stats_internal_api(team_code, game_type)
         
         if yearly_stats_data:
             all_time_stats_dict[team_code] = AllTimeTeamStats(team_code=team_code)
@@ -73,6 +76,10 @@ def calculate_all_time_standings():
                     team_all_time_stats.gf += stats.get('gf', 0)
                     team_all_time_stats.ga += stats.get('ga', 0)
                     team_all_time_stats.pts += stats.get('pts', 0)
+            
+            # Only keep teams that actually have games in the filtered category
+            if team_all_time_stats.gp == 0:
+                del all_time_stats_dict[team_code]
 
     final_all_time_standings = list(all_time_stats_dict.values())
     final_all_time_standings.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
@@ -82,5 +89,24 @@ def calculate_all_time_standings():
 
 @main_bp.route('/all-time-standings')
 def all_time_standings_view():
-    standings_data = calculate_all_time_standings()
-    return render_template('all_time_standings.html', standings_data=standings_data, team_iso_codes=TEAM_ISO_CODES)
+    game_type = request.args.get('game_type', 'all')
+    
+    # Validate game_type parameter
+    if game_type not in ['all', 'preliminary', 'playoffs']:
+        game_type = 'all'
+    
+    standings_data = calculate_all_time_standings(game_type)
+    
+    # Determine page title based on filter
+    title_map = {
+        'all': 'All-Time Standings (Hauptrunde und Playoffs)',
+        'preliminary': 'All-Time Standings (nur Hauptrunde)',
+        'playoffs': 'All-Time Standings (nur Playoffs)'
+    }
+    page_title = title_map.get(game_type, title_map['all'])
+    
+    return render_template('all_time_standings.html', 
+                         standings_data=standings_data, 
+                         team_iso_codes=TEAM_ISO_CODES,
+                         current_filter=game_type,
+                         page_title=page_title)

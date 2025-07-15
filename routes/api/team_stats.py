@@ -1,13 +1,13 @@
 import os
 import json
 import re
-from flask import jsonify, current_app
+from flask import jsonify, request, current_app
 from models import db, ChampionshipYear, Game, TeamStats, GameDisplay, ShotsOnGoal, Goal, Penalty
 from routes.blueprints import main_bp
 from utils import is_code_final, _apply_head_to_head_tiebreaker, get_resolved_team_code
 from utils.fixture_helpers import resolve_fixture_path
 from utils.seeding_helpers import get_custom_seeding_from_db
-from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES
+from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES, PRELIM_ROUNDS, PLAYOFF_ROUNDS
 
 
 
@@ -15,6 +15,10 @@ from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES
 def get_team_yearly_stats(team_code):
     """Get yearly statistics for a specific team across all years - COMPLETE VERSION with all playoff logic"""
     try:
+        # Get game type filter from query parameter
+        game_type = request.args.get('game_type', 'all')
+        if game_type not in ['all', 'preliminary', 'playoffs']:
+            game_type = 'all'
         # Get all championship years
         all_years = ChampionshipYear.query.order_by(ChampionshipYear.year).all()
         yearly_stats = []
@@ -414,12 +418,33 @@ def get_team_yearly_stats(team_code):
             gp = w = otw = sow = l = otl = sol = gf = ga = pts = 0
             sog = soga = ppgf = ppga = ppf = ppa = 0
             
+            # Filter games based on game_type parameter before processing
+            def should_include_game(game_obj, resolved_game_obj, game_type_filter):
+                """Helper function to determine if a game should be included based on game type filter"""
+                if game_type_filter == 'all':
+                    return True
+                elif game_type_filter == 'preliminary':
+                    # Debug: print the round for debugging
+                    return game_obj.round in PRELIM_ROUNDS
+                elif game_type_filter == 'playoffs':
+                    # Debug: print the round for debugging
+                    # Check for various playoff round names that might exist in the database
+                    playoff_indicators = ['Quarter', 'Semi', 'Final', 'Bronze', 'Gold', 'Playoff']
+                    return (game_obj.round in PLAYOFF_ROUNDS or 
+                            any(indicator in game_obj.round for indicator in playoff_indicators))
+                return True
+            
             # Use the EXACT same logic as year_view lines 714-779 - this includes ALL games (preliminary + playoffs)
             # Debug logging for 2016 - removed for now
             
             for game_id, resolved_game_this_iter in games_processed_map.items():
                 raw_game_obj_this_iter = games_raw_map.get(game_id)
                 if not raw_game_obj_this_iter:
+                    continue
+
+                # Filter out games based on game type - use the resolved game for filtering
+                # since playoff games have placeholder codes that get resolved
+                if not should_include_game(raw_game_obj_this_iter, resolved_game_this_iter, game_type):
                     continue
 
                 # CRITICAL FIX: The logic needs to determine which team (team1 or team2) in the RAW game
