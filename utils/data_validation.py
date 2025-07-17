@@ -238,7 +238,8 @@ def check_powerplay_penalty_consistency(game_display):
                 'original_duration_minutes': penalty_duration,  # Originale Dauer für 2+2 Strafen
                 'player': penalty_data.get('player_name', ''),
                 'id': penalty_data.get('id', 0),
-                'is_active': True  # Wird bei PP-Toren modifiziert
+                'is_active': True,  # Wird bei PP-Toren modifiziert
+                'cleared_segments': 0  # For tracking 2+2 penalties
             })
     
     # Sortiere nach Zeit
@@ -278,6 +279,12 @@ def check_powerplay_penalty_consistency(game_display):
                 penalty_start = penalty['time_seconds']
                 penalty_duration = penalty['duration_minutes'] * 60
                 
+                # Special handling for 2+2 penalties that have been partially cleared
+                if penalty['penalty_type'] == '2+2 Min' and penalty.get('cleared_segments', 0) == 1:
+                    # Only 2 minutes remain active after first segment was cleared
+                    # But we keep the full 4-minute window for checking
+                    penalty_duration = 240  # Keep full 4 minutes for checking
+                
                 # Finde die effektive Startzeit dieser Strafe
                 effective_start = penalty_start
                 
@@ -291,7 +298,7 @@ def check_powerplay_penalty_consistency(game_display):
                 effective_end = effective_start + penalty_duration
                 
                 # Prüfe, ob diese Strafe zum Zeitpunkt des Tors aktiv ist
-                if effective_start <= goal_time <= effective_end:
+                if effective_start <= goal_time < effective_end:  # Changed <= to < for end time
                     penalty_copy = penalty.copy()
                     penalty_copy['effective_start'] = effective_start
                     penalty_copy['effective_end'] = effective_end
@@ -332,7 +339,10 @@ def check_powerplay_penalty_consistency(game_display):
         # KRITISCH: Spezielle Behandlung von Strafen bei PP-Toren
         # Diese Änderungen müssen PERSISTENT sein für nachfolgende Tore!
         if goal_type == 'PP':
-            for penalty in penalties:  # Verwende die ursprüngliche penalties Liste
+            # Finde die älteste aktive Strafe des Gegners, die durch ein PP-Tor beendet werden kann
+            clearable_penalties = []
+            
+            for penalty in penalties:
                 if not penalty['is_active']:
                     continue
                 if penalty['team'] != goal_team:  # Strafe des Gegners
@@ -343,23 +353,53 @@ def check_powerplay_penalty_consistency(game_display):
                     
                     # Prüfe, ob diese Strafe zum Zeitpunkt des PP-Tors aktiv war
                     if penalty_start <= goal_time <= penalty_end:
+                        # Prüfe, ob diese Strafe durch ein PP-Tor beendet werden kann
                         if penalty_type == '5 Min + Spieldauer':
                             # Bei 5+Spieldauer: PP-Tor beendet die Strafe NICHT (Major Penalty)
-                            # Die Strafe läuft weiter
+                            pass
+                        elif penalty_type == '5 Min':
+                            # Regular 5 Min penalties: NEVER cleared by goals, always run full time
                             pass
                         elif penalty_type == '2+2 Min':
-                            # Bei 2+2 Min: PP-Tor in den ersten 2 Minuten reduziert auf 2 Min
-                            time_since_penalty_start = goal_time - penalty_start
-                            if time_since_penalty_start <= 120:  # Ersten 2 Minuten (120 Sekunden)
-                                # Strafe wird auf 2 Minuten reduziert
-                                penalty['duration_minutes'] = 2
-                            else:
-                                # Nach den ersten 2 Minuten: Strafe endet normal
-                                penalty['is_active'] = False
+                            # 2+2 Min penalties können teilweise oder ganz beendet werden
+                            clearable_penalties.append(penalty)
                         elif penalty['duration_minutes'] < 5:
-                            # Minor Penalties (< 5 Min): Strafe endet bei PP-Tor
-                            penalty['is_active'] = False
-                        # Major Penalties (>= 5 Min aber nicht 5+Spieldauer): Strafe läuft weiter
+                            # Minor Penalties (< 5 Min): Können durch PP-Tor beendet werden
+                            clearable_penalties.append(penalty)
+            
+            # Beende nur die älteste clearable Strafe (earliest start time)
+            if clearable_penalties:
+                oldest_penalty = min(clearable_penalties, key=lambda p: p['time_seconds'])
+                penalty_type = oldest_penalty['penalty_type']
+                penalty_start = oldest_penalty['time_seconds']
+                
+                if penalty_type == '2+2 Min':
+                    # Bei 2+2 Min: Spezielle Regel für PP-Tore
+                    time_since_penalty_start = goal_time - penalty_start
+                    
+                    # Check if this penalty has already been partially cleared
+                    if 'cleared_segments' not in oldest_penalty:
+                        oldest_penalty['cleared_segments'] = 0
+                    
+                    if oldest_penalty['cleared_segments'] == 0:
+                        # First PP goal handling
+                        if time_since_penalty_start <= 120:  # Within first 2 minutes
+                            # Goal in first 2 minutes: clears first segment only
+                            oldest_penalty['cleared_segments'] = 1
+                            # Penalty continues for second 2-minute segment
+                        elif time_since_penalty_start <= 240:  # Between 2-4 minutes
+                            # Goal after 2 minutes: clears entire penalty
+                            oldest_penalty['is_active'] = False
+                        else:
+                            # Goal after 4 minutes - penalty already expired
+                            oldest_penalty['is_active'] = False
+                    elif oldest_penalty['cleared_segments'] == 1:
+                        # Second PP goal (only possible if first goal was in first 2 minutes)
+                        # This clears the remaining 2-minute segment
+                        oldest_penalty['is_active'] = False
+                elif oldest_penalty['duration_minutes'] < 5:
+                    # Minor Penalties (< 5 Min): Strafe endet bei PP-Tor
+                    oldest_penalty['is_active'] = False
     
     return warnings
 
@@ -397,31 +437,39 @@ def analyze_powerplay_situation(active_penalties, goal_team, team1_code, team2_c
     Returns:
         dict mit 'type' ('pp', 'sh', '4on4', 'even') und Details
     """
-    # Zähle Strafen pro Team (bereits korrekt gefiltert)
+    # Separiere Strafen pro Team
     team1_penalties = [p for p in active_penalties if p['team'] == team1_code]
     team2_penalties = [p for p in active_penalties if p['team'] == team2_code]
-    
-    team1_penalty_count = len(team1_penalties)
-    team2_penalty_count = len(team2_penalties)
     
     # Bestimme welches Team das Tor geschossen hat
     goal_team_penalties = team1_penalties if goal_team == team1_code else team2_penalties
     opponent_penalties = team2_penalties if goal_team == team1_code else team1_penalties
     
-    goal_team_penalty_count = len(goal_team_penalties)
-    opponent_penalty_count = len(opponent_penalties)
+    # Berechne die effektive Spielersituation auf dem Eis
+    # Basis: 5 Spieler pro Team
+    goal_team_players = 5
+    opponent_players = 5
     
-    if goal_team_penalty_count == 0 and opponent_penalty_count == 0:
-        return {'type': 'even'}
-    elif goal_team_penalty_count > 0 and opponent_penalty_count == 0:
-        return {'type': 'sh', 'goal_team_penalties': goal_team_penalty_count}
-    elif goal_team_penalty_count == 0 and opponent_penalty_count > 0:
-        return {'type': 'pp', 'opponent_penalties': opponent_penalty_count}
-    elif goal_team_penalty_count > 0 and opponent_penalty_count > 0:
-        # Beide Teams haben Strafen - normalerweise 4-on-4
-        return {'type': '4on4', 'goal_team_penalties': goal_team_penalty_count, 'opponent_penalties': opponent_penalty_count}
+    # Reduziere Spieler basierend auf aktiven Strafen
+    # Berücksichtige dabei, dass Major Penalties (5+Spieldauer) nicht gleichzeitig Minor Penalties aufheben
+    for penalty in goal_team_penalties:
+        goal_team_players -= 1
+    
+    for penalty in opponent_penalties:
+        opponent_players -= 1
+    
+    # Bestimme die Situation basierend auf der Spieleranzahl
+    if goal_team_players == opponent_players:
+        if goal_team_players == 5:
+            return {'type': 'even'}
+        else:
+            return {'type': '4on4', 'goal_team_penalties': len(goal_team_penalties), 'opponent_penalties': len(opponent_penalties)}
+    elif goal_team_players > opponent_players:
+        return {'type': 'pp', 'opponent_penalties': len(opponent_penalties)}
     else:
-        return {'type': 'unknown'}
+        return {'type': 'sh', 'goal_team_penalties': len(goal_team_penalties)}
+    
+    return {'type': 'unknown'}
 
 
 def get_expected_goal_types(pp_situation):

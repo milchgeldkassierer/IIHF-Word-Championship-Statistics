@@ -2543,15 +2543,31 @@ $(document).ready(function(){
         if (resultType === 'OT' || resultType === 'SO') {
             const form = document.getElementById(`sogEditForm-${gameId}`);
             if (form) {
-                const team1OtShots = parseInt(form.elements['team1_p4_shots']?.value) || 0;
-                const team2OtShots = parseInt(form.elements['team2_p4_shots']?.value) || 0;
-                const totalOtShots = team1OtShots + team2OtShots;
+                // Check if there are any SOG entries for periods 1-3
+                let hasRegulationSOG = false;
                 
-                if (totalOtShots === 0) {
-                    return {
-                        valid: false,
-                        message: `Spiele nach ${resultType === 'OT' ? 'Verlängerung' : 'Penalties'} müssen mindestens 1 Schuss in der OT-Spalte haben.`
-                    };
+                for (let p = 1; p <= 3; p++) {
+                    const team1Shots = parseInt(form.elements[`team1_p${p}_shots`]?.value) || 0;
+                    const team2Shots = parseInt(form.elements[`team2_p${p}_shots`]?.value) || 0;
+                    
+                    if (team1Shots > 0 || team2Shots > 0) {
+                        hasRegulationSOG = true;
+                        break;
+                    }
+                }
+                
+                // Only validate SOG for OT if there are SOG entries in periods 1-3
+                if (hasRegulationSOG) {
+                    const team1OtShots = parseInt(form.elements['team1_p4_shots']?.value) || 0;
+                    const team2OtShots = parseInt(form.elements['team2_p4_shots']?.value) || 0;
+                    const totalOtShots = team1OtShots + team2OtShots;
+                    
+                    if (totalOtShots === 0) {
+                        return {
+                            valid: false,
+                            message: `Spiele nach ${resultType === 'OT' ? 'Verlängerung' : 'Penalties'} müssen mindestens 1 Schuss in der OT-Spalte haben.`
+                        };
+                    }
                 }
             }
         }
