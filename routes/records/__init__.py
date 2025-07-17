@@ -53,17 +53,26 @@ record_bp = Blueprint('record_bp', __name__)
 
 @record_bp.route('/records')
 def records_view():
-    """Rekorde-Seite mit verschiedenen Rekordkategorien"""
+    """Rekorde-Seite mit verschiedenen Rekordkategorien - Optimized version"""
     
-    longest_win_streak = get_longest_win_streak()
-    longest_loss_streak = get_longest_loss_streak()
-    longest_scoring_streak = get_longest_scoring_streak()
-    longest_shutout_streak = get_longest_shutout_streak()
-    longest_goalless_streak = get_longest_goalless_streak()
+    # Get shared records data once instead of calling get_all_resolved_games() 17 times
+    from .utils import get_records_data
+    records_data = get_records_data()
     
-    highest_victory = get_highest_victory()
-    most_goals_game = get_most_goals_game()
+    # Call record functions with shared data where possible
+    longest_win_streak = get_longest_win_streak(records_data)
+    longest_loss_streak = get_longest_loss_streak(records_data)
+    longest_scoring_streak = get_longest_scoring_streak(records_data)
+    longest_shutout_streak = get_longest_shutout_streak(records_data)
+    longest_goalless_streak = get_longest_goalless_streak(records_data)
     
+    # Use shared data for game records
+    highest_victory = get_highest_victory(records_data)
+    most_goals_game = get_most_goals_game(records_data)
+    most_frequent_matchup = get_most_frequent_matchup(records_data)
+    
+    # These functions haven't been updated yet, so call them normally
+    # TODO: Update these functions to use shared data for even better performance
     fastest_goal = get_fastest_goal()
     fastest_hattrick = get_fastest_hattrick()
     
@@ -84,8 +93,6 @@ def records_view():
     most_goals_player_tournament = get_most_goals_player_tournament()
     most_assists_player_tournament = get_most_assists_player_tournament()
     most_penalty_minutes_tournament = get_most_penalty_minutes_tournament()
-    
-    most_frequent_matchup = get_most_frequent_matchup()
     
     return render_template('records.html',
                            longest_win_streak=longest_win_streak,

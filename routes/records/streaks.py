@@ -2,9 +2,12 @@ from collections import defaultdict
 from .utils import get_all_resolved_games
 
 
-def get_longest_win_streak():
+def get_longest_win_streak(records_data=None):
     """Berechnet die längste Siegesserie über alle Turniere"""
-    resolved_games = get_all_resolved_games()
+    if records_data is None:
+        resolved_games = get_all_resolved_games()
+    else:
+        resolved_games = records_data['resolved_games']
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 
@@ -89,9 +92,12 @@ def get_longest_win_streak():
     return top_3_results
 
 
-def get_longest_loss_streak():
+def get_longest_loss_streak(records_data=None):
     """Berechnet die längste Niederlagenserie über alle Turniere"""
-    resolved_games = get_all_resolved_games()
+    if records_data is None:
+        resolved_games = get_all_resolved_games()
+    else:
+        resolved_games = records_data['resolved_games']
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 
@@ -176,9 +182,12 @@ def get_longest_loss_streak():
     return top_3_results
 
 
-def get_longest_scoring_streak():
+def get_longest_scoring_streak(records_data=None):
     """Berechnet die längste Serie mit mindestens 1 Tor"""
-    resolved_games = get_all_resolved_games()
+    if records_data is None:
+        resolved_games = get_all_resolved_games()
+    else:
+        resolved_games = records_data['resolved_games']
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 
@@ -265,9 +274,12 @@ def get_longest_scoring_streak():
     return top_3_results
 
 
-def get_longest_shutout_streak():
+def get_longest_shutout_streak(records_data=None):
     """Berechnet die längste Serie ohne Gegentor"""
-    resolved_games = get_all_resolved_games()
+    if records_data is None:
+        resolved_games = get_all_resolved_games()
+    else:
+        resolved_games = records_data['resolved_games']
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 
@@ -354,9 +366,12 @@ def get_longest_shutout_streak():
     return top_3_results
 
 
-def get_longest_goalless_streak():
+def get_longest_goalless_streak(records_data=None):
     """Berechnet die längste Serie ohne eigenes Tor"""
-    resolved_games = get_all_resolved_games()
+    if records_data is None:
+        resolved_games = get_all_resolved_games()
+    else:
+        resolved_games = records_data['resolved_games']
     resolved_games.sort(key=lambda x: (
         x['year'] or 0, 
         x['game'].date or '1900-01-01', 

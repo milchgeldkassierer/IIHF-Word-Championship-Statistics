@@ -4,9 +4,12 @@ from utils import is_code_final
 from .utils import get_all_resolved_games
 
 
-def get_highest_victory():
+def get_highest_victory(records_data=None):
     """Findet die TOP 3 höchsten Siege (größte Tordifferenzen)"""
-    resolved_games = get_all_resolved_games()
+    if records_data is None:
+        resolved_games = get_all_resolved_games()
+    else:
+        resolved_games = records_data['resolved_games']
     
     if not resolved_games:
         return []
@@ -70,9 +73,12 @@ def get_highest_victory():
     return top_3_results
 
 
-def get_most_goals_game():
+def get_most_goals_game(records_data=None):
     """Findet die TOP 3 Spiele mit den meisten Toren"""
-    resolved_games = get_all_resolved_games()
+    if records_data is None:
+        resolved_games = get_all_resolved_games()
+    else:
+        resolved_games = records_data['resolved_games']
     
     if not resolved_games:
         return []
@@ -125,9 +131,12 @@ def get_most_goals_game():
     return top_3_results
 
 
-def get_most_frequent_matchup():
+def get_most_frequent_matchup(records_data=None):
     """Findet die TOP 3 häufigsten Duelle über alle Turniere"""
-    resolved_games = get_all_resolved_games()
+    if records_data is None:
+        resolved_games = get_all_resolved_games()
+    else:
+        resolved_games = records_data['resolved_games']
     
     if not resolved_games:
         return []

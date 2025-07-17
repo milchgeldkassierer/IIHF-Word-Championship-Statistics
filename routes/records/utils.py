@@ -490,3 +490,20 @@ def get_resolved_team_info(team_code, game=None):
     iso_code = TEAM_ISO_CODES.get(team_code)
     
     return team_code, iso_code
+
+
+def get_records_data():
+    """
+    Centralized function that processes all resolved games once and returns
+    data structures needed for all record calculations. This eliminates the
+    need for each record function to call get_all_resolved_games() individually.
+    
+    Returns:
+        dict: Contains all necessary data structures for record calculations
+    """
+    resolved_games = get_all_resolved_games()
+    
+    return {
+        'resolved_games': resolved_games,
+        # Add more processed data structures here as needed by record functions
+    }
