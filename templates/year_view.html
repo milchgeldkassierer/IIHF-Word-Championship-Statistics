@@ -439,6 +439,12 @@
             border-color: #718096 !important;
             color: #e2e8f0;
         }
+        
+        body.dark-mode #qfPairingsPreview {
+            background-color: #4a5568 !important;
+            border-color: #718096 !important;
+            color: #e2e8f0 !important;
+        }
     </style>
     <script>
         try {
@@ -576,7 +582,155 @@
         {# Spiele pro Runde #}
         {% for round_name, games_in_round in games_by_round.items() %}
         <div class="tab-pane fade {% if not standings and loop.first %}show active{% endif %}" id="{{ round_name|replace(' ', '-')|lower }}" role="tabpanel" aria-labelledby="{{ round_name|replace(' ', '-')|lower }}-tab">
-            {% if round_name == 'Semifinals' %}
+            {% if round_name == 'Quarterfinals' %}
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2>{{ round_name }}</h2>
+                {% if games_in_round|length >= 4 %}
+                    {% set qf_games_with_results = [] %}
+                    {% set all_prelim_complete = true %}
+                    
+                    {# Check if any QF games have results #}
+                    {% for game in games_in_round %}
+                        {% if game.team1_score is not none %}
+                            {% set _ = qf_games_with_results.append(game) %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {# Check if all preliminary games are complete #}
+                    {% for round_name_check, games_check in games_by_round.items() %}
+                        {% if round_name_check == 'Preliminary Round' %}
+                            {% for game_check in games_check %}
+                                {% if game_check.team1_score is none %}
+                                    {% set all_prelim_complete = false %}
+                                {% endif %}
+                            {% endfor %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-toggle="collapse" data-target="#quarterfinalSeedingAdjust" aria-expanded="false" aria-controls="quarterfinalSeedingAdjust" id="adjustQFSeedingBtn">
+                        <i class="fas fa-cogs"></i> Seeding Anpassen
+                        <i class="fas fa-exclamation-triangle text-warning ml-1" id="qfCustomSeedingWarning" style="display: none;" title=""></i>
+                    </button>
+                {% endif %}
+            </div>
+            
+            {# Quarterfinal Seeding Adjustment Section #}
+            {% if games_in_round|length >= 4 %}
+            <div class="collapse mb-4" id="quarterfinalSeedingAdjust">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-trophy"></i> Quarterfinal Seeding Anpassung
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="qfSeedingMessageArea" class="mb-3"></div>
+                        
+                        <div class="alert alert-info" role="alert">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Standard IIHF-Paarungen:</strong><br>
+                            QF1: A1 vs B4, QF2: A2 vs B3, QF3: A3 vs B2, QF4: A4 vs B1<br>
+                            <small class="text-muted">Sie können die Positionen innerhalb jeder Gruppe neu zuordnen (z.B. A-Teams bleiben in A-Positionen)</small>
+                        </div>
+                        
+                        <form id="adjustQFSeedingForm">
+                            <input type="hidden" name="year_id" value="{{ year.id }}">
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>Gruppe A Positionen:</h6>
+                                    <div class="form-group">
+                                        <label for="qfA1">A1 (spielt gegen B4):</label>
+                                        <select class="form-control form-control-sm qf-seed-select" name="A1" id="qfA1" data-group="A" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="qfA2">A2 (spielt gegen B3):</label>
+                                        <select class="form-control form-control-sm qf-seed-select" name="A2" id="qfA2" data-group="A" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="qfA3">A3 (spielt gegen B2):</label>
+                                        <select class="form-control form-control-sm qf-seed-select" name="A3" id="qfA3" data-group="A" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="qfA4">A4 (spielt gegen B1):</label>
+                                        <select class="form-control form-control-sm qf-seed-select" name="A4" id="qfA4" data-group="A" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Gruppe B Positionen:</h6>
+                                    <div class="form-group">
+                                        <label for="qfB1">B1 (spielt gegen A4):</label>
+                                        <select class="form-control form-control-sm qf-seed-select" name="B1" id="qfB1" data-group="B" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="qfB2">B2 (spielt gegen A3):</label>
+                                        <select class="form-control form-control-sm qf-seed-select" name="B2" id="qfB2" data-group="B" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="qfB3">B3 (spielt gegen A2):</label>
+                                        <select class="form-control form-control-sm qf-seed-select" name="B3" id="qfB3" data-group="B" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="qfB4">B4 (spielt gegen A1):</label>
+                                        <select class="form-control form-control-sm qf-seed-select" name="B4" id="qfB4" data-group="B" required>
+                                            <option value="">Team wählen...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <strong>Neue Quarterfinal-Paarungen:</strong>
+                                <div id="qfPairingsPreview" class="mt-2 p-2 bg-light border rounded">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div>QF1: <span class="font-weight-bold" id="qfA1Display">-</span> vs <span class="font-weight-bold" id="qfB4Display">-</span></div>
+                                            <div>QF2: <span class="font-weight-bold" id="qfA2Display">-</span> vs <span class="font-weight-bold" id="qfB3Display">-</span></div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div>QF3: <span class="font-weight-bold" id="qfA3Display">-</span> vs <span class="font-weight-bold" id="qfB2Display">-</span></div>
+                                            <div>QF4: <span class="font-weight-bold" id="qfA4Display">-</span> vs <span class="font-weight-bold" id="qfB1Display">-</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group mt-3">
+                                <label for="qfSeedingReason">Grund für die Seeding-Änderung (optional):</label>
+                                <textarea class="form-control form-control-sm" name="reason" id="qfSeedingReason" rows="2" placeholder="Beschreiben Sie hier, warum Sie das Seeding manuell geändert haben..."></textarea>
+                            </div>
+                            
+                            <div class="mt-3">
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-save"></i> Seeding Speichern
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm ml-2" id="resetQFSeedingBtn">
+                                    <i class="fas fa-undo"></i> Zurücksetzen
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm ml-2" data-toggle="collapse" data-target="#quarterfinalSeedingAdjust">
+                                    Abbrechen
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% elif round_name == 'Semifinals' %}
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h2>{{ round_name }}</h2>
                 {% if games_in_round|length >= 2 %}
@@ -624,24 +778,15 @@
                         {% endif %}
                     {% endfor %}
                     
-                    {% if sf_teams_resolved|length >= 4 and sf_games_with_results|length == 0 %}
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-toggle="collapse" data-target="#semifinalSeedingAdjust" aria-expanded="false" aria-controls="semifinalSeedingAdjust" id="adjustSeedingBtn">
                         <i class="fas fa-cogs"></i> Seeding Anpassen
+                        <i class="fas fa-exclamation-triangle text-warning ml-1" id="sfCustomSeedingWarning" style="display: none;" title=""></i>
                     </button>
-                    {% elif sf_games_with_results|length > 0 %}
-                    <button class="btn btn-outline-secondary btn-sm" disabled title="Seeding kann nicht mehr geändert werden - Semifinal-Spiele haben bereits begonnen">
-                        <i class="fas fa-cogs"></i> Seeding Anpassen
-                    </button>
-                    {% else %}
-                    <button class="btn btn-outline-secondary btn-sm" disabled title="Seeding kann erst angepasst werden, wenn alle Semifinal-Teams feststehen">
-                        <i class="fas fa-cogs"></i> Seeding Anpassen
-                    </button>
-                    {% endif %}
                 {% endif %}
             </div>
             
             {# Semifinal Seeding Adjustment Section #}
-            {% if games_in_round|length >= 2 and sf_teams_resolved|length >= 4 and sf_games_with_results|length == 0 %}
+            {% if games_in_round|length >= 2 %}
             <div class="collapse mb-4" id="semifinalSeedingAdjust">
                 <div class="card">
                     <div class="card-header">
@@ -703,6 +848,11 @@
                                     <div id="pairing1">Spiel 1: <span class="font-weight-bold" id="seed1Display">-</span> vs <span class="font-weight-bold" id="seed4Display">-</span></div>
                                     <div id="pairing2">Spiel 2: <span class="font-weight-bold" id="seed2Display">-</span> vs <span class="font-weight-bold" id="seed3Display">-</span></div>
                                 </div>
+                            </div>
+                            
+                            <div class="form-group mt-3">
+                                <label for="sfSeedingReason">Grund für die Seeding-Änderung (optional):</label>
+                                <textarea class="form-control form-control-sm" name="reason" id="sfSeedingReason" rows="2" placeholder="Beschreiben Sie hier, warum Sie das Seeding manuell geändert haben..."></textarea>
                             </div>
                             
                             <div class="mt-3">
@@ -3274,7 +3424,26 @@ $(document).ready(function(){
             populateSeedingDropdowns(teams.resolved_teams);
             displayCurrentSeeding(teams.seeding);
             setInitialSeedingValues(teams.seeding);
+            
+            // Load existing reason if any
+            loadSeedingReason();
         });
+    }
+    
+    async function loadSeedingReason() {
+        try {
+            const response = await fetch(`/year/${current_year_id}/semifinal_seeding/status`);
+            const data = await response.json();
+            
+            if (data.has_custom_seeding && data.reason) {
+                $('#sfSeedingReason').val(data.reason);
+            } else {
+                $('#sfSeedingReason').val('');
+            }
+        } catch (error) {
+            console.error('Error loading seeding reason:', error);
+            $('#sfSeedingReason').val('');
+        }
     }
 
     async function getCurrentSemifinalTeams() {
@@ -3467,7 +3636,8 @@ $(document).ready(function(){
                 seed2: $('#seed2').val(),
                 seed3: $('#seed3').val(),
                 seed4: $('#seed4').val()
-            }
+            },
+            reason: $('#sfSeedingReason').val()
         };
         
         // Show loading message
@@ -3484,6 +3654,7 @@ $(document).ready(function(){
         .then(data => {
             if (data.success) {
                 showSeedingMessage('success', data.message || 'Seeding wurde erfolgreich geändert!');
+                $(document).trigger('seedingSaved');
                 
                 // Update the original seeding for reset functionality
                 originalSeeding = {
@@ -3529,6 +3700,290 @@ $(document).ready(function(){
         }
     }
     // --- End of Semifinal Seeding Adjustment Feature ---
+
+    // --- Quarterfinal Seeding Adjustment Feature ---
+    let currentQFSeeding = {};
+    let groupStandings = {};
+    
+    // Initialize QF seeding form when collapse is shown
+    $('#quarterfinalSeedingAdjust').on('show.bs.collapse', function () {
+        initializeQFSeedingForm();
+    });
+
+    function initializeQFSeedingForm() {
+        // Get current QF seeding and group standings
+        getCurrentQFSeeding().then(data => {
+            currentQFSeeding = data.seeding;
+            groupStandings = data.group_standings;
+            
+            populateQFSeedingDropdowns();
+            setInitialQFSeedingValues();
+            
+            // Load existing reason if any
+            loadQFSeedingReason();
+        });
+    }
+    
+    async function loadQFSeedingReason() {
+        try {
+            const response = await fetch(`/year/${current_year_id}/quarterfinal_seeding/status`);
+            const data = await response.json();
+            
+            if (data.has_custom_seeding && data.reason) {
+                $('#qfSeedingReason').val(data.reason);
+            } else {
+                $('#qfSeedingReason').val('');
+            }
+        } catch (error) {
+            console.error('Error loading QF seeding reason:', error);
+            $('#qfSeedingReason').val('');
+        }
+    }
+
+    async function getCurrentQFSeeding() {
+        try {
+            const response = await fetch(`/year/${current_year_id}/quarterfinal_seeding`);
+            const data = await response.json();
+            
+            if (data.success) {
+                return {
+                    seeding: data.seeding,
+                    group_standings: data.group_standings
+                };
+            } else {
+                console.error('Failed to get QF seeding:', data.message);
+                return {seeding: {}, group_standings: {}};
+            }
+        } catch (error) {
+            console.error('Error fetching QF seeding:', error);
+            return {seeding: {}, group_standings: {}};
+        }
+    }
+
+    function populateQFSeedingDropdowns() {
+        // Populate Group A dropdowns
+        const groupATeams = groupStandings['Group A'] || [];
+        const groupBTeams = groupStandings['Group B'] || [];
+        
+        // Clear and populate Group A selects
+        $('.qf-seed-select[data-group="A"]').each(function() {
+            const $select = $(this);
+            $select.empty().append('<option value="">Team wählen...</option>');
+            
+            groupATeams.forEach(team => {
+                const isoCode = window.TEAM_ISO_CODES_FROM_TEMPLATE[team];
+                const flagImg = isoCode ? `🏴 ` : '';
+                $select.append(`<option value="${team}">${flagImg}${team}</option>`);
+            });
+        });
+        
+        // Clear and populate Group B selects
+        $('.qf-seed-select[data-group="B"]').each(function() {
+            const $select = $(this);
+            $select.empty().append('<option value="">Team wählen...</option>');
+            
+            groupBTeams.forEach(team => {
+                const isoCode = window.TEAM_ISO_CODES_FROM_TEMPLATE[team];
+                const flagImg = isoCode ? `🏴 ` : '';
+                $select.append(`<option value="${team}">${flagImg}${team}</option>`);
+            });
+        });
+    }
+
+    function setInitialQFSeedingValues() {
+        // Set current values
+        for (const [position, team] of Object.entries(currentQFSeeding)) {
+            $(`#qf${position}`).val(team);
+        }
+        
+        updateQFPairingsPreview();
+    }
+
+    // Update pairings preview when dropdown values change
+    $(document).on('change', '.qf-seed-select', function() {
+        updateQFPairingsPreview();
+        validateQFSeedingSelection();
+    });
+
+    function updateQFPairingsPreview() {
+        // Update all display spans
+        ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4'].forEach(position => {
+            const team = $(`#qf${position}`).val();
+            $(`#qf${position}Display`).text(team || '-');
+        });
+    }
+
+    function validateQFSeedingSelection() {
+        // Check for duplicates within each group
+        const groupASelections = [];
+        const groupBSelections = [];
+        
+        $('.qf-seed-select[data-group="A"]').each(function() {
+            const val = $(this).val();
+            if (val) groupASelections.push(val);
+        });
+        
+        $('.qf-seed-select[data-group="B"]').each(function() {
+            const val = $(this).val();
+            if (val) groupBSelections.push(val);
+        });
+        
+        const hasDuplicatesA = new Set(groupASelections).size !== groupASelections.length;
+        const hasDuplicatesB = new Set(groupBSelections).size !== groupBSelections.length;
+        const allSelectedA = groupASelections.length === 4;
+        const allSelectedB = groupBSelections.length === 4;
+        
+        const submitBtn = $('#adjustQFSeedingForm button[type="submit"]');
+        
+        if (hasDuplicatesA || hasDuplicatesB) {
+            showQFSeedingMessage('warning', 'Jedes Team kann nur einmal ausgewählt werden.');
+            submitBtn.prop('disabled', true);
+        } else if (!allSelectedA || !allSelectedB) {
+            $('#qfSeedingMessageArea').empty();
+            submitBtn.prop('disabled', true);
+        } else {
+            $('#qfSeedingMessageArea').empty();
+            submitBtn.prop('disabled', false);
+        }
+    }
+
+    // Reset QF seeding
+    $('#resetQFSeedingBtn').on('click', function() {
+        if (confirm('Möchten Sie das Quarterfinal-Seeding auf die Standard-Gruppenergebnisse zurücksetzen? Dies löscht alle manuellen Anpassungen.')) {
+            fetch(`/year/${current_year_id}/quarterfinal_seeding`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showQFSeedingMessage('success', data.message || 'QF-Seeding wurde auf Standard zurückgesetzt.');
+                    
+                    // Reload the page
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    showQFSeedingMessage('danger', data.message || 'Fehler beim Zurücksetzen des QF-Seedings.');
+                }
+            })
+            .catch(error => {
+                console.error('Error resetting QF seeding:', error);
+                showQFSeedingMessage('danger', 'Netzwerkfehler beim Zurücksetzen des QF-Seedings.');
+            });
+        }
+    });
+
+    // Handle QF seeding form submission
+    $('#adjustQFSeedingForm').on('submit', function(event) {
+        event.preventDefault();
+        
+        const seedingData = {
+            seeding: {
+                A1: $('#qfA1').val(),
+                A2: $('#qfA2').val(),
+                A3: $('#qfA3').val(),
+                A4: $('#qfA4').val(),
+                B1: $('#qfB1').val(),
+                B2: $('#qfB2').val(),
+                B3: $('#qfB3').val(),
+                B4: $('#qfB4').val()
+            },
+            reason: $('#qfSeedingReason').val()
+        };
+        
+        // Show loading message
+        showQFSeedingMessage('info', 'QF-Seeding wird gespeichert...');
+        
+        fetch(`/year/${current_year_id}/quarterfinal_seeding`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(seedingData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showQFSeedingMessage('success', data.message || 'QF-Seeding wurde erfolgreich geändert!');
+                $(document).trigger('seedingSaved');
+                
+                // Reload the page after a short delay
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            } else {
+                showQFSeedingMessage('danger', data.message || 'Fehler beim Speichern des QF-Seedings.');
+            }
+        })
+        .catch(error => {
+            console.error('Error adjusting QF seeding:', error);
+            showQFSeedingMessage('danger', 'Netzwerkfehler beim Speichern des QF-Seedings.');
+        });
+    });
+
+    function showQFSeedingMessage(type, message) {
+        const alertClass = type === 'success' ? 'alert-success' : 
+                          type === 'warning' ? 'alert-warning' : 
+                          type === 'info' ? 'alert-info' : 'alert-danger';
+        
+        const messageHtml = `<div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                                ${message}
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                             </div>`;
+        
+        $('#qfSeedingMessageArea').html(messageHtml);
+        
+        // Auto-dismiss success messages after 3 seconds
+        if (type === 'success') {
+            setTimeout(() => {
+                $('#qfSeedingMessageArea .alert').alert('close');
+            }, 3000);
+        }
+    }
+    // --- End of Quarterfinal Seeding Adjustment Feature ---
+
+    // --- Custom Seeding Status Check ---
+    async function checkCustomSeedingStatus() {
+        try {
+            // Check SF custom seeding
+            const sfResponse = await fetch(`/year/${current_year_id}/semifinal_seeding/status`);
+            const sfData = await sfResponse.json();
+            
+            if (sfData.has_custom_seeding) {
+                const warning = $('#sfCustomSeedingWarning');
+                const reason = sfData.reason || 'Benutzerdefiniertes Seeding aktiv';
+                warning.attr('title', `⚠️ Manuelles Seeding aktiv: ${reason}`);
+                warning.show();
+            } else {
+                $('#sfCustomSeedingWarning').hide();
+            }
+            
+            // Check QF custom seeding
+            const qfResponse = await fetch(`/year/${current_year_id}/quarterfinal_seeding/status`);
+            const qfData = await qfResponse.json();
+            
+            if (qfData.has_custom_seeding) {
+                const warning = $('#qfCustomSeedingWarning');
+                const reason = qfData.reason || 'Benutzerdefiniertes Seeding aktiv';
+                warning.attr('title', `⚠️ Manuelles Seeding aktiv: ${reason}`);
+                warning.show();
+            } else {
+                $('#qfCustomSeedingWarning').hide();
+            }
+        } catch (error) {
+            console.error('Error checking custom seeding status:', error);
+        }
+    }
+
+    // Check custom seeding status on page load
+    checkCustomSeedingStatus();
+    
+    // Re-check status when seeding is saved
+    $(document).on('seedingSaved', function() {
+        setTimeout(checkCustomSeedingStatus, 500);
+    });
 
 });
 </script>

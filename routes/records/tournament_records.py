@@ -102,17 +102,17 @@ def get_most_final_appearances():
     if not team_final_appearances:
         return []
     
-    max_appearances = max(team_final_appearances.values())
+    # Sort teams by appearances (descending) and return top 3
+    sorted_teams = sorted(team_final_appearances.items(), key=lambda x: x[1], reverse=True)
     results = []
     
-    for team, appearances in team_final_appearances.items():
-        if appearances == max_appearances:
-            years = sorted(list(set(team_final_years[team]))) if team in team_final_years else []
-            results.append({
-                'team': team, 
-                'appearances': appearances,
-                'years': years
-            })
+    for team, appearances in sorted_teams[:3]:
+        years = sorted(list(set(team_final_years[team]))) if team in team_final_years else []
+        results.append({
+            'team': team, 
+            'appearances': appearances,
+            'years': years
+        })
     
     return results
 
@@ -149,17 +149,17 @@ def get_record_champion():
     if not team_championships:
         return []
     
-    max_championships = max(team_championships.values())
+    # Sort teams by championships (descending) and return top 3
+    sorted_teams = sorted(team_championships.items(), key=lambda x: x[1], reverse=True)
     results = []
     
-    for team, championships in team_championships.items():
-        if championships == max_championships:
-            years = sorted(team_championship_years[team]) if team in team_championship_years else []
-            results.append({
-                'team': team, 
-                'championships': championships,
-                'years': years
-            })
+    for team, championships in sorted_teams[:3]:
+        years = sorted(team_championship_years[team]) if team in team_championship_years else []
+        results.append({
+            'team': team, 
+            'championships': championships,
+            'years': years
+        })
     
     return results
 

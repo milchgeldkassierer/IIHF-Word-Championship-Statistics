@@ -61,6 +61,18 @@ def _build_playoff_team_map_for_year(
                 host_placeholder_group_rank = f"H{team_stat.rank_in_group}" 
                 playoff_team_map[host_placeholder_group_rank] = team_stat.name
 
+    # Check for custom QF seeding and apply if exists
+    try:
+        from routes.year.seeding import get_custom_qf_seeding_from_db
+        custom_qf_seeding = get_custom_qf_seeding_from_db(year_obj.id)
+        if custom_qf_seeding:
+            # Override standard group position mappings with custom seeding
+            for position, team_name in custom_qf_seeding.items():
+                playoff_team_map[position] = team_name
+    except ImportError:
+        # In case of circular import or missing function, continue with standard seeding
+        pass
+
 
     # 2. Iteratively resolve W(game_num) and L(game_num)
     max_passes = 10 

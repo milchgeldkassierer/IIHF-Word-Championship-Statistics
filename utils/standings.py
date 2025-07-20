@@ -293,6 +293,21 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
     """
     final_ranking = {}
     
+    # Load custom QF seeding if it exists to ensure proper team resolution
+    custom_qf_seeding = None
+    try:
+        from routes.year.seeding import get_custom_qf_seeding_from_db
+        custom_qf_seeding = get_custom_qf_seeding_from_db(year_obj_for_map.id)
+    except ImportError:
+        pass  # Continue without custom QF seeding if import fails
+    
+    # Create a copy of playoff_map and integrate custom QF seeding
+    enhanced_playoff_map = playoff_map.copy() if playoff_map else {}
+    if custom_qf_seeding:
+        # Apply custom QF seeding to playoff map for proper team resolution
+        for position, team_name in custom_qf_seeding.items():
+            enhanced_playoff_map[position] = team_name
+    
     def trace_team_from_medal_games():
         sf_games = [g for g in games_this_year if g.round == "Semifinals" and g.team1_score is not None and g.team2_score is not None]
         
@@ -307,11 +322,11 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
             team1_resolved = sf_game.team1_code
             team2_resolved = sf_game.team2_code
             
-            # CRITICAL FIX: Resolve seed1, seed2, seed3, seed4 placeholders using playoff_map for custom seeding
-            if not is_code_final(team1_resolved) and playoff_map and team1_resolved in playoff_map:
-                team1_resolved = playoff_map.get(team1_resolved, team1_resolved)
-            if not is_code_final(team2_resolved) and playoff_map and team2_resolved in playoff_map:
-                team2_resolved = playoff_map.get(team2_resolved, team2_resolved)
+            # CRITICAL FIX: Resolve seed1, seed2, seed3, seed4 placeholders using enhanced_playoff_map for custom seeding
+            if not is_code_final(team1_resolved) and enhanced_playoff_map and team1_resolved in enhanced_playoff_map:
+                team1_resolved = enhanced_playoff_map.get(team1_resolved, team1_resolved)
+            if not is_code_final(team2_resolved) and enhanced_playoff_map and team2_resolved in enhanced_playoff_map:
+                team2_resolved = enhanced_playoff_map.get(team2_resolved, team2_resolved)
             
             # Bei manuell geändertem Seeding sind die Teams jetzt aufgelöst
             if is_code_final(team1_resolved) and is_code_final(team2_resolved):
@@ -331,11 +346,11 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
             # SF2 should be seed2 vs seed3 (standard IIHF format)
             
             # First, check if we can determine SF1/SF2 from the teams playing
-            if playoff_map and 'seed1' in playoff_map and 'seed2' in playoff_map and 'seed3' in playoff_map and 'seed4' in playoff_map:
-                q1_team = playoff_map['seed1']
-                q2_team = playoff_map['seed2']
-                q3_team = playoff_map['seed3']
-                q4_team = playoff_map['seed4']
+            if enhanced_playoff_map and 'seed1' in enhanced_playoff_map and 'seed2' in enhanced_playoff_map and 'seed3' in enhanced_playoff_map and 'seed4' in enhanced_playoff_map:
+                q1_team = enhanced_playoff_map['seed1']
+                q2_team = enhanced_playoff_map['seed2']
+                q3_team = enhanced_playoff_map['seed3']
+                q4_team = enhanced_playoff_map['seed4']
                 
                 # Check which teams are in this semifinal
                 teams_in_game = {team1_resolved, team2_resolved}
@@ -472,13 +487,13 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
         
         qf_results = {}
         
-        # CRITICAL: Use playoff_map for seed1-seed4 if provided (contains custom seeding)
-        if playoff_map and all(key in playoff_map for key in ['seed1', 'seed2', 'seed3', 'seed4']):
-            # Use playoff_map (which contains custom seeding)
-            qf_results["seed1"] = playoff_map['seed1']
-            qf_results["seed2"] = playoff_map['seed2']
-            qf_results["seed3"] = playoff_map['seed3']
-            qf_results["seed4"] = playoff_map['seed4']
+        # CRITICAL: Use enhanced_playoff_map for seed1-seed4 if provided (contains custom seeding)
+        if enhanced_playoff_map and all(key in enhanced_playoff_map for key in ['seed1', 'seed2', 'seed3', 'seed4']):
+            # Use enhanced_playoff_map (which contains custom seeding)
+            qf_results["seed1"] = enhanced_playoff_map['seed1']
+            qf_results["seed2"] = enhanced_playoff_map['seed2']
+            qf_results["seed3"] = enhanced_playoff_map['seed3']
+            qf_results["seed4"] = enhanced_playoff_map['seed4']
         elif len(qf_winner_stats) >= 4:
             # Fallback to calculated seeding if no playoff_map provided
             qf_results["seed1"] = qf_winner_stats[0]['team']
@@ -489,6 +504,9 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
         def resolve_code(code):
             if is_code_final(code):
                 return code
+            # Check enhanced_playoff_map first (includes custom QF seeding)
+            if code in enhanced_playoff_map:
+                return enhanced_playoff_map[code]
             if code in team_map:
                 return team_map[code]
             if code in qf_results:
@@ -517,7 +535,7 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
 
     resolve_team = trace_team_from_medal_games()
     
-    def calculate_medals_simple(games_this_year, playoff_map):
+    def calculate_medals_simple(games_this_year, enhanced_playoff_map):
         """
         Simple medal calculation following IIHF rules:
         - SF1 = Game 61: seed1 vs seed4
@@ -527,23 +545,23 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
         """
         final_ranking = {}
         
-        # Check if we have custom seeding in playoff_map
-        has_seeding = (playoff_map and 
-                       'seed1' in playoff_map and 
-                       'seed2' in playoff_map and 
-                       'seed3' in playoff_map and 
-                       'seed4' in playoff_map and
-                       is_code_final(playoff_map['seed1']))
+        # Check if we have custom seeding in enhanced_playoff_map
+        has_seeding = (enhanced_playoff_map and 
+                       'seed1' in enhanced_playoff_map and 
+                       'seed2' in enhanced_playoff_map and 
+                       'seed3' in enhanced_playoff_map and 
+                       'seed4' in enhanced_playoff_map and
+                       is_code_final(enhanced_playoff_map['seed1']))
         
-        # If no proper seeding in playoff_map, build it from QF results
+        # If no proper seeding in enhanced_playoff_map, build it from QF results
         if not has_seeding:
             from .seeding_helpers import get_custom_seeding_from_db
             try:
                 custom_seeding = get_custom_seeding_from_db(year_obj_for_map.id)
                 if custom_seeding:
                     # Use custom seeding
-                    playoff_map = playoff_map.copy() if playoff_map else {}
-                    playoff_map.update(custom_seeding)
+                    enhanced_playoff_map = enhanced_playoff_map.copy() if enhanced_playoff_map else {}
+                    enhanced_playoff_map.update(custom_seeding)
                 else:
                     # Build seeding from QF winners for years without custom seeding
                     qf_games = [g for g in games_this_year if g.round == "Quarterfinals" and g.team1_score is not None and g.team2_score is not None]
@@ -630,13 +648,13 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
                         
                         
                         if len(qf_teams_resolved) == 4:
-                            playoff_map = playoff_map.copy() if playoff_map else {}
-                            playoff_map['seed1'] = qf_teams_resolved[0][0]
-                            playoff_map['seed2'] = qf_teams_resolved[1][0]
-                            playoff_map['seed3'] = qf_teams_resolved[2][0]
-                            playoff_map['seed4'] = qf_teams_resolved[3][0]
+                            enhanced_playoff_map = enhanced_playoff_map.copy() if enhanced_playoff_map else {}
+                            enhanced_playoff_map['seed1'] = qf_teams_resolved[0][0]
+                            enhanced_playoff_map['seed2'] = qf_teams_resolved[1][0]
+                            enhanced_playoff_map['seed3'] = qf_teams_resolved[2][0]
+                            enhanced_playoff_map['seed4'] = qf_teams_resolved[3][0]
             except:
-                pass  # Continue with original playoff_map
+                pass  # Continue with original enhanced_playoff_map
         
         # Step 1: Find SF games (always game 61 and 62)
         sf1_game = next((g for g in games_this_year if g.game_number == 61 and g.team1_score is not None), None)
@@ -646,10 +664,10 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
             return final_ranking
         
         # Step 2: Resolve seed1-seed4 to actual teams
-        seed1 = playoff_map.get('seed1', 'seed1') if playoff_map else 'seed1'
-        seed2 = playoff_map.get('seed2', 'seed2') if playoff_map else 'seed2'
-        seed3 = playoff_map.get('seed3', 'seed3') if playoff_map else 'seed3'
-        seed4 = playoff_map.get('seed4', 'seed4') if playoff_map else 'seed4'
+        seed1 = enhanced_playoff_map.get('seed1', 'seed1') if enhanced_playoff_map else 'seed1'
+        seed2 = enhanced_playoff_map.get('seed2', 'seed2') if enhanced_playoff_map else 'seed2'
+        seed3 = enhanced_playoff_map.get('seed3', 'seed3') if enhanced_playoff_map else 'seed3'
+        seed4 = enhanced_playoff_map.get('seed4', 'seed4') if enhanced_playoff_map else 'seed4'
         
         
         # Step 3: Determine SF winners and losers
@@ -757,7 +775,7 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
     sf_losers = []
     
     # Simple medal calculation for all years (both custom seeding and automatic)
-    final_ranking = calculate_medals_simple(games_this_year, playoff_map)
+    final_ranking = calculate_medals_simple(games_this_year, enhanced_playoff_map)
     
     # Berechne die restlichen Plätze (5-16)
     prelim_stats_map = {}

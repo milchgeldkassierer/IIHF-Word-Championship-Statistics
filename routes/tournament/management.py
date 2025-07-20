@@ -125,7 +125,7 @@ def index():
                 else:
                     flash(f'No fixture file like "{year_str}.json" found for "{target_year_obj.name} ({target_year_obj.year})". Existing games remain.', 'info')
 
-    all_years_db = ChampionshipYear.query.order_by(ChampionshipYear.year.desc(), ChampionshipYear.name).all()
+    all_years_db = ChampionshipYear.query.order_by(ChampionshipYear.year.asc(), ChampionshipYear.name).all()
     
     for year in all_years_db:
         year.stats = get_tournament_statistics(year)
@@ -151,7 +151,7 @@ def index():
                 if year_part.isdigit():
                     all_found_years.add(year_part)
     
-    sorted_fixture_years = sorted(list(all_found_years), reverse=True)
+    sorted_fixture_years = sorted(list(all_found_years))
 
     # Import locally to avoid circular imports
     from routes.standings.medals import get_medal_tally_data

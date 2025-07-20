@@ -117,6 +117,17 @@ def get_medal_tally_data():
                 if h_tcs and team_s.name in h_tcs: 
                     current_year_playoff_map[f"H{team_s.rank_in_group}"] = team_s.name
 
+        # Check for custom QF seeding and apply if exists
+        try:
+            from routes.year.seeding import get_custom_qf_seeding_from_db
+            custom_qf_seeding = get_custom_qf_seeding_from_db(year_id_iter)
+            if custom_qf_seeding:
+                # Override standard group position mappings with custom seeding
+                for position, team_name in custom_qf_seeding.items():
+                    current_year_playoff_map[position] = team_name
+        except ImportError:
+            pass  # If import fails, continue without custom QF seeding
+
         if qf_gns and len(qf_gns) >= 4:
             for i, qf_game_num in enumerate(qf_gns[:4]):
                 current_year_playoff_map[f"Q{i+1}"] = f"W({qf_game_num})"

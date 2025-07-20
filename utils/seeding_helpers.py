@@ -20,7 +20,12 @@ def get_custom_seeding_from_db(year_id):
         overrule = GameOverrule.query.filter_by(game_id=special_game_id).first()
         if overrule and overrule.reason:
             try:
-                return json.loads(overrule.reason)
+                data = json.loads(overrule.reason)
+                # Handle both old format (just seeding) and new format (seeding + reason)
+                if isinstance(data, dict) and 'seeding' in data:
+                    return data['seeding']  # New format - return just the seeding part
+                else:
+                    return data  # Old format (backward compatibility)
             except:
                 return None
         return None

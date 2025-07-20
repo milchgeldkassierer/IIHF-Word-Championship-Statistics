@@ -266,6 +266,7 @@
                     <div class="card-body">
                         {% if most_consecutive_tournament_wins %}
                             {% for wins in most_consecutive_tournament_wins %}
+                                {% if wins.streak >= 2 %}
                                 <div class="record-item">
                                     {% if team_iso_codes[wins.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[wins.team] }}.png" alt="{{ wins.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
                                     <strong>{{ wins.team }}</strong>: {{ wins.streak }} Turniersiege in Folge<br>
@@ -273,6 +274,7 @@
                                         <small class="text-muted">Jahre: {{ wins.years|join(', ') }}</small>
                                     {% endif %}
                                 </div>
+                                {% endif %}
                             {% endfor %}
                         {% else %}
                             <p class="text-muted">Keine Daten verfügbar</p>
@@ -285,11 +287,11 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-crown text-warning"></i> Rekordsieger</h5>
+                        <h5><i class="fas fa-crown text-warning"></i> TOP 3 Rekordsieger</h5>
                     </div>
                     <div class="card-body">
                         {% if record_champion %}
-                            {% for champion in record_champion %}
+                            {% for champion in record_champion[:3] %}
                                 <div class="record-item">
                                     {% if team_iso_codes[champion.team] %}<img src="https://flagcdn.com/w20/{{ team_iso_codes[champion.team] }}.png" alt="{{ champion.team }}" style="margin-right: 5px; vertical-align: middle;">{% endif %}
                                     <strong>{{ champion.team }}</strong>: {{ champion.championships }} Turniersiege<br>
@@ -309,7 +311,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-medal text-info"></i> Meiste Finalteilnahmen</h5>
+                        <h5><i class="fas fa-medal text-info"></i> TOP 3 Meiste Finalteilnahmen</h5>
                     </div>
                     <div class="card-body">
                         {% if most_final_appearances %}
@@ -517,7 +519,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-star text-warning"></i> Meiste Scorer in einem Turnier</h5>
+                        <h5><i class="fas fa-star text-warning"></i> TOP 3 Meiste Scorer in einem Turnier</h5>
                     </div>
                     <div class="card-body">
                         {% if most_scorers_tournament %}
@@ -540,7 +542,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-hockey-puck text-success"></i> Meiste Tore in einem Turnier</h5>
+                        <h5><i class="fas fa-hockey-puck text-success"></i> TOP 3 Meiste Tore in einem Turnier</h5>
                     </div>
                     <div class="card-body">
                         {% if most_goals_player_tournament %}
@@ -563,7 +565,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-hands-helping text-primary"></i> Meiste Assists in einem Turnier</h5>
+                        <h5><i class="fas fa-hands-helping text-primary"></i> TOP 3 Meiste Assists in einem Turnier</h5>
                     </div>
                     <div class="card-body">
                         {% if most_assists_player_tournament %}
@@ -586,7 +588,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-exclamation-triangle text-danger"></i> Meiste Strafminuten in einem Turnier</h5>
+                        <h5><i class="fas fa-exclamation-triangle text-danger"></i> TOP 3 Meiste Strafminuten in einem Turnier</h5>
                     </div>
                     <div class="card-body">
                         {% if most_penalty_minutes_tournament %}

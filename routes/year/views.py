@@ -10,7 +10,7 @@ from routes.records.utils import get_all_resolved_games
 
 # Import the blueprint from the parent package
 from . import year_bp
-from .seeding import get_custom_seeding_from_db
+from .seeding import get_custom_seeding_from_db, get_custom_qf_seeding_from_db
 
 @year_bp.route('/<int:year_id>', methods=['GET', 'POST'])
 def year_view(year_id):
@@ -124,6 +124,13 @@ def year_view(year_id):
             group_letter = group_letter_match.group(1)
             for i, s_team_obj in enumerate(group_standings_list): 
                 playoff_team_map[f'{group_letter}{i+1}'] = s_team_obj.name 
+    
+    # Check for custom QF seeding and apply if exists
+    custom_qf_seeding = get_custom_qf_seeding_from_db(year_id)
+    if custom_qf_seeding:
+        # Override standard group position mappings with custom seeding
+        for position, team_name in custom_qf_seeding.items():
+            playoff_team_map[position] = team_name
     
     games_dict_by_num = {g.game_number: g for g in games_raw}
     
