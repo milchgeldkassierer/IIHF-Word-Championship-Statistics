@@ -3,7 +3,7 @@ from collections import defaultdict
 import re, os, json
 from constants import TEAM_ISO_CODES, PIM_MAP
 from utils import resolve_game_participants, get_resolved_team_code, is_code_final, _apply_head_to_head_tiebreaker
-from utils.data_validation import calculate_tournament_penalty_minutes
+from utils.data_validation import calculate_tournament_penalty_minutes, calculate_tournament_penalty_count
 from sqlalchemy import func, case
 
 
@@ -18,8 +18,10 @@ def get_tournament_statistics(year_obj):
             'completed_games': 0, 
             'goals': 0, 
             'penalties': 0, 
+            'penalty_count': 0,
             'avg_goals_per_game': 0.0,
             'avg_penalties_per_game': 0.0,
+            'avg_penalty_count_per_game': 0.0,
             'winner': None
         }
     
@@ -32,17 +34,20 @@ def get_tournament_statistics(year_obj):
     # Calculate goals and penalties for completed games only
     goals_count = 0
     penalties_count = 0
+    penalty_count = 0
     
     if completed_games > 0:
         # Calculate goals from game scores (same method as records.html)
         goals_count = sum(game.team1_score + game.team2_score for game in completed_games_list)
         
-        # Calculate PIM using centralized function
+        # Calculate penalty statistics using centralized functions
         penalties_count = calculate_tournament_penalty_minutes(year_obj.id, completed_games_only=True)
+        penalty_count = calculate_tournament_penalty_count(year_obj.id, completed_games_only=True)
     
     # Calculate averages
     avg_goals_per_game = round(goals_count / completed_games, 2) if completed_games > 0 else 0.0
     avg_penalties_per_game = round(penalties_count / completed_games, 2) if completed_games > 0 else 0.0
+    avg_penalty_count_per_game = round(penalty_count / completed_games, 2) if completed_games > 0 else 0.0
     
     winner = None
     if completed_games == total_games and total_games > 0:
@@ -79,8 +84,10 @@ def get_tournament_statistics(year_obj):
         'completed_games': completed_games,
         'goals': goals_count,
         'penalties': penalties_count,
+        'penalty_count': penalty_count,
         'avg_goals_per_game': avg_goals_per_game,
         'avg_penalties_per_game': avg_penalties_per_game,
+        'avg_penalty_count_per_game': avg_penalty_count_per_game,
         'winner': winner
     }
 

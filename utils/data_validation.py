@@ -36,6 +36,32 @@ def calculate_tournament_penalty_minutes(year_id, completed_games_only=True):
     return query.scalar() or 0
 
 
+def calculate_tournament_penalty_count(year_id, completed_games_only=True):
+    """
+    Centralized function to calculate penalty count (number of penalties) for a tournament.
+    
+    Args:
+        year_id: The tournament year ID
+        completed_games_only: Whether to only count completed games (default: True)
+    
+    Returns:
+        Total number of penalties for the tournament
+    """
+    query = db.session.query(
+        func.count(Penalty.id)
+    ).join(Game, Penalty.game_id == Game.id).filter(
+        Game.year_id == year_id
+    )
+    
+    if completed_games_only:
+        query = query.filter(
+            Game.team1_score.isnot(None),
+            Game.team2_score.isnot(None)
+        )
+    
+    return query.scalar() or 0
+
+
 def check_game_data_consistency(game_display, sog_data=None):
     """
     Checks a game display object for data consistency issues.
@@ -53,21 +79,26 @@ def check_game_data_consistency(game_display, sog_data=None):
     # Check if scores are set but result_type is missing
     if game_display.team1_score is not None and game_display.team2_score is not None:
         if not game_display.result_type:
-            warnings.append(f"Game {game_display.id}: Scores are set but result_type is missing")
-            scores_fully_match_data = False
-        
-        # Check if scores match result_type logic
-        if game_display.result_type == 'REG' and game_display.team1_score == game_display.team2_score:
-            warnings.append(f"Game {game_display.id}: Regular time result but scores are tied")
-            scores_fully_match_data = False
+            # Special case: if scores are tied, be more lenient - just warn, don't fail validation
+            if game_display.team1_score == game_display.team2_score:
+                warnings.append(f"Game {game_display.id}: Tied score - please set result type to 'OT' or 'SO' (hockey games cannot end in ties)")
+                # Don't set scores_fully_match_data = False here to allow continued data entry
+            else:
+                warnings.append(f"Game {game_display.id}: Scores are set but result_type is missing - please set game type (REG/OT/SO)")
+                scores_fully_match_data = False
+        else:
+            # Check if scores match result_type logic (only when result_type IS set)
+            if game_display.result_type == 'REG' and game_display.team1_score == game_display.team2_score:
+                warnings.append(f"Game {game_display.id}: Regular time result but scores are tied - hockey games cannot end in ties")
+                scores_fully_match_data = False
         
         if game_display.result_type in ['OT', 'SO'] and abs(game_display.team1_score - game_display.team2_score) != 1:
             warnings.append(f"Game {game_display.id}: Overtime/Shootout result but score difference is not 1")
             scores_fully_match_data = False
     
-    # Check if result_type is set but scores are missing
+    # Check if result_type is set but scores are missing - this should also fail validation
     if game_display.result_type and (game_display.team1_score is None or game_display.team2_score is None):
-        warnings.append(f"Game {game_display.id}: Result type is set but scores are missing")
+        warnings.append(f"Game {game_display.id}: Result type '{game_display.result_type}' is set but scores are missing - please enter final scores")
         scores_fully_match_data = False
     
     # Check team codes
@@ -118,22 +149,30 @@ def check_game_data_consistency(game_display, sog_data=None):
         
         # NEW: Check overtime goal rules
         if overtime_goals:
-            # If there are overtime goals, the result_type must be OT
-            if game_display.result_type != 'OT':
-                warnings.append(f"Game {game_display.id}: Goal(s) scored after 60:00 but result type is not 'OT' (n.V.)")
+            # If there are overtime goals, the result_type MUST be OT (or SO)
+            if game_display.result_type == 'REG':
+                # HARD FAILURE: Goals after 60:00 cannot be in regular time
+                warnings.append(f"Game {game_display.id}: Goal(s) scored after 60:00 but result type is 'REG' - must be 'OT' or 'SO'")
                 scores_fully_match_data = False
             
-            # The team that scored the overtime goal must have exactly 1 more goal than the other team
-            score_diff = abs(game_display.team1_score - game_display.team2_score)
-            if score_diff != 1:
-                warnings.append(f"Game {game_display.id}: Overtime goal(s) present but score difference is not 1")
-                scores_fully_match_data = False
-            
-            # Verify that the winning team actually scored the overtime goal
-            winning_team = game_display.team1_code if game_display.team1_score > game_display.team2_score else game_display.team2_code
-            overtime_scoring_teams = [goal['team'] for goal in overtime_goals]
-            if winning_team not in overtime_scoring_teams:
-                warnings.append(f"Game {game_display.id}: Overtime goal(s) not scored by the winning team")
+            # Only enforce strict overtime rules if result_type is actually set to OT
+            if game_display.result_type == 'OT':
+                # The team that scored the overtime goal must have exactly 1 more goal than the other team
+                score_diff = abs(game_display.team1_score - game_display.team2_score)
+                if score_diff != 1:
+                    warnings.append(f"Game {game_display.id}: Overtime result but score difference is not 1")
+                    scores_fully_match_data = False
+                
+                # Verify that the winning team actually scored the overtime goal
+                winning_team = game_display.team1_code if game_display.team1_score > game_display.team2_score else game_display.team2_code
+                overtime_scoring_teams = [goal['team'] for goal in overtime_goals]
+                if winning_team not in overtime_scoring_teams:
+                    warnings.append(f"Game {game_display.id}: Overtime goal(s) not scored by the winning team")
+                    scores_fully_match_data = False
+        else:
+            # NEW: If NO overtime goals but result_type is OT, this should fail validation
+            if game_display.result_type == 'OT':
+                warnings.append(f"Game {game_display.id}: Result type is 'OT' but no goals scored after 60:00 - game likely ended in regulation")
                 scores_fully_match_data = False
         
         # Check if goals match scores

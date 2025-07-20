@@ -21,6 +21,7 @@ def calculate_overall_tournament_summary() -> Dict[str, Any]:
     completed_games = 0
     total_goals = 0
     total_penalties = 0
+    total_penalty_count = 0
     
     # Für jedes Turnier die Statistiken sammeln
     for year in all_years:
@@ -50,8 +51,12 @@ def calculate_overall_tournament_summary() -> Dict[str, Any]:
                 Penalty.game_id.in_(completed_game_ids)
             ).scalar() or 0
             
+            # Count total number of penalties
+            year_penalty_count = Penalty.query.filter(Penalty.game_id.in_(completed_game_ids)).count()
+            
             total_goals += year_goals
             total_penalties += year_penalties
+            total_penalty_count += year_penalty_count
     
     return {
         'total_tournaments': total_tournaments,
@@ -59,5 +64,6 @@ def calculate_overall_tournament_summary() -> Dict[str, Any]:
         'completed_games': completed_games,
         'total_goals': total_goals,
         'total_penalties': total_penalties,
+        'total_penalty_count': total_penalty_count,
         'completion_percentage': round((completed_games / total_games * 100) if total_games > 0 else 0, 1)
     }
