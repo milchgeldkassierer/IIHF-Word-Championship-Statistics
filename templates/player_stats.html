@@ -137,6 +137,17 @@
         pointer-events: none;
         transition: opacity 0.3s ease;
     }
+    
+    /* Year range styling */
+    .year-range {
+        font-size: 0.65em;
+        color: #6c757d;
+        font-weight: normal;
+    }
+    
+    body.dark-mode .year-range {
+        color: #a0aec0;
+    }
 </style>
 {% endblock %}
 
@@ -197,7 +208,7 @@
                             {% for player in scoring_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
-                                    <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
+                                    <td>{{ player.last_name|upper }} {{ player.first_name }} {% if player.overall_year_range %}<span class="year-range">{{ player.overall_year_range }}</span>{% endif %}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
@@ -248,7 +259,7 @@
                             {% for player in goal_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
-                                    <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
+                                    <td>{{ player.last_name|upper }} {{ player.first_name }} {% if player.goal_year_range %}<span class="year-range">{{ player.goal_year_range }}</span>{% endif %}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
@@ -294,7 +305,7 @@
                             {% for player in assist_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
-                                    <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
+                                    <td>{{ player.last_name|upper }} {{ player.first_name }} {% if player.assist_year_range %}<span class="year-range">{{ player.assist_year_range }}</span>{% endif %}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
@@ -342,7 +353,7 @@
                             {% for player in pim_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
-                                    <td>{{ player.last_name|upper }} {{ player.first_name }}</td>
+                                    <td>{{ player.last_name|upper }} {{ player.first_name }} {% if player.pim_year_range %}<span class="year-range">{{ player.pim_year_range }}</span>{% endif %}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
@@ -533,7 +544,7 @@ $(document).ready(function() {
             const rowHtml = `
                 <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
                     <td>${index + 1}</td>
-                    <td>${player.last_name.toUpperCase()} ${player.first_name}</td>
+                    <td>${player.last_name.toUpperCase()} ${player.first_name} ${player.overall_year_range ? `<span class="year-range">${player.overall_year_range}</span>` : ''}</td>
                     <td>${flagHtml}${player.team_code || 'N/A'}</td>
                     <td data-value="${player.goals}">${player.goals}</td>
                     <td data-value="${player.assists}">${player.assists}</td>
@@ -556,7 +567,7 @@ $(document).ready(function() {
             const rowHtml = `
                 <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
                     <td>${index + 1}</td>
-                    <td>${player.last_name.toUpperCase()} ${player.first_name}</td>
+                    <td>${player.last_name.toUpperCase()} ${player.first_name} ${player.goal_year_range ? `<span class="year-range">${player.goal_year_range}</span>` : ''}</td>
                     <td>${flagHtml}${player.team_code || 'N/A'}</td>
                     <td data-value="${player.goals}"><strong>${player.goals}</strong></td>
                 </tr>
@@ -577,7 +588,7 @@ $(document).ready(function() {
             const rowHtml = `
                 <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
                     <td>${index + 1}</td>
-                    <td>${player.last_name.toUpperCase()} ${player.first_name}</td>
+                    <td>${player.last_name.toUpperCase()} ${player.first_name} ${player.assist_year_range ? `<span class="year-range">${player.assist_year_range}</span>` : ''}</td>
                     <td>${flagHtml}${player.team_code || 'N/A'}</td>
                     <td data-value="${player.assists}"><strong>${player.assists}</strong></td>
                 </tr>
@@ -598,7 +609,7 @@ $(document).ready(function() {
             const rowHtml = `
                 <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
                     <td>${index + 1}</td>
-                    <td>${player.last_name.toUpperCase()} ${player.first_name}</td>
+                    <td>${player.last_name.toUpperCase()} ${player.first_name} ${player.pim_year_range ? `<span class="year-range">${player.pim_year_range}</span>` : ''}</td>
                     <td>${flagHtml}${player.team_code || 'N/A'}</td>
                     <td data-value="${player.pims}"><strong>${player.pims}</strong></td>
                 </tr>
