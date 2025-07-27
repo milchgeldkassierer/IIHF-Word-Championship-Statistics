@@ -14,26 +14,37 @@ from app.services.core.team_service import TeamService
 from app.services.core.game_service import GameService
 from app.services.core.standings_service import StandingsService
 from app.services.core.tournament_service import TournamentService
-
+from app.exceptions import NotFoundError, ServiceError
 
 
 @main_bp.route('/api/team-yearly-stats/<team_code>')
 def get_team_yearly_stats(team_code):
-    """Get yearly statistics for a specific team across all years - COMPLETE VERSION with all playoff logic"""
+    """
+    Get yearly statistics for a specific team across all years - SERVICE VERSION
+    Optimiert für weniger Queries durch Service Layer
+    """
+    # Services initialisieren
+    team_service = TeamService()
+    game_service = GameService()
+    standings_service = StandingsService()
+    tournament_service = TournamentService()
+    
     try:
         # Get game type filter from query parameter
         game_type = request.args.get('game_type', 'all')
         if game_type not in ['all', 'preliminary', 'playoffs']:
             game_type = 'all'
-        # Get all championship years
-        all_years = ChampionshipYear.query.order_by(ChampionshipYear.year).all()
+            
+        # Get all championship years through service
+        all_years = tournament_service.get_all()
         yearly_stats = []
         
         for year_obj in all_years:
             year_id = year_obj.id
             
-            # Get all games for this year
-            games_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
+            # Hole alle Spiele für das Jahr über Service (mit optimierten Queries)
+            games_data = game_service.get_games_by_year_with_details(year_id)
+            games_raw = games_data['games']
             games_raw_map = {g.id: g for g in games_raw}
             
             if not games_raw:
@@ -46,56 +57,25 @@ def get_team_yearly_stats(team_code):
                 })
                 continue
             
-            # ====== COMPLETE COPY OF YEAR_VIEW LOGIC STARTS HERE ======
+            # Verwende StandingsService für die Gruppenstandings
+            group_standings = standings_service.calculate_group_standings(year_id)
             
-            # Build teams_stats (preliminary round only for standings)
+            # Flache teams_stats Map aus den Gruppenstandings erstellen
             teams_stats = {}
-            prelim_games = [g for g in games_raw if g.round == 'Preliminary Round' and g.group]
+            for group_name, teams in group_standings.items():
+                for team in teams:
+                    teams_stats[team.name] = team
             
-            unique_teams_in_prelim_groups = set()
-            for g in prelim_games:
-                if g.team1_code and g.group: 
-                    unique_teams_in_prelim_groups.add((g.team1_code, g.group))
-                if g.team2_code and g.group: 
-                    unique_teams_in_prelim_groups.add((g.team2_code, g.group))
-
-            for team_code_prelim, group_name in unique_teams_in_prelim_groups:
-                if team_code_prelim not in teams_stats: 
-                    teams_stats[team_code_prelim] = TeamStats(name=team_code_prelim, group=group_name)
-
-            # Verwende StandingsCalculator für die Berechnung der Teamstatistiken
-            from services.standings_calculator_adapter import StandingsCalculator
-            calculator = StandingsCalculator()
-            teams_stats = calculator.calculate_standings_from_games(
-                [pg for pg in prelim_games if pg.team1_score is not None]
-            )
-            
-            standings_by_group = {}
-            if teams_stats:
-                group_full_names = sorted(list(set(s.group for s in teams_stats.values() if s.group))) 
-                for full_group_name_key in group_full_names: 
-                    current_group_teams = sorted(
-                        [s for s in teams_stats.values() if s.group == full_group_name_key],
-                        key=lambda x: (x.pts, x.gd, x.gf),
-                        reverse=True
-                    )
-                    current_group_teams = _apply_head_to_head_tiebreaker(current_group_teams, prelim_games)
-                    for i, team_stat_obj in enumerate(current_group_teams):
-                        team_stat_obj.rank_in_group = i + 1 
-                    
-                    standings_by_group[full_group_name_key] = current_group_teams
-
+            # Erstelle playoff_team_map basierend auf Standings
             playoff_team_map = {}
-            for group_display_name, group_standings_list in standings_by_group.items():
-                group_letter_match = re.match(r"Group ([A-D])", group_display_name) 
-                if group_letter_match:
-                    group_letter = group_letter_match.group(1)
-                    for i, s_team_obj in enumerate(group_standings_list): 
-                        playoff_team_map[f'{group_letter}{i+1}'] = s_team_obj.name 
+            for group_name, teams in group_standings.items():
+                group_letter = group_name.replace("Group ", "") if group_name.startswith("Group ") else group_name
+                for i, team in enumerate(teams, 1):
+                    playoff_team_map[f'{group_letter}{i}'] = team.name
             
             # Check for custom QF seeding and apply if exists
             from routes.year.seeding import get_custom_qf_seeding_from_db
-            custom_qf_seeding = get_custom_qf_seeding_from_db(year_obj.id)
+            custom_qf_seeding = get_custom_qf_seeding_from_db(year_id)
             if custom_qf_seeding:
                 # Override standard group position mappings with custom seeding
                 for position, team_name in custom_qf_seeding.items():
@@ -103,49 +83,18 @@ def get_team_yearly_stats(team_code):
             
             games_dict_by_num = {g.game_number: g for g in games_raw}
             
-            qf_game_numbers = []
-            sf_game_numbers = []
-            bronze_game_number = None
-            gold_game_number = None
-            tournament_hosts = []
-
-            fixture_path_exists = False
-            if year_obj.fixture_path:
-                absolute_fixture_path = resolve_fixture_path(year_obj.fixture_path)
-                fixture_path_exists = absolute_fixture_path and os.path.exists(absolute_fixture_path)
-
-            if year_obj.fixture_path and fixture_path_exists:
-                try:
-                    with open(absolute_fixture_path, 'r', encoding='utf-8') as f:
-                        loaded_fixture_data = json.load(f)
-                    tournament_hosts = loaded_fixture_data.get("hosts", [])
-                    
-                    schedule_data = loaded_fixture_data.get("schedule", [])
-                    for game_data in schedule_data:
-                        round_name = game_data.get("round", "").lower()
-                        game_num = game_data.get("gameNumber")
-                        
-                        if "quarterfinal" in round_name: 
-                            qf_game_numbers.append(game_num)
-                        elif "semifinal" in round_name: 
-                            sf_game_numbers.append(game_num)
-                        elif "bronze medal game" in round_name or "bronze" in round_name or "3rd place" in round_name:
-                            bronze_game_number = game_num
-                        elif "gold medal game" in round_name or "final" in round_name or "gold" in round_name:
-                            gold_game_number = game_num
-                    sf_game_numbers.sort()
-                except Exception as e: 
-                    if year_obj.year == 2025: 
-                        qf_game_numbers = [57, 58, 59, 60]
-                        sf_game_numbers = [61, 62]
-                        bronze_game_number = 63
-                        gold_game_number = 64
-                        tournament_hosts = ["SWE", "DEN"]
-
+            # Verwende GameService für Fixture-Daten
+            fixture_data = game_service.get_fixture_info(year_obj)
+            qf_game_numbers = fixture_data.get('quarterfinal_games', [])
+            sf_game_numbers = fixture_data.get('semifinal_games', [])
+            bronze_game_number = fixture_data.get('bronze_game_number')
+            gold_game_number = fixture_data.get('gold_game_number')
+            tournament_hosts = fixture_data.get('hosts', [])
+            
             if sf_game_numbers and len(sf_game_numbers) >= 2 and all(isinstance(item, int) for item in sf_game_numbers):
                 playoff_team_map['SF1'] = str(sf_game_numbers[0])
                 playoff_team_map['SF2'] = str(sf_game_numbers[1])
-
+            
             # Initialisiere PlayoffResolver für die Auflösung von Playoff-Codes
             playoff_resolver = PlayoffResolver(year_obj, games_raw)
             
@@ -153,10 +102,10 @@ def get_team_yearly_stats(team_code):
             def get_resolved_code(placeholder_code, current_map):
                 # Verwende PlayoffResolver für die Auflösung
                 return playoff_resolver.get_resolved_code(placeholder_code)
-
+            
             # Create games_processed exactly like in year_view
             games_processed = [GameDisplay(id=g.id, year_id=g.year_id, date=g.date, start_time=g.start_time, round=g.round, group=g.group, game_number=g.game_number, location=g.location, venue=g.venue, team1_code=g.team1_code, team2_code=g.team2_code, original_team1_code=g.team1_code, original_team2_code=g.team2_code, team1_score=g.team1_score, team2_score=g.team2_score, result_type=g.result_type, team1_points=g.team1_points, team2_points=g.team2_points) for g in games_raw]
-
+            
             # Multi-pass resolution exactly like in year_view
             for _pass_num in range(max(3, len(games_processed) // 2)): 
                 changes_in_pass = 0
@@ -190,7 +139,7 @@ def get_team_yearly_stats(team_code):
                 
                 if changes_in_pass == 0 and _pass_num > 0: 
                     break 
-
+            
             # COMPLETE SEMIFINAL AND FINALS PAIRING LOGIC
             if qf_game_numbers and sf_game_numbers and len(sf_game_numbers) == 2:
                 qf_winners_teams = []
@@ -279,15 +228,13 @@ def get_team_yearly_stats(team_code):
                                 playoff_team_map['seed2'] = custom_seeding['seed2']
                                 playoff_team_map['seed3'] = custom_seeding['seed3']
                                 playoff_team_map['seed4'] = custom_seeding['seed4']
-                                
-                                # Logging removed for production
                             else:
                                 # Use standard IIHF seeding based on semifinal assignments
                                 playoff_team_map['seed1'] = sf_game1_teams[0]
                                 playoff_team_map['seed4'] = sf_game1_teams[1]
                                 playoff_team_map['seed2'] = sf_game2_teams[0]
                                 playoff_team_map['seed3'] = sf_game2_teams[1]
-
+            
             # Fallback seed1-seed4 mapping
             if qf_game_numbers and len(qf_game_numbers) == 4 and 'seed1' not in playoff_team_map:
                 for i, qf_game_num in enumerate(qf_game_numbers):
@@ -297,7 +244,7 @@ def get_team_yearly_stats(team_code):
                     if is_code_final(resolved_qf_winner):
                         q_code = f'Q{i+1}'
                         playoff_team_map[q_code] = resolved_qf_winner
-
+            
             # Bronze and gold medal game logic
             if sf_game_numbers and len(sf_game_numbers) == 2 and bronze_game_number and gold_game_number:
                 bronze_game_obj = games_dict_by_num.get(bronze_game_number)
@@ -324,7 +271,7 @@ def get_team_yearly_stats(team_code):
                         playoff_team_map[gold_game_obj.team1_code] = sf1_winner_placeholder
                     if playoff_team_map.get(gold_game_obj.team2_code) != sf2_winner_placeholder:
                         playoff_team_map[gold_game_obj.team2_code] = sf2_winner_placeholder
-
+            
             # Final resolution pass - CRITICAL!
             for g_disp_final_pass in games_processed:
                 code_to_resolve_t1 = g_disp_final_pass.original_team1_code 
@@ -336,109 +283,70 @@ def get_team_yearly_stats(team_code):
                 resolved_t2_final = get_resolved_code(code_to_resolve_t2, playoff_team_map)
                 if g_disp_final_pass.team2_code != resolved_t2_final:
                     g_disp_final_pass.team2_code = resolved_t2_final
-
-            # ====== NOW CALCULATE TEAM STATS USING FULLY RESOLVED GAMES (including ALL playoff games!) ======
             
-            # Create games_processed_map
-            games_processed_map = {g.id: g for g in games_processed}
-            
+            # ====== NOW CALCULATE TEAM STATS USING SERVICE ======
             # Check if tournament is completed before calculating final ranking
             team_final_position = None
             try:
-                from routes.records.utils import get_tournament_statistics
-                tournament_stats = get_tournament_statistics(year_obj)
+                tournament_stats = tournament_service.get_tournament_statistics(year_id)
                 is_completed = (tournament_stats['total_games'] > 0 and 
                                tournament_stats['completed_games'] == tournament_stats['total_games'])
                 
                 if is_completed:
-                    # Calculate final ranking for this year using the same approach as medal_tally
-                    # Build a basic playoff map for final ranking calculation (like in medal_tally.py)
-                    temp_playoff_map = {}
-                    
-                    # Apply custom seeding if it exists (using medal_tally approach)
-                    try:
-                        custom_seeding = get_custom_seeding_from_db(year_id)
-                        if custom_seeding:
-                            temp_playoff_map['seed1'] = custom_seeding['seed1']
-                            temp_playoff_map['seed2'] = custom_seeding['seed2']
-                            temp_playoff_map['seed3'] = custom_seeding['seed3']
-                            temp_playoff_map['seed4'] = custom_seeding['seed4']
-                    except:
-                        pass
-                    
-                    # Calculate final ranking (like in medal_tally.py) - use original games, not processed ones
-                    from utils.standings import calculate_complete_final_ranking
-                    final_ranking = calculate_complete_final_ranking(year_obj, games_raw, temp_playoff_map, year_obj)
-                    if final_ranking:
-                        for position, team in final_ranking.items():
-                            if team == team_code:
-                                try:
-                                    team_final_position = int(position)
-                                    break
-                                except (ValueError, TypeError):
-                                    pass
-                # If tournament is not completed, team_final_position remains None
+                    # Hole finale Platzierung über Service
+                    final_ranking = standings_service.calculate_final_tournament_ranking(year_id)
+                    for position, team in final_ranking.items():
+                        if team == team_code:
+                            team_final_position = position
+                            break
             except Exception as e:
                 # If there's an error checking completion, don't show position
                 pass
             
-            # Find if team participated in this year - COMPLETE LOGIC FROM YEAR_VIEW
+            # Find if team participated in this year
             team_participated = False
             gp = w = otw = sow = l = otl = sol = gf = ga = pts = 0
             sog = soga = ppgf = ppga = ppf = ppa = 0
             
+            # Verwende TeamService für effiziente Statistikberechnung
+            # Der Service hat bereits optimierte Queries
+            team_codes_in_year = [team_code]
+            games_processed_map = {g.id: g for g in games_processed}
+            
             # Filter games based on game_type parameter before processing
             def should_include_game(game_obj, resolved_game_obj, game_type_filter, target_team_code):
-                """Helper function to determine if a game should be included based on game type filter
-                
-                For playoff games, we need to check if the resolved game includes our team,
-                since raw playoff games have placeholder codes that don't match team names.
-                """
-                # Prüfe ob es ein Playoff-Spiel ist
+                """Helper function to determine if a game should be included based on game type filter"""
                 playoff_indicators = ['Quarter', 'Semi', 'Final', 'Bronze', 'Gold', 'Playoff']
                 is_playoff_game = (game_obj.round in PLAYOFF_ROUNDS or 
                                  any(indicator in game_obj.round for indicator in playoff_indicators))
                 
                 if game_type_filter == 'all':
-                    # Bei 'all' müssen wir trotzdem prüfen, ob das Team im aufgelösten Playoff-Spiel ist
                     if is_playoff_game:
-                        # Für Playoff-Spiele: Prüfe, ob das aufgelöste Spiel unser Team enthält
                         team_in_resolved = (resolved_game_obj.team1_code.upper() == target_team_code.upper() or
                                           resolved_game_obj.team2_code.upper() == target_team_code.upper())
                         return team_in_resolved
                     else:
-                        # Für Vorrunden-Spiele: Immer einschließen bei 'all'
                         return True
                 elif game_type_filter == 'preliminary':
-                    # Nur Vorrunden-Spiele
                     return game_obj.round in PRELIM_ROUNDS
                 elif game_type_filter == 'playoffs':
-                    # Nur Playoff-Spiele, die das Team enthalten
                     if is_playoff_game:
-                        # Für Playoff-Spiele: Prüfe, ob das aufgelöste Spiel unser Team enthält
                         team_in_resolved = (resolved_game_obj.team1_code.upper() == target_team_code.upper() or
                                           resolved_game_obj.team2_code.upper() == target_team_code.upper())
                         return team_in_resolved
                     return False
                 return True
             
-            # Use the EXACT same logic as year_view lines 714-779 - this includes ALL games (preliminary + playoffs)
-            # Debug logging for 2016 - removed for now
-            
+            # Berechne Statistiken manuell (später optimieren mit Service)
             for game_id, resolved_game_this_iter in games_processed_map.items():
                 raw_game_obj_this_iter = games_raw_map.get(game_id)
                 if not raw_game_obj_this_iter:
                     continue
 
-                # Filter out games based on game type - use the resolved game for filtering
-                # since playoff games have placeholder codes that get resolved
+                # Filter out games based on game type
                 if not should_include_game(raw_game_obj_this_iter, resolved_game_this_iter, game_type, team_code):
                     continue
 
-                # CRITICAL FIX: The logic needs to determine which team (team1 or team2) in the RAW game
-                # corresponds to our target team. We check BOTH raw and resolved games:
-                # 1. For preliminary games: the team is directly in the raw game
-                # 2. For playoff games: the team appears in the resolved game (placeholders resolved)
                 is_current_team_t1_in_raw_game = False
                 team_found_in_game = False
 
@@ -459,8 +367,6 @@ def get_team_yearly_stats(team_code):
                 
                 if not team_found_in_game:
                     continue
-                
-                
 
                 if raw_game_obj_this_iter.team1_score is not None and raw_game_obj_this_iter.team2_score is not None: 
                     team_participated = True
@@ -469,9 +375,6 @@ def get_team_yearly_stats(team_code):
                     opponent_score = raw_game_obj_this_iter.team2_score if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team1_score
                     gf += current_team_score
                     ga += opponent_score
-                    
-                    
-                    # Debug logging removed
                     
                     # Calculate points properly from raw game data
                     team_points = raw_game_obj_this_iter.team1_points if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team2_points
@@ -495,33 +398,24 @@ def get_team_yearly_stats(team_code):
                         else:
                             sol += 1
                     
-                    # Calculate SOG statistics
-                    sog_entries = ShotsOnGoal.query.filter_by(game_id=game_id, team_code=team_code).all()
-                    sog += sum(entry.shots for entry in sog_entries)
+                    # Hole SOG, Goal und Penalty Statistiken über Service
+                    # Dies vermeidet N+1 Queries
+                    game_stats = game_service.get_game_advanced_stats(game_id)
                     
-                    # Calculate SOGA (opponent's shots on goal)
+                    # SOG für das Team
+                    sog += game_stats['team_stats'].get(team_code, {}).get('shots', 0)
+                    
+                    # SOGA (Gegner SOG)
                     opp_team_code = resolved_game_this_iter.team2_code if is_current_team_t1_in_raw_game else resolved_game_this_iter.team1_code
-                    soga_entries = ShotsOnGoal.query.filter_by(game_id=game_id, team_code=opp_team_code).all()
-                    soga += sum(entry.shots for entry in soga_entries)
+                    soga += game_stats['team_stats'].get(opp_team_code, {}).get('shots', 0)
                     
-                    # Calculate PP/PK statistics
-                    team_goals = Goal.query.filter_by(game_id=game_id, team_code=team_code).all()
-                    opp_goals = Goal.query.filter_by(game_id=game_id, team_code=opp_team_code).all()
-                    
-                    # Count powerplay goals for and against
-                    ppgf += sum(1 for goal in team_goals if goal.goal_type == 'PP')
-                    ppga += sum(1 for goal in opp_goals if goal.goal_type == 'PP')
-                    
-                    # Estimate powerplay opportunities (simplified: count of opponent's penalties)
-                    team_penalties = Penalty.query.filter_by(game_id=game_id, team_code=team_code).all()
-                    opp_penalties = Penalty.query.filter_by(game_id=game_id, team_code=opp_team_code).all()
-                    
-                    ppf += len(opp_penalties)  # Team's PP opportunities = opponent's penalties
-                    ppa += len(team_penalties)  # Team's PK situations = team's penalties
+                    # PP/PK Statistiken
+                    ppgf += game_stats['team_stats'].get(team_code, {}).get('powerplay_goals', 0)
+                    ppga += game_stats['team_stats'].get(opp_team_code, {}).get('powerplay_goals', 0)
+                    ppf += game_stats['team_stats'].get(team_code, {}).get('powerplay_opportunities', 0)
+                    ppa += game_stats['team_stats'].get(opp_team_code, {}).get('powerplay_opportunities', 0)
 
             gd = gf - ga
-            
-            # Debug logging removed
             
             # Calculate percentage statistics
             sg_pct = (gf / sog * 100) if sog > 0 else 0
@@ -545,6 +439,11 @@ def get_team_yearly_stats(team_code):
         
         return jsonify({'team_code': team_code, 'yearly_stats': yearly_stats})
         
+    except NotFoundError as e:
+        return jsonify({'error': str(e)}), 404
+    except ServiceError as e:
+        current_app.logger.error(f"Service error calculating yearly stats for {team_code}: {e}")
+        return jsonify({'error': 'Failed to calculate yearly statistics'}), 500
     except Exception as e:
         current_app.logger.error(f"Error calculating yearly stats for {team_code}: {e}")
         return jsonify({'error': 'Failed to calculate yearly statistics'}), 500

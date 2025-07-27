@@ -254,6 +254,7 @@
                         <div class="player-card">
                             <!-- Direct edit form (always visible) -->
                             <form method="POST" action="{{ url_for('main_bp.edit_players') }}" class="player-edit-form" data-player-id="{{ player.id }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <input type="hidden" name="player_id" value="{{ player.id }}">
                                 <div class="row align-items-end">
                                     <div class="col-md-4">
@@ -261,7 +262,7 @@
                                             <label for="first_name_{{ player.id }}">Vorname</label>
                                             <input type="text" class="form-control form-control-sm" 
                                                    id="first_name_{{ player.id }}" name="first_name" 
-                                                   value="{{ player.first_name }}" required>
+                                                   value="{{ player.first_name|e }}" required maxlength="50" pattern="[a-zA-ZäöüßÄÖÜ\s\-\']+">
                                         </div>
                                     </div>
                                     <div class="col-md-4">
@@ -269,7 +270,7 @@
                                             <label for="last_name_{{ player.id }}">Nachname</label>
                                             <input type="text" class="form-control form-control-sm" 
                                                    id="last_name_{{ player.id }}" name="last_name" 
-                                                   value="{{ player.last_name }}" required>
+                                                   value="{{ player.last_name|e }}" required maxlength="50" pattern="[a-zA-ZäöüßÄÖÜ\s\-\']+">
                                         </div>
                                     </div>
                                     <div class="col-md-3">
@@ -304,20 +305,21 @@
                     <i class="fas fa-plus-circle"></i> Neuen Spieler hinzufügen
                 </h4>
                 <form method="POST" action="{{ url_for('main_bp.add_player_global') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <input type="hidden" name="team_code" value="{{ selected_country }}">
                     <div class="row">
                         <div class="col-md-4">
                             <div class="form-group">
                                 <label for="new_first_name">Vorname</label>
                                 <input type="text" class="form-control" id="new_first_name" 
-                                       name="first_name" required>
+                                       name="first_name" required maxlength="50" pattern="[a-zA-ZäöüßÄÖÜ\s\-\']+">
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
                                 <label for="new_last_name">Nachname</label>
                                 <input type="text" class="form-control" id="new_last_name" 
-                                       name="last_name" required>
+                                       name="last_name" required maxlength="50" pattern="[a-zA-ZäöüßÄÖÜ\s\-\']+">
                             </div>
                         </div>
                         <div class="col-md-4">
@@ -345,6 +347,9 @@
 
 {% block scripts %}
 <script>
+// CSRF token for AJAX requests
+var csrfToken = '{{ csrf_token() }}';
+
 // Auto-focus on first input when clicking in a form field
 document.addEventListener('click', function(e) {
     if (e.target.matches('input[type="text"], input[type="number"]')) {
@@ -384,7 +389,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 body: formData,
                 headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
                 }
             })
             .then(response => response.json())

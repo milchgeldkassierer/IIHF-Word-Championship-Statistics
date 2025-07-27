@@ -13,8 +13,8 @@ from unittest.mock import Mock, MagicMock, patch, call
 from datetime import datetime
 
 # Importiere GameService über das services Modul
-from services import GameService
-from services.exceptions import (
+from app.services.core import GameService
+from app.exceptions import (
     ServiceError, ValidationError, NotFoundError, BusinessRuleError
 )
 from models import Game, ChampionshipYear, TeamStats, ShotsOnGoal, GameOverrule, Goal, Penalty

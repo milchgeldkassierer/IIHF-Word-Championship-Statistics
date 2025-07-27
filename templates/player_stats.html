@@ -208,7 +208,7 @@
                             {% for player in scoring_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
-                                    <td>{{ player.last_name|upper }} {{ player.first_name }} {% if player.overall_year_range %}<span class="year-range">{{ player.overall_year_range }}</span>{% endif %}</td>
+                                    <td>{{ player.last_name|e|upper }} {{ player.first_name|e }} {% if player.overall_year_range %}<span class="year-range">{{ player.overall_year_range|e }}</span>{% endif %}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
@@ -259,7 +259,7 @@
                             {% for player in goal_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
-                                    <td>{{ player.last_name|upper }} {{ player.first_name }} {% if player.goal_year_range %}<span class="year-range">{{ player.goal_year_range }}</span>{% endif %}</td>
+                                    <td>{{ player.last_name|e|upper }} {{ player.first_name|e }} {% if player.goal_year_range %}<span class="year-range">{{ player.goal_year_range|e }}</span>{% endif %}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
@@ -305,7 +305,7 @@
                             {% for player in assist_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
-                                    <td>{{ player.last_name|upper }} {{ player.first_name }} {% if player.assist_year_range %}<span class="year-range">{{ player.assist_year_range }}</span>{% endif %}</td>
+                                    <td>{{ player.last_name|e|upper }} {{ player.first_name|e }} {% if player.assist_year_range %}<span class="year-range">{{ player.assist_year_range|e }}</span>{% endif %}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
@@ -353,7 +353,7 @@
                             {% for player in pim_players %}
                                 <tr data-team="{{ player.team_code if player.team_code else '' }}" {% if loop.index > 25 %}class="extra-stats-row d-none"{% endif %}>
                                     <td>{{ loop.index }}</td>
-                                    <td>{{ player.last_name|upper }} {{ player.first_name }} {% if player.pim_year_range %}<span class="year-range">{{ player.pim_year_range }}</span>{% endif %}</td>
+                                    <td>{{ player.last_name|e|upper }} {{ player.first_name|e }} {% if player.pim_year_range %}<span class="year-range">{{ player.pim_year_range|e }}</span>{% endif %}</td>
                                     <td>
                                         {% if player.team_code and team_iso_codes.get(player.team_code) %}
                                             <img src="https://flagcdn.com/w20/{{ team_iso_codes[player.team_code] }}.png" alt="{{ player.team_code }}" style="margin-right: 5px;"> 
@@ -377,6 +377,19 @@
 
 {% block scripts %}
 <script>
+// XSS Protection: HTML escape function for JavaScript context
+function escapeHtml(text) {
+    if (!text) return '';
+    var map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
 $(document).ready(function() {
     let currentSort = { 
         scoring: { column: null, direction: 'asc' },
@@ -539,13 +552,13 @@ $(document).ready(function() {
         players.forEach(function(player, index) {
             const isExtra = index >= 25;
             const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
-                `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
+                `<img src="https://flagcdn.com/w20/${escapeHtml(teamIsoCodes[player.team_code])}.png" alt="${escapeHtml(player.team_code)}" style="margin-right: 5px;">` : '';
             
             const rowHtml = `
                 <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
                     <td>${index + 1}</td>
-                    <td>${player.last_name.toUpperCase()} ${player.first_name} ${player.overall_year_range ? `<span class="year-range">${player.overall_year_range}</span>` : ''}</td>
-                    <td>${flagHtml}${player.team_code || 'N/A'}</td>
+                    <td>${escapeHtml(player.last_name.toUpperCase())} ${escapeHtml(player.first_name)} ${player.overall_year_range ? `<span class="year-range">${escapeHtml(player.overall_year_range)}</span>` : ''}</td>
+                    <td>${flagHtml}${escapeHtml(player.team_code) || 'N/A'}</td>
                     <td data-value="${player.goals}">${player.goals}</td>
                     <td data-value="${player.assists}">${player.assists}</td>
                     <td data-value="${player.scorer_points}"><strong>${player.scorer_points}</strong></td>
@@ -562,13 +575,13 @@ $(document).ready(function() {
         players.forEach(function(player, index) {
             const isExtra = index >= 25;
             const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
-                `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
+                `<img src="https://flagcdn.com/w20/${escapeHtml(teamIsoCodes[player.team_code])}.png" alt="${escapeHtml(player.team_code)}" style="margin-right: 5px;">` : '';
             
             const rowHtml = `
                 <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
                     <td>${index + 1}</td>
-                    <td>${player.last_name.toUpperCase()} ${player.first_name} ${player.goal_year_range ? `<span class="year-range">${player.goal_year_range}</span>` : ''}</td>
-                    <td>${flagHtml}${player.team_code || 'N/A'}</td>
+                    <td>${escapeHtml(player.last_name.toUpperCase())} ${escapeHtml(player.first_name)} ${player.goal_year_range ? `<span class="year-range">${escapeHtml(player.goal_year_range)}</span>` : ''}</td>
+                    <td>${flagHtml}${escapeHtml(player.team_code) || 'N/A'}</td>
                     <td data-value="${player.goals}"><strong>${player.goals}</strong></td>
                 </tr>
             `;
@@ -583,13 +596,13 @@ $(document).ready(function() {
         players.forEach(function(player, index) {
             const isExtra = index >= 25;
             const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
-                `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
+                `<img src="https://flagcdn.com/w20/${escapeHtml(teamIsoCodes[player.team_code])}.png" alt="${escapeHtml(player.team_code)}" style="margin-right: 5px;">` : '';
             
             const rowHtml = `
                 <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
                     <td>${index + 1}</td>
-                    <td>${player.last_name.toUpperCase()} ${player.first_name} ${player.assist_year_range ? `<span class="year-range">${player.assist_year_range}</span>` : ''}</td>
-                    <td>${flagHtml}${player.team_code || 'N/A'}</td>
+                    <td>${escapeHtml(player.last_name.toUpperCase())} ${escapeHtml(player.first_name)} ${player.assist_year_range ? `<span class="year-range">${escapeHtml(player.assist_year_range)}</span>` : ''}</td>
+                    <td>${flagHtml}${escapeHtml(player.team_code) || 'N/A'}</td>
                     <td data-value="${player.assists}"><strong>${player.assists}</strong></td>
                 </tr>
             `;
@@ -604,13 +617,13 @@ $(document).ready(function() {
         players.forEach(function(player, index) {
             const isExtra = index >= 25;
             const flagHtml = player.team_code && teamIsoCodes[player.team_code] ? 
-                `<img src="https://flagcdn.com/w20/${teamIsoCodes[player.team_code]}.png" alt="${player.team_code}" style="margin-right: 5px;">` : '';
+                `<img src="https://flagcdn.com/w20/${escapeHtml(teamIsoCodes[player.team_code])}.png" alt="${escapeHtml(player.team_code)}" style="margin-right: 5px;">` : '';
             
             const rowHtml = `
                 <tr data-team="${player.team_code || ''}" ${isExtra ? 'class="extra-stats-row d-none"' : ''}>
                     <td>${index + 1}</td>
-                    <td>${player.last_name.toUpperCase()} ${player.first_name} ${player.pim_year_range ? `<span class="year-range">${player.pim_year_range}</span>` : ''}</td>
-                    <td>${flagHtml}${player.team_code || 'N/A'}</td>
+                    <td>${escapeHtml(player.last_name.toUpperCase())} ${escapeHtml(player.first_name)} ${player.pim_year_range ? `<span class="year-range">${escapeHtml(player.pim_year_range)}</span>` : ''}</td>
+                    <td>${flagHtml}${escapeHtml(player.team_code) || 'N/A'}</td>
                     <td data-value="${player.pims}"><strong>${player.pims}</strong></td>
                 </tr>
             `;

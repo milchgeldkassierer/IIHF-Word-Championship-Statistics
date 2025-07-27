@@ -8,7 +8,7 @@ from models import Game, ChampionshipYear, TeamStats, ShotsOnGoal, GameOverrule,
 from app.services.base import BaseService
 from app.services.utils.cache_manager import CacheableService, cached
 from app.repositories.core import GameRepository
-from services.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
+from app.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
 from utils.playoff_resolver import PlayoffResolver
 from utils import check_game_data_consistency, is_code_final
 from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES, TEAM_ISO_CODES

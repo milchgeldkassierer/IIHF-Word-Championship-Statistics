@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from app.services.core import PlayerService
 from app.repositories.core import PlayerRepository
-from services.exceptions import ValidationError, NotFoundError, DuplicateError
+from app.exceptions import ValidationError, NotFoundError, DuplicateError
 from models import Player, Goal, Penalty
 
 

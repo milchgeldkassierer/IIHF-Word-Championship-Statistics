@@ -107,6 +107,7 @@
         <div class="stats-section">
             <h2 class="stats-title">Turnier anlegen / Jahr auswählen</h2>
             <form method="POST" enctype="multipart/form-data" class="mb-4" action="{{ url_for('main_bp.index') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="form-group">
                     <label for="tournament_name">Name des Turniers</label>
                     <input type="text" class="form-control" id="tournament_name" name="tournament_name" placeholder="z.B. WM 2025 oder Virtual Cup" required>
@@ -177,6 +178,7 @@
                             {% endif %}
                         </span>
                         <form method="POST" style="display: inline;" onsubmit="return confirm('Sind Sie sicher, dass Sie das Turnier \'{{ y.name }} ({{ y.year }})\' und alle zugehörigen Daten löschen möchten?');" action="{{ url_for('main_bp.index') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <input type="hidden" name="year_id_to_delete" value="{{ y.id }}">
                             <button type="submit" name="delete_year" class="btn btn-outline-danger btn-sm px-2 py-1" style="font-size: 0.75rem; line-height: 1;" title="Turnier löschen">×</button>
                         </form>

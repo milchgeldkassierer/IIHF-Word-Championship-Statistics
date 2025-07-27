@@ -9,7 +9,7 @@ from models import Player, Goal, Penalty, Game, ChampionshipYear, db
 from app.services.base import BaseService
 from app.services.utils.cache_manager import CacheableService, cached
 from app.repositories.core import PlayerRepository
-from services.exceptions import ServiceError, ValidationError, NotFoundError, DuplicateError
+from app.exceptions import ServiceError, ValidationError, NotFoundError, DuplicateError
 from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES
 from flask import current_app
 import logging

@@ -569,9 +569,9 @@ def year_view(year_id):
                         if team_code not in year_teams_stats: 
                             year_teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
-                    # Verwende StandingsCalculator für die Berechnung der Teamstatistiken
-                    from services.standings_calculator_adapter import StandingsCalculator
-                    calculator = StandingsCalculator()
+                    # Verwende StandingsService für die Berechnung der Teamstatistiken
+                    from app.services.core.standings_service import StandingsService
+                    calculator = StandingsService()
                     year_teams_stats = calculator.calculate_standings_from_games(
                         [pg for pg in year_prelim_games if pg.team1_score is not None]
                     )

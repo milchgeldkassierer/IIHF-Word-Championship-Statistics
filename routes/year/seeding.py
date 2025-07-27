@@ -216,9 +216,9 @@ def get_semifinal_seeding(year_id):
             if team_code not in teams_stats: 
                 teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
-        # Verwende StandingsCalculator für die Berechnung der Teamstatistiken
-        from services.standings_calculator_adapter import StandingsCalculator
-        calculator = StandingsCalculator()
+        # Verwende StandingsService für die Berechnung der Teamstatistiken
+        from app.services.core.standings_service import StandingsService
+        calculator = StandingsService()
         teams_stats = calculator.calculate_standings_from_games(
             [pg for pg in prelim_games if pg.team1_score is not None]
         )
@@ -548,9 +548,9 @@ def get_quarterfinal_seeding(year_id):
                 teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
         # Calculate team statistics
-        # Verwende StandingsCalculator für die Berechnung der Teamstatistiken
-        from services.standings_calculator_adapter import StandingsCalculator
-        calculator = StandingsCalculator()
+        # Verwende StandingsService für die Berechnung der Teamstatistiken
+        from app.services.core.standings_service import StandingsService
+        calculator = StandingsService()
         teams_stats = calculator.calculate_standings_from_games(
             [pg for pg in prelim_games if pg.team1_score is not None]
         )

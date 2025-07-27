@@ -39,10 +39,15 @@ def _calculate_basic_prelim_standings(prelim_games_for_year: List[Game]) -> Dict
             standings[game.team2_code].group = current_game_group
 
 
-        # Verwende StandingsCalculator für die Aktualisierung der Statistiken
-        from services.standings_calculator_adapter import StandingsCalculator
-        calculator = StandingsCalculator()
-        calculator.update_team_stats(standings, game)
+        # Verwende StandingsService für die Berechnung der Statistiken
+        from app.services.core.standings_service import StandingsService
+        calculator = StandingsService()
+        # Berechne Standings für alle Spiele auf einmal (effizienter als pro Spiel)
+        game_standings = calculator.calculate_standings_from_games([game])
+        # Update die bestehenden Standings mit den berechneten Werten
+        for team_code, team_stats in game_standings.items():
+            if team_code in standings:
+                standings[team_code] = team_stats
     
     # Calculate rank_in_group with head-to-head comparison
     grouped_standings_for_ranking: Dict[str, List[TeamStats]] = {}
@@ -361,9 +366,9 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
         team_map = {}
         prelim_games = [g for g in games_this_year if g.round in PRELIM_ROUNDS and is_code_final(g.team1_code) and is_code_final(g.team2_code)]
         
-        # Verwende StandingsCalculator für die Berechnung der Gruppenstandings
-        from services.standings_calculator_adapter import StandingsCalculator
-        calculator = StandingsCalculator()
+        # Verwende StandingsService für die Berechnung der Gruppenstandings
+        from app.services.core.standings_service import StandingsService
+        calculator = StandingsService()
         all_team_stats = calculator.calculate_standings_from_games(
             [g for g in prelim_games if g.team1_score is not None]
         )
@@ -535,10 +540,17 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
                                 elif prelim_stats_map[team_code_val].group == "N/A" and current_game_group != "N/A":
                                     prelim_stats_map[team_code_val].group = current_game_group
                             
-                            # Verwende StandingsCalculator für die Aktualisierung der Statistiken
-                            from services.standings_calculator_adapter import StandingsCalculator
-                            calculator = StandingsCalculator()
-                            calculator.update_team_stats(prelim_stats_map, game_prelim)
+                            # Verwende StandingsService für die Berechnung der Statistiken
+                            from app.services.core.standings_service import StandingsService
+                            calculator = StandingsService()
+                            # Berechne Standings für dieses Spiel
+                            game_standings = calculator.calculate_standings_from_games([game_prelim])
+                            # Update die bestehenden Standings
+                            for team_code, team_stats in game_standings.items():
+                                if team_code in prelim_stats_map:
+                                    # Übertrage die Gruppeneinteilung
+                                    team_stats.group = prelim_stats_map[team_code].group
+                                    prelim_stats_map[team_code] = team_stats
 
                         # Sort teams by group using proper tiebreaker
                         for group_name in group_standings:
@@ -724,10 +736,17 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
             elif prelim_stats_map[team_code].group == "N/A" and current_game_group != "N/A":
                 prelim_stats_map[team_code].group = current_game_group
         
-        # Verwende StandingsCalculator für die Aktualisierung der Statistiken
-        from services.standings_calculator_adapter import StandingsCalculator
-        calculator = StandingsCalculator()
-        calculator.update_team_stats(prelim_stats_map, game)
+        # Verwende StandingsService für die Berechnung der Statistiken
+        from app.services.core.standings_service import StandingsService
+        calculator = StandingsService()
+        # Berechne Standings für dieses Spiel
+        game_standings = calculator.calculate_standings_from_games([game])
+        # Update die bestehenden Standings
+        for team_code, team_stats in game_standings.items():
+            if team_code in prelim_stats_map:
+                # Übertrage die Gruppeneinteilung
+                team_stats.group = prelim_stats_map[team_code].group
+                prelim_stats_map[team_code] = team_stats
     
     standings_by_group = {}
     for ts in prelim_stats_map.values():

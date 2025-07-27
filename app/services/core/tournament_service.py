@@ -8,7 +8,7 @@ from models import ChampionshipYear, Game, db
 from app.services.base import BaseService
 from app.services.utils.cache_manager import CacheableService, cached
 from app.repositories.core.tournament_repository import TournamentRepository
-from services.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
+from app.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
 from utils.playoff_resolver import PlayoffResolver
 from constants import TEAM_ISO_CODES
 import logging

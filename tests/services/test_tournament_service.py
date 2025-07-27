@@ -13,8 +13,8 @@ from unittest.mock import Mock, MagicMock, patch, call
 from datetime import datetime
 
 # Importiere TournamentService über das services Modul
-from services import TournamentService
-from services.exceptions import (
+from app.services.core import TournamentService
+from app.exceptions import (
     ServiceError, ValidationError, NotFoundError, BusinessRuleError
 )
 from models import ChampionshipYear, Game, TeamStats

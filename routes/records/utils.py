@@ -155,15 +155,15 @@ def get_all_resolved_games():
                 if team_code not in teams_stats: 
                     teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
-            # Verwende StandingsCalculator für die Berechnung der Teamstatistiken (ternary style)
+            # Verwende StandingsService für die Berechnung der Teamstatistiken (ternary style)
             import sys
             import os
             # Ensure project root is in Python path for service imports
             project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
             if project_root not in sys.path:
                 sys.path.insert(0, project_root)
-            from services.standings_calculator_adapter import StandingsCalculator
-            calculator = StandingsCalculator()
+            from app.services.core.standings_service import StandingsService
+            calculator = StandingsService()
             teams_stats = calculator.calculate_standings_from_games([pg for pg in prelim_games if pg.team1_score is not None])
             
             standings_by_group = {}

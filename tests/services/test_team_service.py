@@ -13,12 +13,12 @@ from unittest.mock import Mock, MagicMock, patch, call
 from datetime import datetime
 
 # Importiere TeamService über das services Modul
-from services import TeamService
-from services.exceptions import (
+from app.services.core import TeamService
+from app.exceptions import (
     ServiceError, ValidationError, NotFoundError, BusinessRuleError
 )
 from models import Player, Game, Goal, Penalty, ChampionshipYear, TeamStats, TeamOverallStats
-from constants import TEAM_ISO_CODES, TEAM_FULL_NAMES
+from constants import TEAM_ISO_CODES
 
 
 class TestTeamService:
@@ -34,7 +34,7 @@ class TestTeamService:
     @pytest.fixture
     def team_service(self, mock_db):
         """Create TeamService instance with mocked dependencies"""
-        with patch('services.team_service.db', mock_db):
+        with patch('app.services.core.team_service.db', mock_db):
             service = TeamService()
             service.db = mock_db
             return service
@@ -69,7 +69,7 @@ class TestTeamService:
     def test_get_team_roster_success(self, team_service, sample_team_players):
         """Test successful team roster retrieval"""
         # Arrange
-        with patch('services.team_service.Player') as mock_player:
+        with patch('app.services.core.team_service.Player') as mock_player:
             mock_player.query.filter_by.return_value.order_by.return_value.all.return_value = sample_team_players
             
             # Act
@@ -92,13 +92,13 @@ class TestTeamService:
         goal.assist1_id = 2
         goal.assist2_id = 3
         
-        with patch('services.team_service.Game') as mock_game:
+        with patch('app.services.core.team_service.Game') as mock_game:
             mock_game.query.filter_by.return_value.all.return_value = [game]
             
-            with patch('services.team_service.Goal') as mock_goal:
+            with patch('app.services.core.team_service.Goal') as mock_goal:
                 mock_goal.query.join.return_value.filter.return_value.all.return_value = [goal]
                 
-                with patch('services.team_service.Player') as mock_player:
+                with patch('app.services.core.team_service.Player') as mock_player:
                     mock_player.query.filter.return_value.distinct.return_value.order_by.return_value.all.return_value = sample_team_players
                     
                     # Act
@@ -111,7 +111,7 @@ class TestTeamService:
     def test_get_team_roster_empty(self, team_service):
         """Test getting roster for team with no players"""
         # Arrange
-        with patch('services.team_service.Player') as mock_player:
+        with patch('app.services.core.team_service.Player') as mock_player:
             mock_player.query.filter_by.return_value.order_by.return_value.all.return_value = []
             
             # Act
@@ -131,7 +131,7 @@ class TestTeamService:
     def test_get_team_roster_database_error(self, team_service):
         """Test handling of database errors in roster retrieval"""
         # Arrange
-        with patch('services.team_service.Player') as mock_player:
+        with patch('app.services.core.team_service.Player') as mock_player:
             mock_player.query.filter_by.side_effect = Exception("DB Error")
             
             # Act & Assert
@@ -146,7 +146,7 @@ class TestTeamService:
         # Arrange
         team_service.commit = Mock()
         
-        with patch('services.team_service.Player') as mock_player:
+        with patch('app.services.core.team_service.Player') as mock_player:
             mock_player.query.filter_by.return_value.first.return_value = None
             new_player = Mock()
             mock_player.return_value = new_player
@@ -169,7 +169,7 @@ class TestTeamService:
         # Arrange
         team_service.rollback = Mock()
         
-        with patch('services.team_service.Player') as mock_player:
+        with patch('app.services.core.team_service.Player') as mock_player:
             mock_player.query.filter_by.return_value.first.return_value = sample_player
             
             # Act & Assert
@@ -210,7 +210,7 @@ class TestTeamService:
         team_service.commit = Mock(side_effect=Exception("DB Error"))
         team_service.rollback = Mock()
         
-        with patch('services.team_service.Player') as mock_player:
+        with patch('app.services.core.team_service.Player') as mock_player:
             mock_player.query.filter_by.return_value.first.return_value = None
             
             # Act & Assert
@@ -277,7 +277,7 @@ class TestTeamService:
         other_player.id = 2
         other_player.jersey_number = 99
         
-        with patch('services.team_service.Player') as mock_player:
+        with patch('app.services.core.team_service.Player') as mock_player:
             mock_player.query.filter_by.return_value.filter.return_value.first.return_value = other_player
             
             # Act & Assert
@@ -332,7 +332,7 @@ class TestTeamService:
         team_service.get_by_id = Mock(return_value=sample_player)
         team_service.rollback = Mock()
         
-        with patch('services.team_service.Goal') as mock_goal:
+        with patch('app.services.core.team_service.Goal') as mock_goal:
             mock_goal.query.filter.return_value.count.return_value = 5
             
             # Act & Assert
@@ -398,13 +398,13 @@ class TestTeamService:
             game2: {"SWE": 30, "CAN": 25}
         }
         
-        with patch('services.team_service.Game') as mock_game:
+        with patch('app.services.core.team_service.Game') as mock_game:
             mock_game.query.filter.return_value.all.return_value = games
             
-            with patch('services.team_service.Goal') as mock_goal:
+            with patch('app.services.core.team_service.Goal') as mock_goal:
                 mock_goal.query.join.return_value.filter.return_value.all.return_value = goals
                 
-                with patch('services.team_service.Penalty') as mock_penalty:
+                with patch('app.services.core.team_service.Penalty') as mock_penalty:
                     mock_penalty.query.join.return_value.filter.return_value.all.return_value = penalties
                     
                     team_service._get_team_sog_totals = Mock(return_value=sog_data)
@@ -412,13 +412,13 @@ class TestTeamService:
                         "w": 1, "otw": 0, "sow": 0, "l": 0, "otl": 1, "sol": 0, "pts": 4
                     })
                     
-                    with patch('services.team_service.PIM_MAP', {"MINOR": 2, "MAJOR": 5}):
+                    with patch('app.services.core.team_service.PIM_MAP', {"MINOR": 2, "MAJOR": 5}):
                         # Act
                         result = team_service.get_team_stats("CAN", 2024)
         
         # Assert
         assert result["team_code"] == "CAN"
-        assert result["team_name"] == TEAM_FULL_NAMES.get("CAN", "CAN")
+        assert result["team_name"] == "Canada"  # Expected full name for CAN
         assert result["team_iso"] == TEAM_ISO_CODES.get("CAN", "")
         assert result["gp"] == 2
         assert result["gf"] == 7  # 5 + 2
@@ -432,7 +432,7 @@ class TestTeamService:
     def test_get_team_stats_no_games(self, team_service):
         """Test team stats when no games played"""
         # Arrange
-        with patch('services.team_service.Game') as mock_game:
+        with patch('app.services.core.team_service.Game') as mock_game:
             mock_game.query.filter.return_value.all.return_value = []
             
             # Act
@@ -455,7 +455,7 @@ class TestTeamService:
     def test_get_team_stats_database_error(self, team_service):
         """Test handling of database errors in stats retrieval"""
         # Arrange
-        with patch('services.team_service.Game') as mock_game:
+        with patch('app.services.core.team_service.Game') as mock_game:
             mock_game.query.filter.side_effect = Exception("DB Error")
             
             # Act & Assert
@@ -491,7 +491,7 @@ class TestTeamService:
         game2.result_type = "OT"
         games.append(game2)
         
-        with patch('services.team_service.Game') as mock_game:
+        with patch('app.services.core.team_service.Game') as mock_game:
             mock_game.query.filter.return_value.all.return_value = games
             
             # Act
@@ -521,7 +521,7 @@ class TestTeamService:
         game.team2_score = 2
         game.result_type = "REG"
         
-        with patch('services.team_service.Game') as mock_game:
+        with patch('app.services.core.team_service.Game') as mock_game:
             # Setup the query chain
             query_mock = Mock()
             filter_mock = Mock()
@@ -541,7 +541,7 @@ class TestTeamService:
     def test_get_team_vs_team_stats_no_games(self, team_service):
         """Test head-to-head when teams never played"""
         # Arrange
-        with patch('services.team_service.Game') as mock_game:
+        with patch('app.services.core.team_service.Game') as mock_game:
             mock_game.query.filter.return_value.all.return_value = []
             
             # Act
@@ -638,7 +638,7 @@ class TestTeamService:
             Mock(game_id=2, team_code="SWE", period=3, shots=8),
         ]
         
-        with patch('services.team_service.ShotsOnGoal') as mock_sog:
+        with patch('app.services.core.team_service.ShotsOnGoal') as mock_sog:
             mock_sog.query.filter.return_value.all.return_value = sog_records
             
             # Act
@@ -694,7 +694,7 @@ class TestTeamService:
         # Arrange
         team_service.commit = Mock()
         
-        with patch('services.team_service.Player') as mock_player:
+        with patch('app.services.core.team_service.Player') as mock_player:
             mock_player.query.filter_by.return_value.first.return_value = None
             new_player = Mock()
             mock_player.return_value = new_player
@@ -714,10 +714,10 @@ class TestTeamService:
             Mock(team1_code="CAN", team2_code="SWE", team1_score=None, team2_score=None, result_type=None),
         ]
         
-        with patch('services.team_service.Game') as mock_game:
+        with patch('app.services.core.team_service.Game') as mock_game:
             mock_game.query.filter.return_value.all.return_value = games
             
-            with patch('services.team_service.Goal') as mock_goal:
+            with patch('app.services.core.team_service.Goal') as mock_goal:
                 mock_goal.query.join.return_value.filter.return_value.all.return_value = []
                 
                 team_service._get_team_sog_totals = Mock(return_value={})

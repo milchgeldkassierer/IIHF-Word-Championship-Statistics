@@ -8,7 +8,7 @@ from models import TeamStats, TeamOverallStats, AllTimeTeamStats, ChampionshipYe
 from app.services.base import BaseService
 from app.services.utils.cache_manager import CacheableService, cached
 from app.repositories.core import TeamRepository
-from services.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
+from app.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
 from constants import TEAM_ISO_CODES, PRELIM_ROUNDS, PLAYOFF_ROUNDS, PIM_MAP, POWERPLAY_PENALTY_TYPES
 from sqlalchemy import func
 import logging

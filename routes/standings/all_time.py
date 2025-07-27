@@ -35,7 +35,7 @@ def calculate_all_time_standings(game_type='all'):
         # Der TeamService hat bereits optimierte Methoden für All-Time Stats
         
         # Import API function für Kompatibilität
-        from routes.api.team_stats_refactored import get_team_yearly_stats
+        from routes.api.team_stats import get_team_yearly_stats
         
         # Verwende Service-optimierte Batch-Abfrage
         for team_code in all_team_codes:

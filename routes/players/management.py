@@ -1,8 +1,11 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app
+from markupsafe import escape
 from models import db, Player
 from routes.blueprints import main_bp
 from constants import TEAM_ISO_CODES
 from sqlalchemy import func
+import re
+import html
 
 # Import Service Layer
 from app.services.core.player_service import PlayerService
@@ -17,15 +20,22 @@ def edit_players():
     team_service = TeamService()
     
     if request.method == 'POST':
-        player_id = request.form.get('player_id')
-        first_name = request.form.get('first_name')
-        last_name = request.form.get('last_name')
-        jersey_number_str = request.form.get('jersey_number')
+        # Sanitize and validate input data to prevent XSS
+        player_id = _sanitize_input(request.form.get('player_id'))
+        first_name = _sanitize_input(request.form.get('first_name'))
+        last_name = _sanitize_input(request.form.get('last_name'))
+        jersey_number_str = _sanitize_input(request.form.get('jersey_number'))
         
         is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         
+        # Validate required fields and format
         if not player_id or not first_name or not last_name:
             error_msg = 'Spieler-ID, Vorname und Nachname sind erforderlich.'
+            if is_ajax:
+                return jsonify({'success': False, 'message': error_msg}), 400
+            flash(error_msg, 'danger')
+        elif not _validate_player_name(first_name) or not _validate_player_name(last_name):
+            error_msg = 'Ungültiges Format für Spielernamen. Nur Buchstaben, Leerzeichen, Bindestriche und Apostrophe sind erlaubt.'
             if is_ajax:
                 return jsonify({'success': False, 'message': error_msg}), 400
             flash(error_msg, 'danger')
@@ -134,13 +144,19 @@ def add_player_global():
     # Initialize Service
     player_service = PlayerService()
     
-    team_code = request.form.get('team_code')
-    first_name = request.form.get('first_name')
-    last_name = request.form.get('last_name')
-    jersey_number_str = request.form.get('jersey_number')
+    # Sanitize and validate input data to prevent XSS
+    team_code = _sanitize_input(request.form.get('team_code'))
+    first_name = _sanitize_input(request.form.get('first_name'))
+    last_name = _sanitize_input(request.form.get('last_name'))
+    jersey_number_str = _sanitize_input(request.form.get('jersey_number'))
     
+    # Validate required fields and format
     if not team_code or not first_name or not last_name:
         flash('Team, Vorname und Nachname sind erforderlich.', 'danger')
+        return redirect(url_for('main_bp.edit_players'))
+    
+    if not _validate_player_name(first_name) or not _validate_player_name(last_name):
+        flash('Ungültiges Format für Spielernamen. Nur Buchstaben, Leerzeichen, Bindestriche und Apostrophe sind erlaubt.', 'danger')
         return redirect(url_for('main_bp.edit_players'))
     
     try:
@@ -173,3 +189,53 @@ def add_player_global():
         flash(f'Fehler beim Hinzufügen des Spielers: {str(e)}', 'danger')
     
     return redirect(url_for('main_bp.edit_players', country=team_code))
+
+
+def _sanitize_input(value: str) -> str:
+    """
+    Sanitize user input to prevent XSS attacks
+    
+    Args:
+        value: Input string to sanitize
+        
+    Returns:
+        Sanitized string safe for processing
+    """
+    if not value:
+        return value
+    
+    # Strip whitespace
+    value = value.strip()
+    
+    # Remove potentially dangerous characters and scripts
+    # Block script tags and javascript protocols
+    value = re.sub(r'<script[^>]*>.*?</script>', '', value, flags=re.IGNORECASE | re.DOTALL)
+    value = re.sub(r'javascript:', '', value, flags=re.IGNORECASE)
+    value = re.sub(r'on\w+\s*=', '', value, flags=re.IGNORECASE)
+    
+    # Remove HTML tags except for basic safe ones
+    value = re.sub(r'<(?!/?[bi]>)[^>]*>', '', value)
+    
+    # Limit length to prevent DoS
+    if len(value) > 100:
+        value = value[:100]
+    
+    return value
+
+
+def _validate_player_name(name: str) -> bool:
+    """
+    Validate player name format
+    
+    Args:
+        name: Player name to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not name or len(name.strip()) < 2:
+        return False
+    
+    # Only allow letters, spaces, hyphens, and apostrophes
+    pattern = r'^[a-zA-ZäöüßÄÖÜ\s\-\']+$'
+    return bool(re.match(pattern, name.strip()))

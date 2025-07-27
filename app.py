@@ -1,5 +1,6 @@
 import os
 from flask import Flask
+from flask_wtf.csrf import CSRFProtect
 
 from models import db
 
@@ -21,6 +22,9 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     app.config['BASE_DIR'] = BASE_DIR # Make BASE_DIR available in app.config for blueprints
+
+    # Initialize CSRF protection
+    csrf = CSRFProtect(app)
 
     db.init_app(app)
 

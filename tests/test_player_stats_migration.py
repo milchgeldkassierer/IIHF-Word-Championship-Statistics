@@ -5,9 +5,9 @@ This verifies that Issue #14 migration from direct DB queries to service layer m
 
 import pytest
 from unittest.mock import Mock, patch
-from services.player_service import PlayerService
+from app.services.core.player_service import PlayerService
 from routes.players.stats import get_all_player_stats
-from services.exceptions import ServiceError
+from app.exceptions import ServiceError
 
 
 class TestPlayerStatsMigration:

@@ -15,7 +15,7 @@ from datetime import datetime
 
 # Importiere die Services und Exceptions
 from app.services.core import GameService, TournamentService, TeamService, StandingsService, PlayerService
-from services.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
+from app.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
 from models import ChampionshipYear, Game, Player, TeamStats, GameDisplay
 
 

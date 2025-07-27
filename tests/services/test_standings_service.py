@@ -13,8 +13,8 @@ from unittest.mock import Mock, MagicMock, patch
 from datetime import datetime
 
 # Importiere StandingsService direkt
-from services.standings_service import StandingsService
-from services.exceptions import (
+from app.services.core.standings_service import StandingsService
+from app.exceptions import (
     ServiceError, ValidationError, NotFoundError, BusinessRuleError
 )
 from models import Game, ChampionshipYear, TeamStats
@@ -38,7 +38,7 @@ class TestStandingsService:
     @pytest.fixture
     def standings_service(self, mock_db, mock_repository):
         """Create StandingsService instance with mocked dependencies"""
-        with patch('services.standings_service.db', mock_db):
+        with patch('app.services.core.standings_service.db', mock_db):
             service = StandingsService()
             service.repository = mock_repository
             return service
@@ -111,7 +111,7 @@ class TestStandingsService:
     def test_get_group_standings_success(self, standings_service, sample_games, sample_championship):
         """Test successful group standings calculation"""
         # Arrange
-        with patch('services.standings_service.ChampionshipYear') as mock_year:
+        with patch('models.ChampionshipYear') as mock_year:
             mock_year.query.get.return_value = sample_championship
             standings_service.repository.get_group_games.return_value = sample_games[:3]  # Exclude incomplete game
             
@@ -132,7 +132,7 @@ class TestStandingsService:
     def test_get_group_standings_championship_not_found(self, standings_service):
         """Test group standings when championship doesn't exist"""
         # Arrange
-        with patch('services.standings_service.ChampionshipYear') as mock_year:
+        with patch('models.ChampionshipYear') as mock_year:
             mock_year.query.get.return_value = None
             
             # Act & Assert
@@ -143,7 +143,7 @@ class TestStandingsService:
     def test_get_group_standings_group_not_found(self, standings_service, sample_championship):
         """Test group standings when group doesn't exist"""
         # Arrange
-        with patch('services.standings_service.ChampionshipYear') as mock_year:
+        with patch('models.ChampionshipYear') as mock_year:
             mock_year.query.get.return_value = sample_championship
             standings_service.repository.get_group_games.return_value = []
             
@@ -290,7 +290,7 @@ class TestStandingsService:
     def test_get_all_groups_standings_success(self, standings_service, sample_championship):
         """Test getting standings for all groups"""
         # Arrange
-        with patch('services.standings_service.ChampionshipYear') as mock_year:
+        with patch('models.ChampionshipYear') as mock_year:
             mock_year.query.get.return_value = sample_championship
             standings_service.repository.get_all_groups.return_value = ["A", "B"]
             
@@ -312,7 +312,7 @@ class TestStandingsService:
     def test_get_all_groups_standings_with_error(self, standings_service, sample_championship):
         """Test handling errors in group standings calculation"""
         # Arrange
-        with patch('services.standings_service.ChampionshipYear') as mock_year:
+        with patch('models.ChampionshipYear') as mock_year:
             mock_year.query.get.return_value = sample_championship
             standings_service.repository.get_all_groups.return_value = ["A", "B"]
             

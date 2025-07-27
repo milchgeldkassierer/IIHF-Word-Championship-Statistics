@@ -118,9 +118,9 @@ def game_stats_view(year_id, game_id):
             if team_code not in teams_stats: 
                 teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
-        # Verwende StandingsCalculator für die Berechnung der Teamstatistiken (ultra-compact style beibehalten)
-        from services.standings_calculator_adapter import StandingsCalculator
-        calculator = StandingsCalculator()
+        # Verwende StandingsService für die Berechnung der Teamstatistiken (ultra-compact style beibehalten)
+        from app.services.core.standings_service import StandingsService
+        calculator = StandingsService()
         teams_stats = calculator.calculate_standings_from_games([pg for pg in prelim_games if pg.team1_score is not None])
     
         standings_by_group = {}

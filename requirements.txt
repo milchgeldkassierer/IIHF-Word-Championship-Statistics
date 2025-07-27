@@ -1,5 +1,6 @@
 Flask==2.2.5
 Flask-SQLAlchemy==3.0.3
+Flask-WTF==1.1.1
 Werkzeug==2.2.3
 SQLAlchemy==1.4.41
 python-dotenv==0.21.1 

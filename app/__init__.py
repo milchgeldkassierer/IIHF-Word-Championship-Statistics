@@ -14,13 +14,14 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 try:
-    from app_main import create_app
-except ImportError:
-    # Fallback to reading create_app from app.py
+    # Try to import create_app from app.py
     import importlib.util
     spec = importlib.util.spec_from_file_location("app_main", os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.py"))
     app_main = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(app_main)
     create_app = app_main.create_app
+except ImportError:
+    # Last resort fallback
+    create_app = None
 
 __all__ = ['create_app']

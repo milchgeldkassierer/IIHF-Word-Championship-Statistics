@@ -447,6 +447,9 @@
         }
     </style>
     <script>
+        // CSRF token for AJAX requests and dynamic forms
+        var csrfToken = '{{ csrf_token() }}';
+        
         try {
             // Initialize all_players_by_team_json with proper error handling
             var all_players_by_team_json = {{ all_players_by_team_json|tojson|safe }};
@@ -997,6 +1000,7 @@
                                 {% endif %}
                             </td>
                             <form method="POST" action="{{ url_for('year_bp.year_view', year_id=year.id) }}#game-{{game.id}}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <input type="hidden" name="game_id" value="{{ game.id }}">
                                 <td style="width: 70px;">
                                     <input type="number" name="team1_score" class="form-control form-control-sm" value="{{ game.team1_score if game.team1_score is not none else '' }}" min="0">
@@ -1066,11 +1070,13 @@
                                                                 <small>
                                                                     {% if event.type == 'goal' %}
                                                                         <form method="POST" action="{{ url_for('year_bp.delete_goal', year_id=year.id, goal_id=event.data.id) }}" style="display: inline;" class="delete-event-form">
+                                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                                             <input type="hidden" name="game_id_event_delete" value="{{ game.id }}">
                                                                             <button type="submit" class="btn btn-danger btn-xs ml-2" title="Tor löschen">×</button>
                                                                         </form>
                                                                     {% elif event.type == 'penalty' %}
                                                                         <form method="POST" action="{{ url_for('year_bp.delete_penalty', year_id=year.id, penalty_id=event.data.id) }}" style="display: inline;" class="delete-event-form">
+                                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                                             <input type="hidden" name="game_id_event_delete" value="{{ game.id }}">
                                                                             <button type="submit" class="btn btn-danger btn-xs ml-2" title="Strafe löschen">×</button>
                                                                         </form>
@@ -1132,6 +1138,7 @@
                                             </div>
                                         </div>
                                         <form method="POST" action="{{ url_for('year_bp.add_goal', year_id=year.id, game_id=game.id) }}" id="addGoalForm-{{ game.id }}" class="mb-4">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             {# ... Goal form fields ... (content is the same, just ensure IDs are unique if needed) ... #}
                                             <input type="hidden" name="game_id" value="{{ game.id }}">
                                             <div class="form-row">
@@ -1205,6 +1212,7 @@
                                             </div>
                                         </div>
                                         <form method="POST" action="{{ url_for('year_bp.add_penalty', year_id=year.id, game_id=game.id) }}" id="addPenaltyForm-{{ game.id }}" class="mb-4">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             {# ... Penalty form fields ... (content is the same) ... #}
                                             <input type="hidden" name="game_id" value="{{ game.id }}">
                                             <div class="form-row">
@@ -1253,6 +1261,7 @@
                                         <div id="messageArea-{{ game.id }}" class="mt-2"></div>
                                         <h6>Neuen Spieler hinzufügen (zum Kader)</h6>
                                         <form method="POST" action="{{ url_for('year_bp.add_player') }}" class="mt-2" id="addPlayerForm-{{ game.id }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             {# ... Add Player form fields ... (content is the same) ... #}
                                             <input type="hidden" name="game_id_anchor" value="{{ game.id }}">
                                             <input type="hidden" name="year_id_redirect" value="{{ year.id }}">
@@ -2398,6 +2407,9 @@ $(document).ready(function(){
             url: "{{ url_for('year_bp.add_player') }}", // Use global add player
             type: 'POST',
             data: form.serialize(), // Changed to use form.serialize()
+            headers: {
+                'X-CSRFToken': csrfToken
+            },
             success: function(response) {
                 var alertClass = response.success ? 'alert-success' : 'alert-danger';
                 messageArea.html('<div class="alert ' + alertClass + ' alert-dismissible fade show" role="alert">' +
@@ -2478,7 +2490,10 @@ $(document).ready(function(){
         fetch(addGoalUrl, {
             method: 'POST',
             body: new FormData(form[0]),
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: { 
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfToken
+            }
         })
         .then(response => {
             if (!response.ok) {
@@ -2531,6 +2546,7 @@ $(document).ready(function(){
                         newGoal.minute + '</h6>' +
                         '<small>' +
                             '<form method="POST" action="' + deleteGoalFormAction + '" style="display: inline;">' +
+                            '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
                             '<input type="hidden" name="game_id_anchor" value="' + gameId + '">' +
                                 '<button type="submit" class="btn btn-danger btn-xs" onclick="this.form.action += \'#game-details-'+gameId+'\'; return confirm(\\\'Sicher, dass du dieses Tor löschen willst?\\\');" title="Tor löschen">&times;</button>' +
                         '</form>' +
@@ -2585,7 +2601,10 @@ $(document).ready(function(){
         fetch(addPenaltyUrl, {
             method: 'POST',
             body: new FormData(form[0]),
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: { 
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfToken
+            }
         })
         .then(response => {
             if (!response.ok) {
@@ -2634,6 +2653,7 @@ $(document).ready(function(){
                         newPenalty.minute_of_game + '</h6>' +
                         '<small>' +
                             '<form method="POST" action="' + deletePenaltyFormAction + '" style="display: inline;">' +
+                                '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
                                 '<input type="hidden" name="game_id_anchor" value="' + gameId + '">' +
                                 '<button type="submit" class="btn btn-danger btn-xs" onclick="this.form.action += \'#game-details-'+gameId+'\'; return confirm(\\\'Sicher, dass du diese Strafe löschen willst?\\\');" title="Strafe löschen">&times;</button>' +
                             '</form>' +
@@ -2744,7 +2764,10 @@ $(document).ready(function(){
 
         fetch(`{{ url_for('year_bp.add_sog', game_id=0) }}`.replace('0', gameId), {
             method: 'POST',
-            body: formData
+            body: formData,
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
         })
         .then(response => {
             if (!response.ok) {
@@ -2821,8 +2844,7 @@ $(document).ready(function(){
             method: 'POST',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
-                // If you have CSRF tokens, include them here
-                // 'X-CSRFToken': getCsrfToken() 
+                'X-CSRFToken': csrfToken
             },
             body: new FormData(form[0]) // Send form data if needed by backend, though URL params might be enough
         })
@@ -3313,7 +3335,10 @@ $(document).ready(function(){
         
         fetch(`{{ url_for('year_bp.add_overrule', year_id=year.id, game_id=0) }}`.replace('/0/overrule', '/' + currentGameIdForOverrule + '/overrule'), {
             method: 'POST',
-            body: formData
+            body: formData,
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
         })
         .then(response => response.json())
         .then(data => {
@@ -3341,7 +3366,10 @@ $(document).ready(function(){
         }
         
         fetch(`{{ url_for('year_bp.remove_overrule', year_id=year.id, game_id=0) }}`.replace('/0/overrule', '/' + currentGameIdForOverrule + '/overrule'), {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
         })
         .then(response => response.json())
         .then(data => {
@@ -3604,7 +3632,10 @@ $(document).ready(function(){
         if (confirm('Möchten Sie das Seeding auf die Standard IIHF-Regeln zurücksetzen? Dies löscht alle manuellen Anpassungen.')) {
             // Call DELETE route to reset to standard seeding
             fetch(`/year/${current_year_id}/semifinal_seeding`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
             })
             .then(response => response.json())
             .then(data => {
@@ -3647,6 +3678,7 @@ $(document).ready(function(){
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
             },
             body: JSON.stringify(seedingData)
         })
@@ -3851,7 +3883,10 @@ $(document).ready(function(){
     $('#resetQFSeedingBtn').on('click', function() {
         if (confirm('Möchten Sie das Quarterfinal-Seeding auf die Standard-Gruppenergebnisse zurücksetzen? Dies löscht alle manuellen Anpassungen.')) {
             fetch(`/year/${current_year_id}/quarterfinal_seeding`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
             })
             .then(response => response.json())
             .then(data => {
@@ -3898,6 +3933,7 @@ $(document).ready(function(){
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
             },
             body: JSON.stringify(seedingData)
         })
