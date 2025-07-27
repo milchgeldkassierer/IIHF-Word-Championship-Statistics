@@ -9,6 +9,11 @@ from utils.fixture_helpers import resolve_fixture_path
 from utils.seeding_helpers import get_custom_seeding_from_db
 from utils.playoff_resolver import PlayoffResolver
 from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES, PRELIM_ROUNDS, PLAYOFF_ROUNDS
+# Importiere Services
+from app.services.core.team_service import TeamService
+from app.services.core.game_service import GameService
+from app.services.core.standings_service import StandingsService
+from app.services.core.tournament_service import TournamentService
 
 
 

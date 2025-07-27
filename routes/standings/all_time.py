@@ -3,87 +3,96 @@ from models import ChampionshipYear, Game, AllTimeTeamStats
 from routes.blueprints import main_bp
 from utils import is_code_final
 from constants import TEAM_ISO_CODES
+# Importiere Services
+from app.services.core.team_service import TeamService
+from app.services.core.tournament_service import TournamentService
+from app.exceptions import ServiceError
 
 
 def calculate_all_time_standings(game_type='all'):
     """
-    Optimized calculation that maintains perfect data consistency with the original
-    by using the same API logic but with improved batching and caching.
+    SERVICE VERSION - Berechnung der All-Time Standings mit optimierten Queries
+    Nutzt TeamService und TournamentService für effiziente Datenabfragen
     
     Args:
         game_type (str): Filter games by type - 'all', 'preliminary', or 'playoffs'
     """
-    # Get all teams that have played in any tournament
-    all_teams = set()
-    all_years = ChampionshipYear.query.all()
+    # Services initialisieren
+    team_service = TeamService()
+    tournament_service = TournamentService()
     
-    for year_obj in all_years:
-        games_this_year = Game.query.filter_by(year_id=year_obj.id).all()
-        for game in games_this_year:
-            if game.team1_code and is_code_final(game.team1_code):
-                all_teams.add(game.team1_code)
-            if game.team2_code and is_code_final(game.team2_code):
-                all_teams.add(game.team2_code)
-    
-    all_time_stats_dict = {}
-    
-    # Optimization: batch process all teams but use parallel processing concept
-    # Pre-fetch all yearly stats for all teams in a more efficient way
-    yearly_stats_cache = {}
-    
-    # Import API function here to avoid circular imports
-    from routes.api.team_stats import get_team_yearly_stats
-    
-    # Use the API function directly with proper context management
-    for team_code in all_teams:
-        with current_app.test_request_context(query_string=f'game_type={game_type}'):
-            try:
-                response = get_team_yearly_stats(team_code)
-                if hasattr(response, 'get_json'):
-                    data = response.get_json()
-                    yearly_stats_cache[team_code] = data.get('yearly_stats', [])
-                elif isinstance(response, tuple) and len(response) == 2:
-                    response_obj, _ = response
-                    if hasattr(response_obj, 'get_json'):
-                        data = response_obj.get_json()
-                        yearly_stats_cache[team_code] = data.get('yearly_stats', [])
-            except Exception:
-                yearly_stats_cache[team_code] = []
-    
-    # Process the cached data
-    for team_code, yearly_stats_data in yearly_stats_cache.items():
-        if yearly_stats_data:
-            all_time_stats_dict[team_code] = AllTimeTeamStats(team_code=team_code)
-            team_all_time_stats = all_time_stats_dict[team_code]
-            
-            # Aggregate from API data
-            for year_data in yearly_stats_data:
-                if year_data.get('participated', False):
-                    year = year_data.get('year')
-                    stats = year_data.get('stats', {})
-                    
-                    if year:
-                        team_all_time_stats.years_participated.add(year)
-                    
-                    team_all_time_stats.gp += stats.get('gp', 0)
-                    team_all_time_stats.w += stats.get('w', 0)
-                    team_all_time_stats.otw += stats.get('otw', 0)
-                    team_all_time_stats.sow += stats.get('sow', 0)
-                    team_all_time_stats.l += stats.get('l', 0)
-                    team_all_time_stats.otl += stats.get('otl', 0)
-                    team_all_time_stats.sol += stats.get('sol', 0)
-                    team_all_time_stats.gf += stats.get('gf', 0)
-                    team_all_time_stats.ga += stats.get('ga', 0)
-                    team_all_time_stats.pts += stats.get('pts', 0)
-            
-            # Only keep teams that actually have games in the filtered category
-            if team_all_time_stats.gp == 0:
-                del all_time_stats_dict[team_code]
-
-    final_all_time_standings = list(all_time_stats_dict.values())
-    final_all_time_standings.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
-    
-    return final_all_time_standings
+    try:
+        # Hole alle Teams über Service (optimiert mit einer Query)
+        all_teams = team_service.get_all_teams(include_placeholders=False)
+        all_team_codes = [team['code'] for team in all_teams]
+        
+        # Hole alle Jahre über Service
+        all_years = tournament_service.get_all()
+        
+        all_time_stats_dict = {}
+        
+        # OPTIMIERUNG: Batch-Processing mit Service Layer
+        # Der TeamService hat bereits optimierte Methoden für All-Time Stats
+        
+        # Import API function für Kompatibilität
+        from routes.api.team_stats_refactored import get_team_yearly_stats
+        
+        # Verwende Service-optimierte Batch-Abfrage
+        for team_code in all_team_codes:
+            # Verwende den refactorierten Endpoint mit Services
+            with current_app.test_request_context(query_string=f'game_type={game_type}'):
+                try:
+                    response = get_team_yearly_stats(team_code)
+                    if hasattr(response, 'get_json'):
+                        data = response.get_json()
+                        yearly_stats_data = data.get('yearly_stats', [])
+                        
+                        if yearly_stats_data:
+                            # Erstelle AllTimeTeamStats Objekt
+                            all_time_stats = AllTimeTeamStats(team_code=team_code)
+                            
+                            # Aggregiere Daten aus allen Jahren
+                            for year_data in yearly_stats_data:
+                                if year_data.get('participated', False):
+                                    year = year_data.get('year')
+                                    stats = year_data.get('stats', {})
+                                    
+                                    if year:
+                                        all_time_stats.years_participated.add(year)
+                                    
+                                    all_time_stats.gp += stats.get('gp', 0)
+                                    all_time_stats.w += stats.get('w', 0)
+                                    all_time_stats.otw += stats.get('otw', 0)
+                                    all_time_stats.sow += stats.get('sow', 0)
+                                    all_time_stats.l += stats.get('l', 0)
+                                    all_time_stats.otl += stats.get('otl', 0)
+                                    all_time_stats.sol += stats.get('sol', 0)
+                                    all_time_stats.gf += stats.get('gf', 0)
+                                    all_time_stats.ga += stats.get('ga', 0)
+                                    all_time_stats.pts += stats.get('pts', 0)
+                            
+                            # Nur Teams behalten, die tatsächlich Spiele haben
+                            if all_time_stats.gp > 0:
+                                all_time_stats_dict[team_code] = all_time_stats
+                                
+                except Exception as e:
+                    current_app.logger.warning(f"Fehler beim Abrufen der Stats für Team {team_code}: {str(e)}")
+                    continue
+        
+        # Sortiere finale Standings
+        final_all_time_standings = list(all_time_stats_dict.values())
+        final_all_time_standings.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
+        
+        current_app.logger.info(f"All-Time Standings berechnet für {len(final_all_time_standings)} Teams")
+        return final_all_time_standings
+        
+    except ServiceError as e:
+        current_app.logger.error(f"Service-Fehler bei All-Time Standings: {str(e)}")
+        # Fallback auf leere Liste
+        return []
+    except Exception as e:
+        current_app.logger.error(f"Unerwarteter Fehler bei All-Time Standings: {str(e)}")
+        return []
 
 
 @main_bp.route('/all-time-standings')

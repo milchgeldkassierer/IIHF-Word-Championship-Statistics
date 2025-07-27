@@ -6,6 +6,10 @@ from models import db, ChampionshipYear, Game, TeamStats, GameOverrule
 from utils import _apply_head_to_head_tiebreaker, is_code_final
 from utils.fixture_helpers import resolve_fixture_path
 from utils.playoff_resolver import PlayoffResolver
+from app.services.core.tournament_service import TournamentService
+from app.services.core.game_service import GameService
+from app.services.core.standings_service import StandingsService
+from app.exceptions import NotFoundError, ValidationError, ServiceError
 
 # Import the blueprint from the parent package
 from . import year_bp
@@ -182,15 +186,19 @@ def get_semifinal_seeding(year_id):
         }
     """
     try:
-        year_obj = db.session.get(ChampionshipYear, year_id)
-        if not year_obj:
+        # Service-Layer verwenden
+        tournament_service = TournamentService()
+        try:
+            year_obj = tournament_service.get_by_id(year_id)
+        except NotFoundError:
             return jsonify({
                 'success': False,
                 'message': 'Tournament year not found.'
             }), 404
 
-        # Games und playoff_team_map logic aus year_view wiederverwenden
-        games_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
+        # Service-Layer für Spiele verwenden
+        game_service = GameService()
+        games_raw = game_service.get_by_tournament(year_id)
         games_raw_map = {g.id: g for g in games_raw}
         
         # Preliminary Round Statistics für Seeding
@@ -389,8 +397,11 @@ def save_semifinal_seeding(year_id):
         }
     """
     try:
-        year_obj = db.session.get(ChampionshipYear, year_id)
-        if not year_obj:
+        # Service-Layer verwenden
+        tournament_service = TournamentService()
+        try:
+            year_obj = tournament_service.get_by_id(year_id)
+        except NotFoundError:
             return jsonify({
                 'success': False,
                 'message': 'Tournament year not found.'
@@ -451,8 +462,11 @@ def reset_semifinal_seeding(year_id):
         }
     """
     try:
-        year_obj = db.session.get(ChampionshipYear, year_id)
-        if not year_obj:
+        # Service-Layer verwenden
+        tournament_service = TournamentService()
+        try:
+            year_obj = tournament_service.get_by_id(year_id)
+        except NotFoundError:
             return jsonify({
                 'success': False,
                 'message': 'Tournament year not found.'
@@ -504,15 +518,19 @@ def get_quarterfinal_seeding(year_id):
         }
     """
     try:
-        year_obj = db.session.get(ChampionshipYear, year_id)
-        if not year_obj:
+        # Service-Layer verwenden
+        tournament_service = TournamentService()
+        try:
+            year_obj = tournament_service.get_by_id(year_id)
+        except NotFoundError:
             return jsonify({
                 'success': False,
                 'message': 'Tournament year not found.'
             }), 404
 
-        # Get all games for the year
-        games_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
+        # Service-Layer für Spiele verwenden
+        game_service = GameService()
+        games_raw = game_service.get_by_tournament(year_id)
         
         # Preliminary Round Statistics
         teams_stats = {}
@@ -626,8 +644,11 @@ def save_quarterfinal_seeding(year_id):
         }
     """
     try:
-        year_obj = db.session.get(ChampionshipYear, year_id)
-        if not year_obj:
+        # Service-Layer verwenden
+        tournament_service = TournamentService()
+        try:
+            year_obj = tournament_service.get_by_id(year_id)
+        except NotFoundError:
             return jsonify({
                 'success': False,
                 'message': 'Tournament year not found.'
@@ -688,8 +709,11 @@ def reset_quarterfinal_seeding(year_id):
         }
     """
     try:
-        year_obj = db.session.get(ChampionshipYear, year_id)
-        if not year_obj:
+        # Service-Layer verwenden
+        tournament_service = TournamentService()
+        try:
+            year_obj = tournament_service.get_by_id(year_id)
+        except NotFoundError:
             return jsonify({
                 'success': False,
                 'message': 'Tournament year not found.'

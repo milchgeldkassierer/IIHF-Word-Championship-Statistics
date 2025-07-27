@@ -181,12 +181,13 @@ npx claude-flow sparc run integration "integrate authentication with user manage
 
 ### 📋 Agent Categories & Concurrent Patterns
 
-#### **Core Development Agents**
-- `coder` - Implementation specialist
-- `reviewer` - Code quality assurance
-- `tester` - Test creation and validation
-- `planner` - Strategic planning
-- `researcher` - Information gathering
+### **1. Core Development Agents (Kernentwicklung)**
+*   **`coder`**: Schreibt Code basierend auf Spezifikationen.
+*   **`reviewer`**: Überprüft den Code auf Qualität, Fehler und Einhaltung von Standards.
+*   **`tester`**: Erstellt und führt Tests aus, um die Funktionalität zu validieren.
+*   **`planner`**: Plant die Abfolge von Aufgaben und bricht komplexe Probleme herunter.
+*   **`researcher`**: Sammelt und analysiert Informationen aus verschiedenen Quellen.
+*   **`general-purpose`**: Ein flexibler Agent für diverse, nicht spezialisierte Aufgaben.
 
 **Concurrent Usage:**
 ```bash
@@ -198,12 +199,14 @@ Task("Create tests", "...", "tester")
 Task("Review code", "...", "reviewer")
 ```
 
-#### **Swarm Coordination Agents**
-- `hierarchical-coordinator` - Queen-led coordination
-- `mesh-coordinator` - Peer-to-peer networks
-- `adaptive-coordinator` - Dynamic topology
-- `collective-intelligence-coordinator` - Hive-mind intelligence
-- `swarm-memory-manager` - Distributed memory
+### **2. Swarm Coordination & Management (Schwarm-Koordination & Management)**
+*   **`swarm-init`**: Initialisiert und konfiguriert einen neuen Agenten-Schwarm.
+*   **`hierarchical-coordinator`**: Koordiniert Agenten in einer Befehlskette (Hierarchie).
+*   **`mesh-coordinator`**: Koordiniert Agenten in einem dezentralen Netzwerk (Mesh).
+*   **`adaptive-coordinator`**: Passt die Koordinationsstrategie dynamisch an die Aufgabe an.
+*   **`task-orchestrator`**: Orchestriert die Ausführung von Aufgaben über mehrere Agenten hinweg.
+*   **`collective-intelligence-coordinator`**: Sammelt und synthetisiert das Wissen des gesamten Schwarms.
+*   **`swarm-memory-manager`**: Verwaltet das geteilte Gedächtnis und den Kontext des Schwarms.
 
 **Concurrent Swarm Deployment:**
 ```bash
@@ -213,58 +216,49 @@ Task("Mesh network backup", "...", "mesh-coordinator")
 Task("Adaptive optimization", "...", "adaptive-coordinator")
 ```
 
-#### **Consensus & Distributed Systems**
-- `byzantine-coordinator` - Byzantine fault tolerance
-- `raft-manager` - Leader election protocols
-- `gossip-coordinator` - Epidemic dissemination
-- `consensus-builder` - Decision-making algorithms
-- `crdt-synchronizer` - Conflict-free replication
-- `quorum-manager` - Dynamic quorum management
-- `security-manager` - Cryptographic security
+### **3. Analysis & Architecture (Analyse & Architektur)**
+*   **`system-architect`**: Entwirft die übergeordnete Systemarchitektur.
+*   **`code-analyzer`**: Analysiert statischen Code auf Struktur, Komplexität und potenzielle Probleme.
+*   **`migration-planner`**: Plant die Migration von Daten oder Systemen.
 
-#### **Performance & Optimization**
-- `perf-analyzer` - Bottleneck identification
-- `performance-benchmarker` - Performance testing
-- `task-orchestrator` - Workflow optimization
-- `memory-coordinator` - Memory management
-- `smart-agent` - Intelligent coordination
+### **4. Consensus & Distributed Systems (Konsens & Verteilte Systeme)**
+*   **`consensus-builder`**: Hilft dem Schwarm, zu einer gemeinsamen Entscheidung zu kommen.
+*   **`quorum-manager`**: Stellt sicher, dass eine Mindestanzahl von Agenten für eine Entscheidung zustimmt.
+*   **`raft-manager`**: Implementiert den Raft-Konsensalgorithmus für Fehlertoleranz.
+*   **`gossip-coordinator`**: Verbreitet Informationen effizient nach dem Gossip-Protokoll.
+*   **`crdt-synchronizer`**: Synchronisiert Datenstrukturen ohne zentrale Sperren (Conflict-free Replicated Data Types).
+*   **`byzantine-coordinator`**: Schützt den Schwarm vor fehlerhaftem oder störendem Verhalten einzelner Agenten.
 
-#### **GitHub & Repository Management**
-- `github-modes` - Comprehensive GitHub integration
-- `pr-manager` - Pull request management
-- `code-review-swarm` - Multi-agent code review
-- `issue-tracker` - Issue management
-- `release-manager` - Release coordination
-- `workflow-automation` - CI/CD automation
-- `project-board-sync` - Project tracking
-- `repo-architect` - Repository optimization
-- `multi-repo-swarm` - Cross-repository coordination
+### **5. GitHub & Repository Management (GitHub & Repository-Verwaltung)**
+*   **`pr-manager`**: Verwaltet den Lebenszyklus von Pull Requests.
+*   **`issue-tracker`**: Verfolgt und verwaltet Issues.
+*   **`release-manager`**: Automatisiert den Software-Release-Prozess.
+*   **`multi-repo-swarm`**: Koordiniert Aufgaben, die mehrere Repositories umfassen.
+*   **`code-review-swarm`**: Ein spezialisierter Schwarm, der Code-Reviews durchführt.
+*   **`swarm-pr`**: Ein Schwarm zur Erstellung und Verwaltung von Pull Requests.
+*   **`swarm-issue`**: Ein Schwarm, der sich auf die Bearbeitung von Issues konzentriert.
+*   **`release-swarm`**: Ein Schwarm zur Automatisierung von Releases.
+*   **`github-modes`**: Interagiert mit spezifischen GitHub-Funktionen (z.B. Projects, Actions).
+*   **`project-board-sync`**: Synchronisiert den Arbeitsfortschritt mit Projekt-Boards (z.B. GitHub Projects).
+*   **`workflow-automation`**: Automatisiert wiederkehrende Entwicklungs-Workflows.
+*   **`repo-architect`**: Plant die Struktur und Organisation von Code-Repositories.
+*   **`sync-coordinator`**: Sorgt für die Synchronisation von Daten und Zuständen zwischen Agenten.
 
-#### **SPARC Methodology Agents**
-- `sparc-coord` - SPARC orchestration
-- `sparc-coder` - TDD implementation
-- `specification` - Requirements analysis
-- `pseudocode` - Algorithm design
-- `architecture` - System design
-- `refinement` - Iterative improvement
+### **6. Performance & Optimization (Leistung & Optimierung)**
+*   **`perf-analyzer`**: Analysiert die Laufzeitleistung des Codes.
+*   **`performance-benchmarker`**: Führt standardisierte Leistungstests (Benchmarks) durch.
+*   **`memory-coordinator`**: Überwacht und optimiert die Speichernutzung.
 
-#### **Specialized Development**
-- `backend-dev` - API development
-- `mobile-dev` - React Native development
-- `ml-developer` - Machine learning
-- `cicd-engineer` - CI/CD pipelines
-- `api-docs` - OpenAPI documentation
-- `system-architect` - High-level design
-- `code-analyzer` - Code quality analysis
-- `base-template-generator` - Boilerplate creation
+### **7. Security & Validation (Sicherheit & Validierung)**
+*   **`security-manager`**: Identifiziert und behebt Sicherheitslücken.
+*   **`production-validator`**: Validiert die Anwendung in einer produktionsnahen Umgebung.
 
-#### **Testing & Validation**
-- `tdd-london-swarm` - Mock-driven TDD
-- `production-validator` - Real implementation validation
+### **8. Specialized Development & Methodologies (Spezialisierte Entwicklung & Methodiken)**
+*   **`backend-dev`**: Spezialisiert auf die Entwicklung von Server-Anwendungen.
 
-#### **Migration & Planning**
-- `migration-planner` - System migrations
-- `swarm-init` - Topology initialization
+### **9. Workflow & Tooling (Workflow & Werkzeuge)**
+*   **`api-docs`**: Generiert automatisch Dokumentation für APIs.
+*   **`base-template-generator`**: Erstellt Code-Grundgerüste und Projektvorlagen.
 
 ### 🎯 Concurrent Agent Patterns
 
@@ -299,15 +293,6 @@ Task("Release coordination", "...", "release-manager")
 Task("Workflow automation", "...", "workflow-automation")
 ```
 
-#### **SPARC TDD Swarm (7 agents)**
-```bash
-Task("Requirements spec", "...", "specification")
-Task("Algorithm design", "...", "pseudocode")
-Task("System architecture", "...", "architecture") 
-Task("TDD implementation", "...", "sparc-coder")
-Task("London school tests", "...", "tdd-london-swarm")
-Task("Iterative refinement", "...", "refinement")
-Task("Production validation", "...", "production-validator")
 ```
 
 ### ⚡ Performance Optimization
@@ -458,14 +443,14 @@ If you need to do X operations, they should be in 1 message, not X messages
   mcp__claude-flow__swarm_init { topology: "mesh", maxAgents: 6 }
   mcp__claude-flow__agent_spawn { type: "researcher" }
   mcp__claude-flow__agent_spawn { type: "coder" }
-  mcp__claude-flow__agent_spawn { type: "analyst" }
+  mcp__claude-flow__agent_spawn { type: "code-analyzer" }
   mcp__claude-flow__agent_spawn { type: "tester" }
-  mcp__claude-flow__agent_spawn { type: "coordinator" }
+  mcp__claude-flow__agent_spawn { type: "adaptive-coordinator" }
 
   // Claude Code execution - ALL in parallel
   Task("You are researcher agent. MUST coordinate via hooks...")
   Task("You are coder agent. MUST coordinate via hooks...")
-  Task("You are analyst agent. MUST coordinate via hooks...")
+  Task("You are code-analyzer agent. MUST coordinate via hooks...")
   Task("You are tester agent. MUST coordinate via hooks...")
   TodoWrite { todos: [5-10 todos with all priorities and statuses] }
 
@@ -601,7 +586,7 @@ Once configured, Claude Flow MCP tools enhance Claude Code's coordination:
 - Tool: `mcp__claude-flow__agent_spawn`
 - Parameters: `{"type": "researcher", "name": "Literature Review"}`
 - Tool: `mcp__claude-flow__agent_spawn`
-- Parameters: `{"type": "analyst", "name": "Data Analysis"}`
+- Parameters: `{"type": "code-analyzer", "name": "Data Analysis"}`
 - Result: Different cognitive patterns for Claude Code to use
 
 **Step 3:** Coordinate research execution
@@ -616,7 +601,7 @@ Once configured, Claude Flow MCP tools enhance Claude Code's coordination:
 2. Each agent MUST use Claude Flow hooks for coordination:
    - `npx claude-flow@alpha hooks pre-task` before starting
    - `npx claude-flow@alpha hooks post-edit` after each file operation
-   - `npx claude-flow@alpha hooks notification` to share decisions
+   - `npx claude-flow@alpha hooks notify` to share decisions
 3. Claude Code uses its native Read, WebSearch, and Task tools
 4. The swarm coordinates through shared memory and hooks
 5. Results are synthesized by Claude Code with full coordination history
@@ -634,7 +619,7 @@ Once configured, Claude Flow MCP tools enhance Claude Code's coordination:
 **Step 2:** Define development perspectives
 
 - Tool: `mcp__claude-flow__agent_spawn`
-- Parameters: `{"type": "architect", "name": "System Design"}`
+- Parameters: `{"type": "system-architect", "name": "System Design"}`
 - Result: Architectural thinking pattern for Claude Code
 
 **Step 3:** Coordinate implementation
@@ -802,7 +787,7 @@ See `.claude/commands/` for detailed documentation on all features.
    - Medium tasks (4-6 components): 5-7 agents
    - Complex tasks (7+ components): 8-12 agents
 3. **Agent Type Distribution**: Balance agent types based on task:
-   - Always include 1 coordinator
+   - Always include 1 coordinator (adaptiv, hierarchal, mesh)
    - For code-heavy tasks: more coders
    - For design tasks: more architects/analysts
    - For quality tasks: more testers/reviewers
@@ -843,7 +828,7 @@ npx claude-flow@alpha hooks session-restore --session-id "swarm-[id]" --load-mem
 npx claude-flow@alpha hooks post-edit --file "[filepath]" --memory-key "swarm/[agent]/[step]"
 
 # Store decisions and findings
-npx claude-flow@alpha hooks notification --message "[what was done]" --telemetry true
+npx claude-flow@alpha hooks notify --message "[what was done]" --telemetry true
 
 # Check coordination with other agents
 npx claude-flow@alpha hooks pre-search --query "[what to check]" --cache-results true
@@ -867,7 +852,7 @@ You are the [Agent Type] agent in a coordinated swarm.
 MANDATORY COORDINATION:
 1. START: Run `npx claude-flow@alpha hooks pre-task --description "[your task]"`
 2. DURING: After EVERY file operation, run `npx claude-flow@alpha hooks post-edit --file "[file]" --memory-key "agent/[step]"`
-3. MEMORY: Store ALL decisions using `npx claude-flow@alpha hooks notification --message "[decision]"`
+3. MEMORY: Store ALL decisions using `npx claude-flow@alpha hooks notify --message "[decision]"`
 4. END: Run `npx claude-flow@alpha hooks post-task --task-id "[task]" --analyze-performance true`
 
 Your specific task: [detailed task description]
@@ -896,15 +881,15 @@ Message 1: [BatchTool]
   - mcp__claude-flow__swarm_init
   - mcp__claude-flow__agent_spawn (researcher)
   - mcp__claude-flow__agent_spawn (coder)
-  - mcp__claude-flow__agent_spawn (analyst)
+  - mcp__claude-flow__agent_spawn (code-analyzer)
   - mcp__claude-flow__agent_spawn (tester)
-  - mcp__claude-flow__agent_spawn (coordinator)
+  - mcp__claude-flow__agent_spawn (adaptive-coordinator)
 
 Message 2: [BatchTool - Claude Code execution]
   // Task agents with full coordination instructions
   - Task("You are researcher agent. MANDATORY: Run hooks pre-task, post-edit, post-task. Task: Research API patterns")
   - Task("You are coder agent. MANDATORY: Run hooks pre-task, post-edit, post-task. Task: Implement REST endpoints")
-  - Task("You are analyst agent. MANDATORY: Run hooks pre-task, post-edit, post-task. Task: Analyze performance")
+  - Task("You are code-analyzer agent. MANDATORY: Run hooks pre-task, post-edit, post-task. Task: Analyze performance")
   - Task("You are tester agent. MANDATORY: Run hooks pre-task, post-edit, post-task. Task: Write comprehensive tests")
 
   // TodoWrite with ALL todos batched
@@ -940,13 +925,13 @@ STEP 1: IMMEDIATE PARALLEL SPAWN (Single Message!)
 
   // Spawn agents based on maxAgents count and task requirements
   // If CLI specifies 3 agents, spawn 3. If no args, auto-decide optimal count (3-12)
-  - mcp__claude-flow__agent_spawn { type: "architect", name: "System Designer" }
+  - mcp__claude-flow__agent_spawn { type: "system-architect", name: "System Designer" }
   - mcp__claude-flow__agent_spawn { type: "coder", name: "API Developer" }
   - mcp__claude-flow__agent_spawn { type: "coder", name: "Frontend Dev" }
-  - mcp__claude-flow__agent_spawn { type: "analyst", name: "DB Designer" }
+  - mcp__claude-flow__agent_spawn { type: "code-analyzer", name: "DB Designer" }
   - mcp__claude-flow__agent_spawn { type: "tester", name: "QA Engineer" }
   - mcp__claude-flow__agent_spawn { type: "researcher", name: "Tech Lead" }
-  - mcp__claude-flow__agent_spawn { type: "coordinator", name: "PM" }
+  - mcp__claude-flow__agent_spawn { type: "adaptive-coordinator", name: "PM" }
   - TodoWrite { todos: [multiple todos at once] }
 
 STEP 2: PARALLEL TASK EXECUTION (Single Message!)
@@ -998,12 +983,12 @@ Dependencies: ↳ X deps | Actionable: ▶
 [BatchTool - Message 1]:
   // Initialize and spawn ALL agents at once
   mcp__claude-flow__swarm_init { topology: "hierarchical", maxAgents: 8, strategy: "parallel" }
-  mcp__claude-flow__agent_spawn { type: "architect", name: "System Designer" }
+  mcp__claude-flow__agent_spawn { type: "system-architect", name: "System Designer" }
   mcp__claude-flow__agent_spawn { type: "coder", name: "API Developer" }
   mcp__claude-flow__agent_spawn { type: "coder", name: "Auth Expert" }
-  mcp__claude-flow__agent_spawn { type: "analyst", name: "DB Designer" }
+  mcp__claude-flow__agent_spawn { type: "code-analyzer", name: "DB Designer" }
   mcp__claude-flow__agent_spawn { type: "tester", name: "Test Engineer" }
-  mcp__claude-flow__agent_spawn { type: "coordinator", name: "Lead" }
+  mcp__claude-flow__agent_spawn { type: "adaptive-coordinator", name: "Lead" }
 
   // Update ALL todos at once - NEVER split todos!
   TodoWrite { todos: [
@@ -1109,12 +1094,12 @@ When showing swarm status, use this format:
 └── 🧠 Memory: 15 coordination points stored
 
 Agent Activity:
-├── 🟢 architect: Designing database schema...
+├── 🟢 system-architect: Designing database schema...
 ├── 🟢 coder-1: Implementing auth endpoints...
 ├── 🟢 coder-2: Building user CRUD operations...
-├── 🟢 analyst: Optimizing query performance...
+├── 🟢 code-analyzer: Optimizing query performance...
 ├── 🟡 tester: Waiting for auth completion...
-└── 🟢 coordinator: Monitoring progress...
+└── 🟢 adaptive-coordinator: Monitoring progress...
 ```
 
 ## 📝 CRITICAL: TODOWRITE AND TASK TOOL BATCHING
@@ -1169,7 +1154,5 @@ Remember: **Claude Flow coordinates, Claude Code creates!** Start with `mcp__cla
 
 **when u not find a label in github u can create this**
 **if u make .md files for REPORTS or test, or SUMMARY or RESULT, or all u do for ur own and not for me put in the .doc_md folder and all other scripts or temporary files put in the .tmp folder**
-
-**for new Agents not use the agent type 'architect' use 'system-architect' or 'repo-architect'**
 
 **always use 'python3 -m venv venv' before install or run something in bash 'source venv/bin/activate'**

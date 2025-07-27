@@ -4,9 +4,18 @@ from routes.blueprints import main_bp
 from constants import TEAM_ISO_CODES
 from sqlalchemy import func
 
+# Import Service Layer
+from app.services.core.player_service import PlayerService
+from app.services.core.team_service import TeamService
+from app.exceptions import NotFoundError, ValidationError, ServiceError
+
 
 @main_bp.route('/edit-players', methods=['GET', 'POST'])
 def edit_players():
+    # Initialize Services
+    player_service = PlayerService()
+    team_service = TeamService()
+    
     if request.method == 'POST':
         player_id = request.form.get('player_id')
         first_name = request.form.get('first_name')
@@ -22,47 +31,54 @@ def edit_players():
             flash(error_msg, 'danger')
         else:
             try:
-                player = db.session.get(Player, int(player_id))
-                if not player:
-                    error_msg = 'Spieler nicht gefunden.'
-                    if is_ajax:
-                        return jsonify({'success': False, 'message': error_msg}), 404
-                    flash(error_msg, 'danger')
-                else:
-                    player.first_name = first_name.strip()
-                    player.last_name = last_name.strip()
-                    
-                    if jersey_number_str and jersey_number_str.strip():
-                        try:
-                            player.jersey_number = int(jersey_number_str.strip())
-                        except ValueError:
-                            error_msg = 'Ungültige Trikotnummer.'
-                            if is_ajax:
-                                return jsonify({'success': False, 'message': error_msg}), 400
-                            flash(error_msg, 'warning')
-                            return redirect(url_for('main_bp.edit_players'))
-                    else:
-                        player.jersey_number = None
-                    
-                    db.session.commit()
-                    success_msg = f'Spieler {first_name} {last_name} erfolgreich aktualisiert!'
-                    
-                    if is_ajax:
-                        return jsonify({
-                            'success': True, 
-                            'message': success_msg,
-                            'player': {
-                                'id': player.id,
-                                'first_name': player.first_name,
-                                'last_name': player.last_name,
-                                'jersey_number': player.jersey_number,
-                                'team_code': player.team_code
-                            }
-                        })
-                    flash(success_msg, 'success')
-            except Exception as e:
-                db.session.rollback()
-                current_app.logger.error(f"Error updating player: {str(e)}")
+                # Validate jersey number
+                jersey_number = None
+                if jersey_number_str and jersey_number_str.strip():
+                    try:
+                        jersey_number = int(jersey_number_str.strip())
+                    except ValueError:
+                        error_msg = 'Ungültige Trikotnummer.'
+                        if is_ajax:
+                            return jsonify({'success': False, 'message': error_msg}), 400
+                        flash(error_msg, 'warning')
+                        return redirect(url_for('main_bp.edit_players'))
+                
+                # Update player via service
+                updated_player = player_service.update_player(
+                    int(player_id),
+                    first_name=first_name.strip(),
+                    last_name=last_name.strip(),
+                    jersey_number=jersey_number
+                )
+                
+                success_msg = f'Spieler {first_name} {last_name} erfolgreich aktualisiert!'
+                
+                if is_ajax:
+                    return jsonify({
+                        'success': True, 
+                        'message': success_msg,
+                        'player': {
+                            'id': updated_player.id,
+                            'first_name': updated_player.first_name,
+                            'last_name': updated_player.last_name,
+                            'jersey_number': updated_player.jersey_number,
+                            'team_code': updated_player.team_code
+                        }
+                    })
+                flash(success_msg, 'success')
+                
+            except NotFoundError:
+                error_msg = 'Spieler nicht gefunden.'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': error_msg}), 404
+                flash(error_msg, 'danger')
+            except ValidationError as e:
+                error_msg = f'Validierungsfehler: {str(e)}'
+                if is_ajax:
+                    return jsonify({'success': False, 'message': error_msg}), 400
+                flash(error_msg, 'warning')
+            except ServiceError as e:
+                current_app.logger.error(f"Service error updating player: {str(e)}")
                 error_msg = f'Fehler beim Aktualisieren des Spielers: {str(e)}'
                 if is_ajax:
                     return jsonify({'success': False, 'message': error_msg}), 500
@@ -74,25 +90,35 @@ def edit_players():
                 return redirect(url_for('main_bp.edit_players', country=selected_country))
             return redirect(url_for('main_bp.edit_players'))
     
-    countries_with_players_query = db.session.query(
-        Player.team_code, 
-        func.count(Player.id).label('player_count')
-    ).group_by(Player.team_code).order_by(Player.team_code).all()
-    
-    countries_data = {}
-    total_players = 0
-    for country_code, player_count in countries_with_players_query:
-        if country_code in TEAM_ISO_CODES and TEAM_ISO_CODES[country_code] is not None:
-            countries_data[country_code] = player_count
-            total_players += player_count
-    
-    countries = list(countries_data.keys())
-    
-    selected_country = request.args.get('country', countries[0] if countries else None)
-    
-    players = []
-    if selected_country:
-        players = Player.query.filter_by(team_code=selected_country).order_by(Player.last_name, Player.first_name).all()
+    # Get countries with players via service
+    try:
+        countries_stats = team_service.get_countries_with_players()
+        countries_data = {}
+        total_players = 0
+        
+        for stat in countries_stats:
+            country_code = stat['team_code']
+            player_count = stat['player_count']
+            if country_code in TEAM_ISO_CODES and TEAM_ISO_CODES[country_code] is not None:
+                countries_data[country_code] = player_count
+                total_players += player_count
+        
+        countries = list(countries_data.keys())
+        selected_country = request.args.get('country', countries[0] if countries else None)
+        
+        # Get players for selected country via service
+        players = []
+        if selected_country:
+            players = player_service.get_players_by_team(selected_country)
+            
+    except ServiceError as e:
+        current_app.logger.error(f"Service error in edit_players: {str(e)}")
+        flash(f'Fehler beim Laden der Spielerdaten: {str(e)}', 'danger')
+        countries_data = {}
+        total_players = 0
+        countries = []
+        selected_country = None
+        players = []
     
     return render_template('edit_players.html', 
                          countries=countries, 
@@ -105,6 +131,9 @@ def edit_players():
 
 @main_bp.route('/add-player-global', methods=['POST'])
 def add_player_global():
+    # Initialize Service
+    player_service = PlayerService()
+    
     team_code = request.form.get('team_code')
     first_name = request.form.get('first_name')
     last_name = request.form.get('last_name')
@@ -115,6 +144,7 @@ def add_player_global():
         return redirect(url_for('main_bp.edit_players'))
     
     try:
+        # Validate jersey number
         jersey_number = None
         if jersey_number_str and jersey_number_str.strip():
             try:
@@ -123,28 +153,23 @@ def add_player_global():
                 flash('Ungültige Trikotnummer.', 'warning')
                 return redirect(url_for('main_bp.edit_players'))
         
-        existing_player = Player.query.filter_by(
-            team_code=team_code, 
-            first_name=first_name.strip(), 
-            last_name=last_name.strip()
-        ).first()
+        # Create player via service
+        new_player = player_service.create_player(
+            team_code=team_code,
+            first_name=first_name.strip(),
+            last_name=last_name.strip(),
+            jersey_number=jersey_number
+        )
         
-        if existing_player:
+        flash(f'Spieler {first_name} {last_name} erfolgreich hinzugefügt!', 'success')
+        
+    except ValidationError as e:
+        if 'bereits' in str(e).lower() or 'exists' in str(e).lower():
             flash(f'Spieler {first_name} {last_name} ({team_code}) existiert bereits.', 'warning')
         else:
-            new_player = Player(
-                team_code=team_code,
-                first_name=first_name.strip(),
-                last_name=last_name.strip(),
-                jersey_number=jersey_number
-            )
-            db.session.add(new_player)
-            db.session.commit()
-            flash(f'Spieler {first_name} {last_name} erfolgreich hinzugefügt!', 'success')
-            
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Error adding player: {str(e)}")
+            flash(f'Validierungsfehler: {str(e)}', 'warning')
+    except ServiceError as e:
+        current_app.logger.error(f"Service error adding player: {str(e)}")
         flash(f'Fehler beim Hinzufügen des Spielers: {str(e)}', 'danger')
     
     return redirect(url_for('main_bp.edit_players', country=team_code))

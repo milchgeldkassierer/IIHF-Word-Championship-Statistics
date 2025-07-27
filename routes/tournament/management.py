@@ -10,33 +10,47 @@ from constants import TEAM_ISO_CODES, PIM_MAP
 from sqlalchemy import func, case
 from routes.blueprints import main_bp
 from routes.records.utils import get_tournament_statistics
+# Service Layer imports
+from app.services.core.tournament_service import TournamentService
+from app.exceptions import NotFoundError, ValidationError, BusinessRuleError
 # Import locally to avoid circular imports
 
 
 @main_bp.route('/', methods=['GET', 'POST'])
 def index():
+    # Service Layer initialisieren
+    tournament_service = TournamentService()
+    
     if request.method == 'POST':
         if 'delete_year' in request.form:
             year_id_to_delete = request.form.get('year_id_to_delete')
-            year_obj_del = db.session.get(ChampionshipYear, year_id_to_delete)
-            if year_obj_del:
-                if year_obj_del.fixture_path:
-                    absolute_fixture_path = resolve_fixture_path(year_obj_del.fixture_path)
-                    if absolute_fixture_path and os.path.exists(absolute_fixture_path):
-                        try:
-                            abs_fixture_path = os.path.abspath(absolute_fixture_path)
-                            abs_upload_folder = os.path.abspath(current_app.config['UPLOAD_FOLDER'])
-                            if abs_fixture_path.startswith(abs_upload_folder):
-                                 os.remove(absolute_fixture_path)
-                                 flash(f'Associated fixture file "{os.path.basename(absolute_fixture_path)}" from data directory deleted.', 'info')
-                        except OSError as e:
-                            flash(f"Error deleting managed fixture file: {e}", "danger")
-                
-                db.session.delete(year_obj_del)
-                db.session.commit()
-                flash(f'Tournament "{year_obj_del.name} ({year_obj_del.year})" deleted.', 'success')
-            else:
-                flash('Tournament to delete not found.', 'warning')
+            try:
+                # Service Layer nutzen für Tournament-Abruf
+                year_obj_del = tournament_service.get_by_id(year_id_to_delete)
+                if year_obj_del:
+                    # Fixture-Datei löschen falls vorhanden
+                    if year_obj_del.fixture_path:
+                        absolute_fixture_path = resolve_fixture_path(year_obj_del.fixture_path)
+                        if absolute_fixture_path and os.path.exists(absolute_fixture_path):
+                            try:
+                                abs_fixture_path = os.path.abspath(absolute_fixture_path)
+                                abs_upload_folder = os.path.abspath(current_app.config['UPLOAD_FOLDER'])
+                                if abs_fixture_path.startswith(abs_upload_folder):
+                                     os.remove(absolute_fixture_path)
+                                     flash(f'Associated fixture file "{os.path.basename(absolute_fixture_path)}" from data directory deleted.', 'info')
+                            except OSError as e:
+                                flash(f"Error deleting managed fixture file: {e}", "danger")
+                    
+                    # Löschung direkt durchführen (Service hat keine delete Methode)
+                    db.session.delete(year_obj_del)
+                    db.session.commit()
+                    flash(f'Tournament "{year_obj_del.name} ({year_obj_del.year})" deleted.', 'success')
+                else:
+                    flash('Tournament to delete not found.', 'warning')
+            except BusinessRuleError as e:
+                flash(str(e), 'danger')
+            except Exception as e:
+                flash(f'Error deleting tournament: {str(e)}', 'danger')
             return redirect(url_for('main_bp.index'))
 
         name_str = request.form.get('tournament_name')
@@ -52,18 +66,22 @@ def index():
             flash('Year must be a number.', 'danger')
             return redirect(url_for('main_bp.index'))
 
-        existing_tournament = ChampionshipYear.query.filter_by(name=name_str, year=year_int).first()
+        # Service Layer nutzen für Tournament-Suche
+        existing_tournament = ChampionshipYear.query.filter_by(year=year_int).first()
         target_year_obj = existing_tournament
 
         if not target_year_obj:
-            new_tournament = ChampionshipYear(name=name_str, year=year_int)
-            db.session.add(new_tournament)
             try:
-                db.session.commit()
-                target_year_obj = new_tournament
+                # Service Layer nutzen für Tournament-Erstellung
+                target_year_obj = tournament_service.create_tournament(name_str, year_int)
                 flash(f'Tournament "{target_year_obj.name} ({target_year_obj.year})" created.', 'success')
+            except ValidationError as e:
+                flash(f'Validation error: {str(e)}', 'danger')
+                return redirect(url_for('main_bp.index'))
+            except BusinessRuleError as e:
+                flash(f'Business rule error: {str(e)}', 'danger')
+                return redirect(url_for('main_bp.index'))
             except Exception as e:
-                db.session.rollback()
                 flash(f'Error creating tournament: {str(e)}', 'danger')
                 return redirect(url_for('main_bp.index'))
         else:
@@ -92,15 +110,27 @@ def index():
                       relative_fixture_path = potential_id_fixture_filename
 
             if fixture_path_to_load:
-                Game.query.filter_by(year_id=target_year_obj.id).delete()
+                # Fixture-Loading bleibt direkt, da es komplexe Datenverarbeitung ist
+                # Service Layer für Spielverwaltung nutzen
+                game_service = GameService()
+                
+                # Zuerst alle bestehenden Spiele für dieses Turnier löschen
+                existing_games = game_service.get_by_tournament(target_year_obj.id)
+                for game in existing_games:
+                    game_service.delete(game.id)
                 try:
+                    # Tournament-Update direkt (Service hat keine update Methode)
                     target_year_obj.fixture_path = relative_fixture_path
+                    
                     with open(fixture_path_to_load, 'r', encoding='utf-8') as f:
                         fixture_data = json.load(f)
                     
                     games_from_json = fixture_data.get("schedule", [])
+                    games_data_list = []
+                    
                     for game_data_item in games_from_json:
                         mapped_game_data = {
+                            'year_id': target_year_obj.id,
                             'date': game_data_item.get('date'),
                             'start_time': game_data_item.get('startTime'),
                             'round': game_data_item.get('round'),
@@ -111,13 +141,14 @@ def index():
                             'location': game_data_item.get('location'),
                             'venue': game_data_item.get('venue')
                         }
-                        new_game = Game(year_id=target_year_obj.id, **mapped_game_data)
-                        db.session.add(new_game)
+                        games_data_list.append(mapped_game_data)
                     
-                    db.session.commit()
+                    # Bulk create Spiele über Service
+                    if games_data_list:
+                        game_service.bulk_create(games_data_list)
                     flash(f'Fixture "{os.path.basename(fixture_path_to_load)}" loaded and games updated for "{target_year_obj.name} ({target_year_obj.year})".', 'success')
                 except Exception as e:
-                    db.session.rollback()
+                    game_service.rollback()
                     flash(f'Error processing fixture file "{os.path.basename(fixture_path_to_load if fixture_path_to_load else potential_fixture_filename)}": {str(e)} - {traceback.format_exc()}', 'danger')
             else:
                 if not existing_tournament:
@@ -125,11 +156,14 @@ def index():
                 else:
                     flash(f'No fixture file like "{year_str}.json" found for "{target_year_obj.name} ({target_year_obj.year})". Existing games remain.', 'info')
 
+    # Direkte Datenbankabfrage für Tournament-Liste
     all_years_db = ChampionshipYear.query.order_by(ChampionshipYear.year.asc(), ChampionshipYear.name).all()
     
+    # Statistiken für jedes Tournament hinzufügen
     for year in all_years_db:
         year.stats = get_tournament_statistics(year)
     
+    # Verfügbare Fixture-Dateien finden
     all_found_years = set()
     upload_folder_path = current_app.config['UPLOAD_FOLDER']
     if os.path.exists(upload_folder_path):

@@ -9,65 +9,67 @@ from utils.fixture_helpers import resolve_fixture_path
 from utils.playoff_resolver import PlayoffResolver  # Nutze den zentralisierten PlayoffResolver
 from routes.records.utils import get_all_resolved_games
 
+# Importiere Service Layer
+from app.services.core.game_service import GameService
+from app.services.core.tournament_service import TournamentService
+from app.services.core.team_service import TeamService
+from app.services.core.standings_service import StandingsService
+from app.services.core.player_service import PlayerService
+from app.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
+
 # Import the blueprint from the parent package
 from . import year_bp
 from .seeding import get_custom_seeding_from_db, get_custom_qf_seeding_from_db
 
 @year_bp.route('/<int:year_id>', methods=['GET', 'POST'])
 def year_view(year_id):
+    # Initialisiere Services
+    tournament_service = TournamentService()
+    game_service = GameService()
+    standings_service = StandingsService()
+    player_service = PlayerService()
+    team_service = TeamService()
     
-    year_obj = db.session.get(ChampionshipYear, year_id)
-    if not year_obj:
+    try:
+        year_obj = tournament_service.get_by_id(year_id)
+    except NotFoundError:
         flash('Tournament year not found.', 'danger')
         return redirect(url_for('main_bp.index'))
 
-    games_raw = Game.query.filter_by(year_id=year_id).order_by(Game.date, Game.start_time, Game.game_number).all()
+    # Hole alle Spiele für das Jahr über den Service
+    games_raw = game_service.get_games_by_year(year_id)
     games_raw_map = {g.id: g for g in games_raw}
 
-    sog_by_game_flat = {} 
-    for sog_entry in ShotsOnGoal.query.join(Game).filter(Game.year_id == year_id).all():
-        game_sog_data = sog_by_game_flat.setdefault(sog_entry.game_id, {})
-        team_period_sog_data = game_sog_data.setdefault(sog_entry.team_code, {})
-        team_period_sog_data[sog_entry.period] = sog_entry.shots
+    # Hole Shots on Goal Daten über den Service
+    sog_by_game_flat = game_service.get_shots_on_goal_by_year(year_id)
 
+    # Handle Spielergebnis Update über Service
     if request.method == 'POST' and 'sog_team1_code_resolved' not in request.form:
         game_id_form = request.form.get('game_id')
-        game_to_update = db.session.get(Game, game_id_form)
-        if game_to_update:
+        if game_id_form:
             try:
+                # Parse scores
                 t1s = request.form.get('team1_score')
                 t2s = request.form.get('team2_score')
-                game_to_update.team1_score = int(t1s) if t1s and t1s.strip() else None
-                game_to_update.team2_score = int(t2s) if t2s and t2s.strip() else None
+                team1_score = int(t1s) if t1s and t1s.strip() else None
+                team2_score = int(t2s) if t2s and t2s.strip() else None
                 res_type = request.form.get('result_type')
                 
-                if game_to_update.team1_score is None or game_to_update.team2_score is None:
-                    game_to_update.result_type = None
-                    game_to_update.team1_points = 0
-                    game_to_update.team2_points = 0
-                else:
-                    game_to_update.result_type = res_type
-                    if res_type == 'REG':
-                        if game_to_update.team1_score > game_to_update.team2_score:
-                            pts1, pts2 = 3, 0
-                        elif game_to_update.team2_score > game_to_update.team1_score:
-                            pts1, pts2 = 0, 3
-                        else:
-                            pts1, pts2 = 1, 1 
-                        game_to_update.team1_points, game_to_update.team2_points = pts1, pts2
-                    elif res_type in ['OT', 'SO']:
-                        if game_to_update.team1_score > game_to_update.team2_score:
-                            game_to_update.team1_points, game_to_update.team2_points = 2, 1
-                        else:
-                            game_to_update.team1_points, game_to_update.team2_points = 1, 2
-                db.session.commit()
+                # Update über Service
+                game_service.update_game_score(
+                    game_id=int(game_id_form),
+                    team1_score=team1_score,
+                    team2_score=team2_score,
+                    result_type=res_type
+                )
                 flash('Game result updated!', 'success')
                 return redirect(url_for('year_bp.year_view', year_id=year_id, _anchor=f"game-{game_id_form}"))
-            except Exception as e:
-                db.session.rollback()
+            except NotFoundError:
+                flash('Game not found for update.', 'warning')
+            except ValidationError as e:
+                flash(f'Validation error: {str(e)}', 'danger')
+            except ServiceError as e:
                 flash(f'Error updating result: {str(e)}', 'danger')
-        else:
-            flash('Game not found for update.', 'warning')
 
     teams_stats = {}
     prelim_games = [g for g in games_raw if g.round == 'Preliminary Round' and g.group]
@@ -83,10 +85,8 @@ def year_view(year_id):
         if team_code not in teams_stats: 
             teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
-    # Verwende StandingsCalculator für die Berechnung der Teamstatistiken
-    from services.standings_calculator_adapter import StandingsCalculator
-    calculator = StandingsCalculator()
-    teams_stats = calculator.calculate_standings_from_games(
+    # Verwende StandingsService für die Berechnung der Teamstatistiken
+    teams_stats = standings_service.calculate_standings_from_games(
         [pg for pg in prelim_games if pg.team1_score is not None]
     )
     
@@ -419,33 +419,28 @@ def year_view(year_id):
         if g_disp_final_pass.team2_code != resolved_t2_final:
             g_disp_final_pass.team2_code = resolved_t2_final
 
-    all_players_list = Player.query.order_by(Player.team_code, Player.last_name).all()
+    # Hole alle Spieler über den Service
+    all_players_list = player_service.get_all_players(order_by=['team_code', 'last_name'])
     player_cache = {p.id: p for p in all_players_list}
     selected_team_filter = request.args.get('stats_team_filter')
     
-    player_stats_agg = {p.id: {'g': 0, 'a': 0, 'p': 0, 'obj': p} for p in all_players_list if not selected_team_filter or p.team_code == selected_team_filter}
-    for goal in Goal.query.filter(Goal.game_id.in_([g.id for g in games_raw])).all():
-        if goal.scorer_id in player_stats_agg:
-            player_stats_agg[goal.scorer_id]['g'] += 1
-            player_stats_agg[goal.scorer_id]['p'] += 1
-        if goal.assist1_id and goal.assist1_id in player_stats_agg:
-            player_stats_agg[goal.assist1_id]['a'] += 1
-            player_stats_agg[goal.assist1_id]['p'] += 1
-        if goal.assist2_id and goal.assist2_id in player_stats_agg:
-            player_stats_agg[goal.assist2_id]['a'] += 1
-            player_stats_agg[goal.assist2_id]['p'] += 1
+    # Hole Spielerstatistiken über den Service
+    player_stats_agg = player_service.get_player_stats_for_year(
+        year_id=year_id,
+        team_filter=selected_team_filter,
+        game_ids=[g.id for g in games_raw]
+    )
     
     all_player_stats_list = [{'goals': v['g'], 'assists': v['a'], 'points': v['p'], 'player_obj': v['obj']} for v in player_stats_agg.values()]
     top_scorers_points = sorted([s for s in all_player_stats_list if s['points'] > 0], key=lambda x: (-x['points'], -x['goals'], x['player_obj'].last_name.lower()))
     top_goal_scorers = sorted([s for s in all_player_stats_list if s['goals'] > 0], key=lambda x: (-x['goals'], -x['points'], x['player_obj'].last_name.lower()))
     top_assist_providers = sorted([s for s in all_player_stats_list if s['assists'] > 0], key=lambda x: (-x['assists'], -x['points'], x['player_obj'].last_name.lower()))
 
-    player_pim_agg = {p.id: {'pim': 0, 'obj': p} for p in all_players_list if (not selected_team_filter or p.team_code == selected_team_filter) and p.id is not None}
-    all_penalties_for_year = Penalty.query.join(Game).filter(Game.year_id == year_id).all()
-    for penalty_entry in all_penalties_for_year:
-        if penalty_entry.player_id and penalty_entry.player_id in player_pim_agg:
-            pim_value = PIM_MAP.get(penalty_entry.penalty_type, 0)
-            player_pim_agg[penalty_entry.player_id]['pim'] += pim_value
+    # Hole Strafminuten-Statistiken über den Service
+    player_pim_agg = player_service.get_player_penalty_stats_for_year(
+        year_id=year_id,
+        team_filter=selected_team_filter
+    )
     top_penalty_players = sorted([{'player_obj': v['obj'], 'pim': v['pim']} for v in player_pim_agg.values() if v['pim'] > 0], key=lambda x: (-x['pim'], x['player_obj'].last_name.lower()))
 
     game_nat_teams = set(g.team1_code for g in games_processed if not (g.team1_code.startswith(('A', 'B', 'W', 'L', 'Q', 'S')) and g.team1_code[1:].isdigit()))
@@ -457,9 +452,14 @@ def year_view(year_id):
         p = player_cache.get(pid)
         return f"{p.first_name} {p.last_name}" if p else "N/A"
 
+    # Hole alle Goals und Penalties für alle Spiele auf einmal (N+1 Query vermeiden)
+    all_game_ids = [g.id for g in games_processed]
+    goals_by_game = game_service.get_goals_by_games(all_game_ids)
+    penalties_by_game = game_service.get_penalties_by_games(all_game_ids)
+    
     for g_disp in games_processed:
         g_disp.sorted_events = [] 
-        for goal in Goal.query.filter_by(game_id=g_disp.id).all():
+        for goal in goals_by_game.get(g_disp.id, []):
             g_disp.sorted_events.append({
                 'type': 'goal',
                 'time_str': goal.minute,
@@ -476,7 +476,7 @@ def year_view(year_id):
                     'team_iso': TEAM_ISO_CODES.get(goal.team_code.upper())
                 }
             })
-        for pnlty in Penalty.query.filter_by(game_id=g_disp.id).all():
+        for pnlty in penalties_by_game.get(g_disp.id, []):
             g_disp.sorted_events.append({
                 'type': 'penalty',
                 'time_str': pnlty.minute_of_game,
@@ -505,9 +505,8 @@ def year_view(year_id):
         consistency_check = check_game_data_consistency(g_disp, sog_src)
         g_disp.scores_fully_match_goals = consistency_check['scores_fully_match_data']
 
-    # Load overrule data for all games
-    all_overrules = GameOverrule.query.join(Game).filter(Game.year_id == year_id).all()
-    overrule_by_game_id = {overrule.game_id: overrule for overrule in all_overrules}
+    # Load overrule data for all games über Service
+    overrule_by_game_id = game_service.get_overrules_by_year(year_id)
     
     for g_disp in games_processed:
         g_disp.overrule = overrule_by_game_id.get(g_disp.id)
@@ -668,114 +667,16 @@ def year_view(year_id):
             team_pair_key = f"{team_pair_sorted[0]}_vs_{team_pair_sorted[1]}"
             team_combinations_with_games[team_pair_key] = True
 
+    # Hole Teamstatistiken über Service  
     team_stats_data_list = []
     if unique_teams_in_year: 
-        all_games_for_year = Game.query.filter_by(year_id=year_id).all()
-        all_goals_for_year = Goal.query.join(Game).filter(Game.year_id == year_id).all()
-        all_penalties_for_year_detailed = Penalty.query.join(Game).filter(Game.year_id == year_id).all()
-        all_sog_for_year = ShotsOnGoal.query.join(Game).filter(Game.year_id == year_id).all()
-
-        sog_by_game_team = {}
-        for sog_entry in all_sog_for_year:
-            game_sog = sog_by_game_team.setdefault(sog_entry.game_id, {})
-            team_total_sog = game_sog.get(sog_entry.team_code, 0)
-            game_sog[sog_entry.team_code] = team_total_sog + sog_entry.shots
-
-        for team_code_upper in unique_teams_in_year:
-            actual_team_code_from_games = None
-            for g_disp_for_code in games_processed:
-                if g_disp_for_code.team1_code.upper() == team_code_upper:
-                    actual_team_code_from_games = g_disp_for_code.team1_code
-                    break
-                if g_disp_for_code.team2_code.upper() == team_code_upper:
-                    actual_team_code_from_games = g_disp_for_code.team2_code
-                    break
-            
-            if not actual_team_code_from_games:
-                found_in_players = any(p.team_code.upper() == team_code_upper for p in all_players_list)
-                if found_in_players:
-                    player_team_match = next((p.team_code for p in all_players_list if p.team_code.upper() == team_code_upper), team_code_upper)
-                    actual_team_code_from_games = player_team_match
-                else: 
-                    for g_raw_for_code_obj in games_raw_map.values():
-                        if g_raw_for_code_obj.team1_code.upper() == team_code_upper:
-                            actual_team_code_from_games = g_raw_for_code_obj.team1_code
-                            break
-                        if g_raw_for_code_obj.team2_code.upper() == team_code_upper:
-                            actual_team_code_from_games = g_raw_for_code_obj.team2_code
-                            break
-                if not actual_team_code_from_games:
-                    actual_team_code_from_games = team_code_upper 
-
-            current_team_code = actual_team_code_from_games
-            stats = TeamOverallStats(team_name=current_team_code, team_iso_code=TEAM_ISO_CODES.get(current_team_code.upper()))
-
-            for game_id, resolved_game_this_iter in games_processed_map.items():
-                raw_game_obj_this_iter = games_raw_map.get(game_id)
-                if not raw_game_obj_this_iter:
-                    continue
-
-                is_current_team_t1_in_raw_game = False
-
-                if resolved_game_this_iter.team1_code == current_team_code:
-                    is_current_team_t1_in_raw_game = True
-                elif resolved_game_this_iter.team2_code == current_team_code:
-                    is_current_team_t1_in_raw_game = False 
-                else:
-                    continue
-
-                if raw_game_obj_this_iter.team1_score is not None and raw_game_obj_this_iter.team2_score is not None: 
-                    stats.gp += 1
-                    current_team_score = raw_game_obj_this_iter.team1_score if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team2_score
-                    opponent_score = raw_game_obj_this_iter.team2_score if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team1_score
-                    stats.gf += current_team_score
-                    stats.ga += opponent_score
-                    if opponent_score == 0 and current_team_score > 0:
-                        stats.so += 1
-                
-                game_sog_info = sog_by_game_team.get(raw_game_obj_this_iter.id, {})
-                if resolved_game_this_iter.team1_code == current_team_code:
-                    stats.sog += game_sog_info.get(current_team_code, 0)
-                    stats.soga += game_sog_info.get(resolved_game_this_iter.team2_code, 0)
-                elif resolved_game_this_iter.team2_code == current_team_code:
-                    stats.sog += game_sog_info.get(current_team_code, 0)
-                    stats.soga += game_sog_info.get(resolved_game_this_iter.team1_code, 0)
-            
-            for goal_event in all_goals_for_year:
-                if goal_event.game_id not in games_processed_map:
-                    continue
-                
-                resolved_game_of_goal = games_processed_map.get(goal_event.game_id)
-                if not resolved_game_of_goal:
-                    continue
-
-                if goal_event.team_code == current_team_code:
-                    if goal_event.is_empty_net:
-                        stats.eng += 1
-                    if goal_event.goal_type == 'PP':
-                        stats.ppgf += 1
-                elif (resolved_game_of_goal.team1_code == current_team_code and goal_event.team_code == resolved_game_of_goal.team2_code) or \
-                     (resolved_game_of_goal.team2_code == current_team_code and goal_event.team_code == resolved_game_of_goal.team1_code):
-                    if goal_event.goal_type == 'PP':
-                        stats.ppga += 1
-
-            for penalty_event in all_penalties_for_year_detailed:
-                if penalty_event.game_id not in games_processed_map:
-                    continue
-
-                resolved_game_of_penalty = games_processed_map.get(penalty_event.game_id)
-                if not resolved_game_of_penalty:
-                    continue
-                
-                if penalty_event.team_code == current_team_code:
-                    stats.pim += PIM_MAP.get(penalty_event.penalty_type, 0)
-                    if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES:
-                        stats.ppa += 1 
-                elif (resolved_game_of_penalty.team1_code == current_team_code and penalty_event.team_code == resolved_game_of_penalty.team2_code) or \
-                     (resolved_game_of_penalty.team2_code == current_team_code and penalty_event.team_code == resolved_game_of_penalty.team1_code):
-                    if penalty_event.penalty_type in POWERPLAY_PENALTY_TYPES:
-                        stats.ppf += 1
-            team_stats_data_list.append(stats)
+        # Verwende TeamService um die Statistiken zu holen
+        team_stats_data_list = team_service.calculate_team_stats_for_year(
+            year_id=year_id,
+            team_codes=unique_teams_in_year,
+            games_processed=games_processed,
+            games_raw_map=games_raw_map
+        )
 
     return render_template('year_view.html', 
                            year=year_obj, games_by_round=games_by_round_display,
@@ -791,26 +692,25 @@ def year_view(year_id):
 
 @year_bp.route('/<int:year_id>/stats_data')
 def get_stats_data(year_id):
+    # Initialisiere Services
+    tournament_service = TournamentService()
+    player_service = PlayerService()
+    
     selected_team_filter = request.args.get('stats_team_filter')
-    year_obj = db.session.get(ChampionshipYear, year_id)
-    if not year_obj:
+    
+    try:
+        # Validiere Tournament Jahr
+        year_obj = tournament_service.get_by_id(year_id)
+    except NotFoundError:
         return jsonify({'error': 'Tournament year not found'}), 404
 
-    all_players_list = Player.query.order_by(Player.team_code, Player.last_name).all()
-    player_stats_agg = {p.id: {'g': 0, 'a': 0, 'p': 0, 'obj': p} for p in all_players_list if not selected_team_filter or p.team_code == selected_team_filter}
-    all_goals_for_year = Goal.query.join(Game).filter(Game.year_id == year_id).all()
-
-    for goal in all_goals_for_year:
-        if goal.scorer_id in player_stats_agg:
-            player_stats_agg[goal.scorer_id]['g'] += 1
-            player_stats_agg[goal.scorer_id]['p'] += 1
-        if goal.assist1_id and goal.assist1_id in player_stats_agg:
-            player_stats_agg[goal.assist1_id]['a'] += 1
-            player_stats_agg[goal.assist1_id]['p'] += 1
-        if goal.assist2_id and goal.assist2_id in player_stats_agg:
-            player_stats_agg[goal.assist2_id]['a'] += 1
-            player_stats_agg[goal.assist2_id]['p'] += 1
-
+    # Hole Spielerstatistiken über Service
+    player_stats_agg = player_service.get_player_stats_for_year(
+        year_id=year_id,
+        team_filter=selected_team_filter
+    )
+    
+    # Konvertiere für JSON Response
     all_player_stats_list_for_json = [
         {'goals': v['g'], 'assists': v['a'], 'points': v['p'], 
          'player_obj': {'id': v['obj'].id, 'first_name': v['obj'].first_name, 'last_name': v['obj'].last_name, 'team_code': v['obj'].team_code}}
@@ -820,14 +720,23 @@ def get_stats_data(year_id):
     top_goal_scorers = sorted([s for s in all_player_stats_list_for_json if s['goals'] > 0], key=lambda x: (-x['goals'], -x['points'], x['player_obj']['last_name'].lower()))
     top_assist_providers = sorted([s for s in all_player_stats_list_for_json if s['assists'] > 0], key=lambda x: (-x['assists'], -x['points'], x['player_obj']['last_name'].lower()))
 
-    player_pim_agg = {p.id: {'pim': 0, 'obj': {'id': p.id, 'first_name': p.first_name, 'last_name': p.last_name, 'team_code': p.team_code}} 
-                      for p in all_players_list if (not selected_team_filter or p.team_code == selected_team_filter) and p.id is not None}
-    all_penalties_for_year = Penalty.query.join(Game).filter(Game.year_id == year_id).all()
-    for penalty_entry in all_penalties_for_year:
-        if penalty_entry.player_id and penalty_entry.player_id in player_pim_agg:
-            pim_value = PIM_MAP.get(penalty_entry.penalty_type, 0)
-            player_pim_agg[penalty_entry.player_id]['pim'] += pim_value
-    top_penalty_players = sorted([{'player_obj': v['obj'], 'pim': v['pim']} for v in player_pim_agg.values() if v['pim'] > 0], key=lambda x: (-x['pim'], x['player_obj']['last_name'].lower()))
+    # Hole Strafminuten-Statistiken über Service
+    player_pim_agg = player_service.get_player_penalty_stats_for_year(
+        year_id=year_id,
+        team_filter=selected_team_filter
+    )
+    
+    # Konvertiere PIM Daten für JSON
+    player_pim_for_json = {
+        pid: {'pim': data['pim'], 'obj': {
+            'id': data['obj'].id, 
+            'first_name': data['obj'].first_name, 
+            'last_name': data['obj'].last_name, 
+            'team_code': data['obj'].team_code
+        }} for pid, data in player_pim_agg.items()
+    }
+    
+    top_penalty_players = sorted([{'player_obj': v['obj'], 'pim': v['pim']} for v in player_pim_for_json.values() if v['pim'] > 0], key=lambda x: (-x['pim'], x['player_obj']['last_name'].lower()))
 
     return jsonify({
         'top_scorers_points': top_scorers_points, 'top_goal_scorers': top_goal_scorers,
@@ -837,8 +746,13 @@ def get_stats_data(year_id):
 
 @year_bp.route('/<int:year_id>/team_vs_team/<team1>/<team2>')
 def team_vs_team_view(year_id, team1, team2):
-    year_obj = db.session.get(ChampionshipYear, year_id)
-    if not year_obj:
+    # Initialisiere Services
+    tournament_service = TournamentService()
+    game_service = GameService()
+    
+    try:
+        year_obj = tournament_service.get_by_id(year_id)
+    except NotFoundError:
         flash('Turnierjahr nicht gefunden.', 'danger')
         return redirect(url_for('main_bp.index'))
 
@@ -886,16 +800,23 @@ def team_vs_team_view(year_id, team1, team2):
     
     duel_details = []
     
+    # Hole alle benötigten Daten auf einmal um N+1 Queries zu vermeiden
+    all_game_ids = [rg['game'].id for rg in filtered_games]
+    goals_by_game = game_service.get_goals_by_games(all_game_ids) if all_game_ids else {}
+    penalties_by_game = game_service.get_penalties_by_games(all_game_ids) if all_game_ids else {}
+    sog_by_game_flat = game_service.get_shots_on_goal_by_year(year_id) if all_game_ids else {}
+    
     for resolved_game in filtered_games:
         game = resolved_game['game']
         t1_score = resolved_game['t1_score']
         t2_score = resolved_game['t2_score']
         
-        # Import required models
-        from models import Penalty, Goal, ShotsOnGoal
+        # Verwende vorher geholte Daten (vermeidet N+1 Queries)
+        penalty_entries = penalties_by_game.get(game.id, [])
+        goal_entries = goals_by_game.get(game.id, [])
+        game_sog_data = sog_by_game_flat.get(game.id, {})
         
         # Strafminuten sammeln
-        penalty_entries = Penalty.query.filter_by(game_id=game.id).all()
         penalties_t1 = sum(PIM_MAP.get(p.penalty_type, 0) for p in penalty_entries if p.team_code.upper() == t1)
         penalties_t2 = sum(PIM_MAP.get(p.penalty_type, 0) for p in penalty_entries if p.team_code.upper() == t2)
         stats[t1]['pim'] += penalties_t1
@@ -909,7 +830,6 @@ def team_vs_team_view(year_id, team1, team2):
                 stats[t1]['pp_opportunities'] += 1
 
         # Powerplay-Tore sammeln
-        goal_entries = Goal.query.filter_by(game_id=game.id).all()
         for goal in goal_entries:
             if goal.goal_type == 'PP':
                 if goal.team_code.upper() == t1:
@@ -918,12 +838,11 @@ def team_vs_team_view(year_id, team1, team2):
                     stats[t2]['pp_goals'] += 1
 
         # Schüsse sammeln
-        sog_entries = ShotsOnGoal.query.filter_by(game_id=game.id).all()
-        for sog in sog_entries:
-            if sog.team_code.upper() == t1:
-                stats[t1]['sog'] += sog.shots
-            elif sog.team_code.upper() == t2:
-                stats[t2]['sog'] += sog.shots
+        for team_code, sog_periods in game_sog_data.items():
+            if team_code.upper() == t1:
+                stats[t1]['sog'] += sum(sog_periods.values())
+            elif team_code.upper() == t2:
+                stats[t2]['sog'] += sum(sog_periods.values())
 
         if t1_score is not None and t2_score is not None:
             stats[t1]['tore'] += t1_score
@@ -977,9 +896,11 @@ def team_vs_team_view(year_id, team1, team2):
         # Jahr des Spiels bestimmen
         year_display = '-'
         if game.year_id:
-            year_obj_of_game = db.session.get(ChampionshipYear, game.year_id)
-            if year_obj_of_game:
+            try:
+                year_obj_of_game = tournament_service.get_by_id(game.year_id)
                 year_display = str(year_obj_of_game.year)
+            except (NotFoundError, ServiceError):
+                year_display = '-'
         
         duel_details.append({
             'game': game,

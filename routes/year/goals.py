@@ -2,14 +2,22 @@ from flask import request, jsonify, redirect, url_for, flash, current_app
 from models import db, Game, Goal, Player, ShotsOnGoal
 from constants import TEAM_ISO_CODES
 from utils import convert_time_to_seconds, check_game_data_consistency
+from app.services.core.game_service import GameService
+from app.services.core.player_service import PlayerService
+from app.exceptions import NotFoundError, ValidationError, ServiceError
 
 # Import the blueprint from the parent package
 from . import year_bp
 
 @year_bp.route('/<int:year_id>/game/<int:game_id>/add_goal', methods=['POST'])
 def add_goal(year_id, game_id):
-    game = db.session.get(Game, game_id)
-    if not game or game.year_id != year_id:
+    # Service-Layer verwenden
+    game_service = GameService()
+    try:
+        game = game_service.get_by_id(game_id)
+        if not game or game.year_id != year_id:
+            return jsonify({'success': False, 'message': 'Spiel nicht gefunden oder gehört nicht zum Turnier.'}), 404
+    except NotFoundError:
         return jsonify({'success': False, 'message': 'Spiel nicht gefunden oder gehört nicht zum Turnier.'}), 404
     try:
         data = request.form
@@ -25,7 +33,10 @@ def add_goal(year_id, game_id):
         db.session.add(new_goal)
         db.session.commit()
 
-        player_cache = {p.id: p for p in Player.query.all()} 
+        # Service für Player verwenden
+        player_service = PlayerService()
+        all_players = player_service.get_all()
+        player_cache = {p.id: p for p in all_players} 
         def get_pname_local(pid):
             p = player_cache.get(pid)
             return f"{p.first_name} {p.last_name}" if p else "N/A"
@@ -63,6 +74,7 @@ def add_goal(year_id, game_id):
 
 @year_bp.route('/<int:year_id>/goal/<int:goal_id>/delete', methods=['POST'])
 def delete_goal(year_id, goal_id):
+    # TODO: GoalService implementieren - vorerst direkte DB-Abfrage
     goal = db.session.get(Goal, goal_id)
     if not goal: 
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -70,8 +82,16 @@ def delete_goal(year_id, goal_id):
         flash('Goal not found.', 'warning')
         return redirect(url_for('year_bp.year_view', year_id=year_id))
 
-    game = db.session.get(Game, goal.game_id)
-    if not game or game.year_id != year_id:
+    # Service-Layer verwenden
+    game_service = GameService()
+    try:
+        game = game_service.get_by_id(goal.game_id)
+        if not game or game.year_id != year_id:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'success': False, 'message': 'Invalid association.'}), 400
+            flash('Invalid goal for year.', 'danger')
+            return redirect(url_for('year_bp.year_view', year_id=year_id))
+    except NotFoundError:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'success': False, 'message': 'Invalid association.'}), 400
         flash('Invalid goal for year.', 'danger')

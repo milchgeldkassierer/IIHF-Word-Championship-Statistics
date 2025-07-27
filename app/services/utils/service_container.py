@@ -4,9 +4,9 @@ Manages service and repository instances
 """
 
 from typing import Dict, Any, Optional, List
-from app.repositories.core import GameRepository
-from app.services.core import GameService
 import logging
+
+# Lazy imports to avoid circular dependencies
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,9 @@ class ServiceContainer:
     
     def _initialize_repositories(self) -> None:
         """Initialize all repository instances"""
+        # Lazy import to avoid circular dependency
+        from app.repositories.core.game_repository import GameRepository
+        
         # Core repositories
         self._repositories['game'] = GameRepository()
         
@@ -60,6 +63,9 @@ class ServiceContainer:
     
     def _initialize_services(self) -> None:
         """Initialize all service instances with their dependencies"""
+        # Lazy import to avoid circular dependency
+        from app.services.core.game_service import GameService
+        
         # Core services
         self._services['game'] = GameService(self._repositories['game'])
         

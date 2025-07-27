@@ -2,6 +2,7 @@ from collections import defaultdict
 from models import db, ChampionshipYear
 from utils import is_code_final
 from .utils import get_all_resolved_games
+from app.services.core.records_service import RecordsService
 
 
 def get_most_goals_team_tournament():

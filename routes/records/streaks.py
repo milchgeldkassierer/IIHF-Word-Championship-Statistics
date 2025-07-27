@@ -1,6 +1,13 @@
 from collections import defaultdict
 from .utils import get_all_resolved_games
 
+# Service layer integration
+try:
+    from app.services.core.records_service import RecordsService
+    _service_available = True
+except ImportError:
+    _service_available = False
+
 
 def get_longest_win_streak(records_data=None):
     """Berechnet die längste Siegesserie über alle Turniere"""

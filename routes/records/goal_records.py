@@ -2,6 +2,10 @@ import re
 from collections import defaultdict
 from models import db, Goal, Player, Game, ChampionshipYear
 from .utils import get_all_resolved_games
+from app.services.core.records_service import RecordsService
+from app.services.core.tournament_service import TournamentService
+from app.services.core.game_service import GameService
+from app.exceptions import ServiceError, NotFoundError
 
 
 def get_fastest_goal():
@@ -33,8 +37,14 @@ def get_fastest_goal():
     goal_times = []
     for goal in goals:
         time_seconds = parse_minute(goal.minute)
-        game = db.session.query(Game).filter_by(id=goal.game_id).first()
-        year = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
+        try:
+            game_service = GameService()
+            tournament_service = TournamentService()
+            game = game_service.get_by_id(goal.game_id)
+            year = tournament_service.get_by_id(game.year_id)
+        except (NotFoundError, ServiceError):
+            game = None
+            year = None
         
         # Verwende aufgelöste Team-Codes falls verfügbar
         resolved_teams = game_id_to_resolved.get(goal.game_id)
@@ -112,30 +122,32 @@ def get_fastest_hattrick():
             'team2_code': resolved_game['team2_code']
         }
     
-    # Zusätzlicher Fallback: Sammle alle abgeschlossenen Spiele direkt aus der Datenbank
-    all_completed_games = db.session.query(Game).filter(
-        Game.team1_score.isnot(None), 
-        Game.team2_score.isnot(None)
-    ).all()
-    for game in all_completed_games:
-        if game.id not in game_id_to_resolved:
-            # Versuche Team-Resolution für diese Spiele
-            try:
-                year = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
-                if year:
-                    from utils import resolve_game_participants
-                    all_games_this_year = db.session.query(Game).filter_by(year_id=game.year_id).all()
-                    resolved_team1, resolved_team2 = resolve_game_participants(game, year, all_games_this_year)
-                    game_id_to_resolved[game.id] = {
-                        'team1_code': resolved_team1, 
-                        'team2_code': resolved_team2
-                    }
-            except:
-                # Fallback auf ursprüngliche Team-Codes falls Resolution fehlschlägt
+    # Zusätzlicher Fallback: Sammle alle abgeschlossenen Spiele über Service
+    try:
+        game_service = GameService()
+        tournament_service = TournamentService()
+        all_completed_games = game_service.get_completed_games()
+        
+        for game in all_completed_games:
+            if game.id not in game_id_to_resolved:
+                # Versuche Team-Resolution für diese Spiele
+                try:
+                    year = tournament_service.get_by_id(game.year_id)
+                    if year:
+                        from utils import resolve_game_participants
+                        all_games_this_year = game_service.get_games_by_year(game.year_id)
+                        resolved_team1, resolved_team2 = resolve_game_participants(game, year, all_games_this_year)
+                except (NotFoundError, ServiceError):
+                    # Fallback auf ursprüngliche Team-Codes falls Resolution fehlschlägt
+                    resolved_team1, resolved_team2 = game.team1_code, game.team2_code
+                
                 game_id_to_resolved[game.id] = {
-                    'team1_code': game.team1_code, 
-                    'team2_code': game.team2_code
+                    'team1_code': resolved_team1, 
+                    'team2_code': resolved_team2
                 }
+    except (ServiceError, NotFoundError):
+        # Service-Fehler - verwende leere Liste
+        all_completed_games = []
     
     player_game_goals = defaultdict(list)
     for goal in goals:
@@ -171,9 +183,19 @@ def get_fastest_hattrick():
             third_goal_time = parse_minute(game_goals[2].minute)
             duration = third_goal_time - first_goal_time
             
-            player = db.session.query(Player).filter_by(id=player_id).first()
-            game = db.session.query(Game).filter_by(id=game_id).first()
-            year = db.session.query(ChampionshipYear).filter_by(id=game.year_id).first()
+            try:
+                from app.services.core.player_service import PlayerService
+                game_service = GameService()
+                tournament_service = TournamentService()
+                player_service = PlayerService()
+                
+                player = player_service.get_by_id(player_id)
+                game = game_service.get_by_id(game_id)
+                year = tournament_service.get_by_id(game.year_id)
+            except (NotFoundError, ServiceError):
+                player = None
+                game = None 
+                year = None
             
             # Bestimme Gegner-Team und Spieler-Team für die Anzeige
             player_team = game_goals[0].team_code

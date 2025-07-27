@@ -5,6 +5,7 @@ from utils import is_code_final
 from utils.data_validation import calculate_tournament_penalty_minutes
 from constants import TOP_3_DISPLAY
 from .utils import get_all_resolved_games
+from app.services.core.records_service import RecordsService
 
 
 # Helper-Funktionen für Validierung

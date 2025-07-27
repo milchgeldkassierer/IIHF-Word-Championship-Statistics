@@ -4,13 +4,13 @@ Handles all business logic related to games, scores, and game statistics
 """
 
 from typing import Dict, List, Optional, Tuple, Any
-from models import Game, ChampionshipYear, TeamStats, ShotsOnGoal, GameOverrule, Goal, Penalty, db
+from models import Game, ChampionshipYear, TeamStats, ShotsOnGoal, GameOverrule, Goal, Penalty, Player, db
 from services.base import BaseService
 from services.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
-from repositories.game_repository import GameRepository
+from app.repositories.core.game_repository import GameRepository
 from utils.playoff_resolver import PlayoffResolver
-from utils import check_game_data_consistency, is_code_final
-from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES, TEAM_ISO_CODES
+from utils import check_game_data_consistency, is_code_final, convert_time_to_seconds
+from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES, TEAM_ISO_CODES, GOAL_TYPE_DISPLAY_MAP, PERIOD_1_END, PERIOD_2_END, PERIOD_3_END
 import logging
 
 logger = logging.getLogger(__name__)
@@ -495,3 +495,137 @@ class GameService(BaseService[Game]):
                 games_with_stats.append({'game': game, 'error': str(e)})
         
         return games_with_stats
+    
+    def get_game_stats_for_view(self, year_id: int, game_id: int) -> Dict[str, Any]:
+        """
+        Get comprehensive game statistics for the game stats view
+        Includes all playoff resolution logic and team name resolution
+        
+        Args:
+            year_id: Championship year ID
+            game_id: Game ID
+            
+        Returns:
+            Dictionary with all necessary data for game stats view
+            
+        Raises:
+            NotFoundError: If year or game not found
+        """
+        # Validiere Jahr und Spiel
+        year_obj = ChampionshipYear.query.get(year_id)
+        if not year_obj:
+            raise NotFoundError("Championship year", year_id)
+        
+        game = self.repository.find_by_id(game_id)
+        if not game or game.year_id != year_id:
+            raise NotFoundError("Game", game_id)
+        
+        # Hole alle Spiele für Playoff-Resolution
+        games_raw = self.repository.find_by_year(year_id)
+        
+        # Nutze PlayoffResolver für Team-Resolution
+        if year_id not in self._playoff_resolver_cache:
+            self._playoff_resolver_cache[year_id] = PlayoffResolver(year_obj, games_raw)
+        
+        resolver = self._playoff_resolver_cache[year_id]
+        
+        # Hole aufgelöste Teamnamen
+        team1_resolved, team2_resolved = self.resolve_team_names(year_id, game_id)
+        
+        # Hole Spielstatistiken
+        game_stats = self.get_game_with_stats(game_id)
+        
+        # Füge aufgelöste Namen zum Spielobjekt hinzu
+        game.team1_display_name = team1_resolved
+        game.team2_display_name = team2_resolved
+        
+        # Hole SOG-Daten mit aufgelösten Namen
+        sog_data = game_stats['sog_data']
+        sog_totals = game_stats['sog_totals']
+        
+        # Stelle sicher, dass beide Teams in den SOG-Daten vorhanden sind
+        for team_name in [team1_resolved, team2_resolved]:
+            if team_name not in sog_data:
+                sog_data[team_name] = {1: 0, 2: 0, 3: 0, 4: 0}
+            if team_name not in sog_totals:
+                sog_totals[team_name] = 0
+        
+        # Berechne Scores nach Periode
+        team1_scores_by_period = {1: 0, 2: 0, 3: 0, 4: 0}
+        team2_scores_by_period = {1: 0, 2: 0, 3: 0, 4: 0}
+        
+        for goal in game_stats['goals']:
+            time_sec = convert_time_to_seconds(goal.minute)
+            period = 4
+            if time_sec <= PERIOD_1_END:
+                period = 1
+            elif time_sec <= PERIOD_2_END:
+                period = 2
+            elif time_sec <= PERIOD_3_END:
+                period = 3
+            
+            if goal.team_code == team1_resolved:
+                team1_scores_by_period[period] += 1
+            elif goal.team_code == team2_resolved:
+                team2_scores_by_period[period] += 1
+        
+        # Erstelle Game Events für Template
+        game_events = []
+        player_cache = {p.id: p for p in Player.query.all()}
+        
+        def get_player_name(pid):
+            p = player_cache.get(pid)
+            return f"{p.first_name} {p.last_name}" if p else "N/A"
+        
+        for goal in game_stats['goals']:
+            time_sec = convert_time_to_seconds(goal.minute)
+            period_disp = "OT"
+            if time_sec <= PERIOD_1_END:
+                period_disp = "1st Period"
+            elif time_sec <= PERIOD_2_END:
+                period_disp = "2nd Period"
+            elif time_sec <= PERIOD_3_END:
+                period_disp = "3rd Period"
+            
+            game_events.append({
+                'type': 'goal',
+                'time_str': goal.minute,
+                'time_for_sort': time_sec,
+                'period_display': period_disp,
+                'team_code': goal.team_code,
+                'team_iso': TEAM_ISO_CODES.get(goal.team_code.upper() if goal.team_code else ""),
+                'goal_type_display': GOAL_TYPE_DISPLAY_MAP.get(goal.goal_type, goal.goal_type),
+                'is_empty_net': goal.is_empty_net,
+                'scorer': get_player_name(goal.scorer_id),
+                'assist1': get_player_name(goal.assist1_id) if goal.assist1_id else None,
+                'assist2': get_player_name(goal.assist2_id) if goal.assist2_id else None,
+                'scorer_obj': player_cache.get(goal.scorer_id),
+                'assist1_obj': player_cache.get(goal.assist1_id) if goal.assist1_id else None,
+                'assist2_obj': player_cache.get(goal.assist2_id) if goal.assist2_id else None,
+            })
+        
+        game_events.sort(key=lambda x: x['time_for_sort'])
+        
+        # Berechne Powerplay-Prozentsatz
+        pp_percentage = {team1_resolved: 0.0, team2_resolved: 0.0}
+        for team_name in [team1_resolved, team2_resolved]:
+            pp_opps = game_stats['pp_opportunities'].get(team_name, 0)
+            pp_goals = game_stats['pp_goals'].get(team_name, 0)
+            if pp_opps > 0:
+                pp_percentage[team_name] = round((pp_goals / pp_opps) * 100, 1)
+        
+        return {
+            'year': year_obj,
+            'game': game,
+            'team1_resolved': team1_resolved,
+            'team2_resolved': team2_resolved,
+            'sog_data': sog_data,
+            'sog_totals': sog_totals,
+            'pim_totals': game_stats['pim_totals'],
+            'pp_goals_scored': game_stats['pp_goals'],
+            'pp_opportunities': game_stats['pp_opportunities'],
+            'pp_percentage': pp_percentage,
+            'game_events': game_events,
+            'team1_scores_by_period': team1_scores_by_period,
+            'team2_scores_by_period': team2_scores_by_period
+        }

@@ -1,5 +1,7 @@
 from flask import request, redirect, url_for, flash, jsonify, current_app
 from models import db, Player
+from app.services.core.player_service import PlayerService
+from app.exceptions import NotFoundError, ValidationError, ServiceError
 
 # Import the blueprint from the parent package
 from . import year_bp
@@ -30,16 +32,22 @@ def add_player():
                 return redirect(url_for('year_bp.year_view', year_id=int(year_id_redirect), _anchor=anchor_to_use))
             return redirect(url_for('main_bp.index'))
 
-        existing_player = Player.query.filter_by(team_code=team_code, first_name=first_name, last_name=last_name).first()
+        # Service-Layer verwenden
+        player_service = PlayerService()
+        existing_player = player_service.find_by_name_and_team(first_name, last_name, team_code)
         if existing_player:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return jsonify({'success': False, 'message': f'Player {first_name} {last_name} ({team_code}) already exists.'}), 400
             flash(f'Player {first_name} {last_name} ({team_code}) already exists.', 'warning')
         else:
             try:
-                new_player = Player(team_code=team_code, first_name=first_name, last_name=last_name, jersey_number=jersey_number)
-                db.session.add(new_player)
-                db.session.commit()
+                # Service-Layer für Player-Erstellung verwenden
+                new_player = player_service.create_player(
+                    team_code=team_code,
+                    first_name=first_name,
+                    last_name=last_name,
+                    jersey_number=jersey_number
+                )
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return jsonify({
                         'success': True, 'message': f'Player {first_name} {last_name} added!',
@@ -47,7 +55,7 @@ def add_player():
                     })
                 flash(f'Player {first_name} {last_name} added!', 'success')
             except Exception as e:
-                db.session.rollback()
+                # Rollback wird vom Service gehandhabt
                 current_app.logger.error(f"Error adding player: {str(e)}")
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return jsonify({'success': False, 'message': f'Error adding player: {str(e)}'}), 500

@@ -6,17 +6,20 @@ Handles all business logic related to games, scores, and game statistics
 from typing import Dict, List, Optional, Tuple, Any
 from models import Game, ChampionshipYear, TeamStats, ShotsOnGoal, GameOverrule, Goal, Penalty, db
 from app.services.base import BaseService
+from app.services.utils.cache_manager import CacheableService, cached
 from app.repositories.core import GameRepository
 from services.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
 from utils.playoff_resolver import PlayoffResolver
 from utils import check_game_data_consistency, is_code_final
 from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES, TEAM_ISO_CODES
 import logging
+import os
+import json
 
 logger = logging.getLogger(__name__)
 
 
-class GameService(BaseService[Game]):
+class GameService(CacheableService, BaseService[Game]):
     """
     Service for game-related business logic using repository pattern
     Manages games, scores, shots on goal, and game statistics
@@ -24,13 +27,14 @@ class GameService(BaseService[Game]):
     
     def __init__(self, repository: Optional[GameRepository] = None):
         """
-        Initialize service with repository
+        Initialize service with repository and cache
         
         Args:
             repository: GameRepository instance (optional, will create if not provided)
         """
         if repository is None:
             repository = GameRepository()
+        # Use proper MRO initialization
         super().__init__(repository)
         self._playoff_resolver_cache = {}
     
@@ -94,6 +98,11 @@ class GameService(BaseService[Game]):
             # Use repository for update
             self.flush()  # Ensure changes are flushed
             self.commit()
+            
+            # Invalidiere Cache für dieses Spiel und Jahr
+            self.invalidate_cache(f"game:with_stats:{game_id}")
+            self.invalidate_cache(f"game:by_year:{game.year_id}")
+            self.invalidate_cache(f"game:by_year_details:{game.year_id}")
             
             logger.info(f"Updated game {game_id} score: {team1_score}-{team2_score} ({result_type})")
             return game
@@ -281,6 +290,7 @@ class GameService(BaseService[Game]):
         
         return team1_resolved, team2_resolved
     
+    @cached(ttl=300, key_prefix="game:with_stats")
     def get_game_with_stats(self, game_id: int) -> Dict[str, Any]:
         """
         Get comprehensive game information with all statistics
@@ -479,6 +489,7 @@ class GameService(BaseService[Game]):
             logger.error(f"Error removing overrule for game {game_id}: {str(e)}")
             raise ServiceError(f"Failed to remove overrule: {str(e)}")
     
+    @cached(ttl=600, key_prefix="game:by_year")
     def get_games_by_year(self, year_id: int, include_stats: bool = False) -> List[Dict[str, Any]]:
         """
         Get all games for a championship year
@@ -532,6 +543,79 @@ class GameService(BaseService[Game]):
         """
         return self.repository.get_playoff_games(year_id)
     
+    def get_shots_on_goal_by_year(self, year_id: int) -> Dict[int, Dict[str, Dict[int, int]]]:
+        """
+        Get all shots on goal data for a championship year
+        
+        Args:
+            year_id: Championship year ID
+            
+        Returns:
+            Nested dictionary: {game_id: {team_code: {period: shots}}}
+        """
+        sog_by_game_flat = {}
+        sog_entries = ShotsOnGoal.query.join(Game).filter(Game.year_id == year_id).all()
+        
+        for sog_entry in sog_entries:
+            game_sog_data = sog_by_game_flat.setdefault(sog_entry.game_id, {})
+            team_period_sog_data = game_sog_data.setdefault(sog_entry.team_code, {})
+            team_period_sog_data[sog_entry.period] = sog_entry.shots
+            
+        return sog_by_game_flat
+    
+    def get_goals_by_games(self, game_ids: List[int]) -> Dict[int, List[Goal]]:
+        """
+        Get all goals for multiple games (avoids N+1 queries)
+        
+        Args:
+            game_ids: List of game IDs
+            
+        Returns:
+            Dictionary with game_id as key and list of goals as value
+        """
+        goals = Goal.query.filter(Goal.game_id.in_(game_ids)).all()
+        
+        goals_by_game = {}
+        for goal in goals:
+            if goal.game_id not in goals_by_game:
+                goals_by_game[goal.game_id] = []
+            goals_by_game[goal.game_id].append(goal)
+        
+        return goals_by_game
+    
+    def get_penalties_by_games(self, game_ids: List[int]) -> Dict[int, List[Penalty]]:
+        """
+        Get all penalties for multiple games (avoids N+1 queries)
+        
+        Args:
+            game_ids: List of game IDs
+            
+        Returns:
+            Dictionary with game_id as key and list of penalties as value
+        """
+        penalties = Penalty.query.filter(Penalty.game_id.in_(game_ids)).all()
+        
+        penalties_by_game = {}
+        for penalty in penalties:
+            if penalty.game_id not in penalties_by_game:
+                penalties_by_game[penalty.game_id] = []
+            penalties_by_game[penalty.game_id].append(penalty)
+        
+        return penalties_by_game
+    
+    def get_overrules_by_year(self, year_id: int) -> Dict[int, GameOverrule]:
+        """
+        Get all game overrules for a championship year
+        
+        Args:
+            year_id: Championship year ID
+            
+        Returns:
+            Dictionary with game_id as key and GameOverrule as value
+        """
+        all_overrules = GameOverrule.query.join(Game).filter(Game.year_id == year_id).all()
+        return {overrule.game_id: overrule for overrule in all_overrules}
+    
     def get_head_to_head_record(self, team1_code: str, team2_code: str,
                                year_id: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -582,3 +666,222 @@ class GameService(BaseService[Game]):
             f'{team2_code}_goals': team2_goals,
             'goal_differential': team1_goals - team2_goals
         }
+    
+    @cached(ttl=600, key_prefix="game:by_year_details")
+    def get_games_by_year_with_details(self, year_id: int) -> Dict[str, Any]:
+        """
+        Get all games for a year with all related data
+        
+        Args:
+            year_id: Championship year ID
+            
+        Returns:
+            Dictionary with games and metadata
+        """
+        games = self.repository.get_games_by_year(year_id)
+        
+        # Get additional data
+        goals = Goal.query.join(Game).filter(Game.year_id == year_id).all()
+        penalties = Penalty.query.join(Game).filter(Game.year_id == year_id).all()
+        shots = ShotsOnGoal.query.join(Game).filter(Game.year_id == year_id).all()
+        
+        return {
+            'games': games,
+            'total_games': len(games),
+            'completed_games': len([g for g in games if g.team1_score is not None]),
+            'total_goals': sum(1 for goal in goals) if goals else 0,  # Korrigiert für Goal Model
+            'total_penalties': len(penalties),
+            'total_shots': sum(shot.shots for shot in shots) if shots else 0
+        }
+    
+    def get_games_for_years(self, year_ids: List[int]) -> List[Game]:
+        """
+        Get all games for multiple years in one query
+        
+        Args:
+            year_ids: List of championship year IDs
+            
+        Returns:
+            List of Game objects
+        """
+        if not year_ids:
+            return []
+        
+        # Optimierte Query für mehrere Jahre
+        games = Game.query.filter(Game.year_id.in_(year_ids)).all()
+        
+        logger.info(f"Retrieved {len(games)} games for {len(year_ids)} years")
+        return games
+    
+    def get_fixture_info(self, year_obj: ChampionshipYear) -> Dict[str, Any]:
+        """
+        Get fixture information for a year
+        
+        Args:
+            year_obj: Championship year object
+            
+        Returns:
+            Dictionary with fixture data
+        """
+        fixture_info = {
+            'quarterfinal_games': [],
+            'semifinal_games': [],
+            'bronze_game_number': None,
+            'gold_game_number': None,
+            'hosts': []
+        }
+        
+        # Standard defaults
+        default_qf = [57, 58, 59, 60]
+        default_sf = [61, 62]
+        default_bronze = 63
+        default_gold = 64
+        
+        # Versuche Fixture-Datei zu lesen
+        from utils.fixture_helpers import resolve_fixture_path
+        fixture_path = resolve_fixture_path(year_obj.fixture_path) if year_obj.fixture_path else None
+        
+        if fixture_path and os.path.exists(fixture_path):
+            try:
+                with open(fixture_path, 'r', encoding='utf-8') as f:
+                    loaded_fixture_data = json.load(f)
+                
+                fixture_info['hosts'] = loaded_fixture_data.get("hosts", [])
+                
+                schedule_data = loaded_fixture_data.get("schedule", [])
+                for game_data in schedule_data:
+                    round_name = game_data.get("round", "").lower()
+                    game_num = game_data.get("gameNumber")
+                    
+                    if "quarterfinal" in round_name:
+                        fixture_info['quarterfinal_games'].append(game_num)
+                    elif "semifinal" in round_name:
+                        fixture_info['semifinal_games'].append(game_num)
+                    elif "bronze medal game" in round_name or "bronze" in round_name or "3rd place" in round_name:
+                        fixture_info['bronze_game_number'] = game_num
+                    elif "gold medal game" in round_name or "final" in round_name or "gold" in round_name:
+                        fixture_info['gold_game_number'] = game_num
+                
+                # Sortiere Semifinal-Spiele
+                fixture_info['semifinal_games'].sort()
+                
+            except Exception as e:
+                logger.warning(f"Fehler beim Lesen der Fixture-Datei: {str(e)}")
+                # Use defaults
+                fixture_info['quarterfinal_games'] = default_qf
+                fixture_info['semifinal_games'] = default_sf
+                fixture_info['bronze_game_number'] = default_bronze
+                fixture_info['gold_game_number'] = default_gold
+        else:
+            # Use defaults
+            fixture_info['quarterfinal_games'] = default_qf
+            fixture_info['semifinal_games'] = default_sf
+            fixture_info['bronze_game_number'] = default_bronze
+            fixture_info['gold_game_number'] = default_gold
+            
+            # Special case for 2025
+            if year_obj.year == 2025:
+                fixture_info['hosts'] = ["SWE", "DEN"]
+        
+        return fixture_info
+    
+    def get_completed_games(self, year_id: Optional[int] = None) -> List[Game]:
+        """
+        Get all completed games (with scores)
+        
+        Args:
+            year_id: Championship year ID (optional, if None returns all completed games)
+            
+        Returns:
+            List of completed games
+        """
+        if year_id is not None:
+            # Use repository method for specific year
+            return self.repository.get_completed_games(year_id)
+        else:
+            # Get all completed games across all years using session
+            from sqlalchemy import and_
+            return self.db.session.query(Game).filter(
+                and_(
+                    Game.team1_score.isnot(None),
+                    Game.team2_score.isnot(None)
+                )
+            ).all()
+    
+    def get_game_advanced_stats(self, game_id: int) -> Dict[str, Any]:
+        """
+        Get advanced statistics for a game organized by team
+        
+        This method provides a more efficient way to get team-specific stats
+        compared to get_game_with_stats, optimized for team yearly stats calculations.
+        
+        Args:
+            game_id: The game ID
+            
+        Returns:
+            Dictionary with team_stats containing per-team statistics
+            Format: {
+                'team_stats': {
+                    'TEAM_CODE': {
+                        'shots': int,
+                        'powerplay_goals': int,
+                        'powerplay_opportunities': int
+                    }
+                }
+            }
+            
+        Raises:
+            NotFoundError: If game not found
+        """
+        game = self.get_by_id(game_id)
+        if not game:
+            raise NotFoundError("Game", game_id)
+        
+        try:
+            # Resolve team names for this game
+            team1_resolved, team2_resolved = self.resolve_team_names(game.year_id, game_id)
+            
+            # Initialize team stats structure
+            team_stats = {
+                team1_resolved: {
+                    'shots': 0,
+                    'powerplay_goals': 0,
+                    'powerplay_opportunities': 0
+                },
+                team2_resolved: {
+                    'shots': 0,
+                    'powerplay_goals': 0,
+                    'powerplay_opportunities': 0
+                }
+            }
+            
+            # Get shots on goal data
+            sog_data = self._get_current_sog_data(game_id)
+            for team_code, periods in sog_data.items():
+                if team_code in team_stats:
+                    team_stats[team_code]['shots'] = sum(periods.values())
+            
+            # Get goals for powerplay stats
+            goals = Goal.query.filter_by(game_id=game_id).all()
+            for goal in goals:
+                if goal.goal_type == "PP" and goal.team_code in team_stats:
+                    team_stats[goal.team_code]['powerplay_goals'] += 1
+            
+            # Get penalties for powerplay opportunities
+            penalties = Penalty.query.filter_by(game_id=game_id).all()
+            pp_opportunities = self._calculate_powerplay_opportunities(
+                penalties, team1_resolved, team2_resolved
+            )
+            
+            # Update powerplay opportunities
+            for team_code in [team1_resolved, team2_resolved]:
+                if team_code in pp_opportunities:
+                    team_stats[team_code]['powerplay_opportunities'] = pp_opportunities[team_code]
+            
+            return {
+                'team_stats': team_stats
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting advanced stats for game {game_id}: {str(e)}")
+            raise ServiceError(f"Failed to get advanced game stats: {str(e)}")

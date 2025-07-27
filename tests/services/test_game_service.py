@@ -5,13 +5,15 @@ Tests all CRUD operations, error handling, and business logic
 
 import sys
 import os
+# Füge das Projekt-Root zum Pfad hinzu
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import pytest
 from unittest.mock import Mock, MagicMock, patch, call
 from datetime import datetime
 
-from services.game_service import GameService
+# Importiere GameService über das services Modul
+from services import GameService
 from services.exceptions import (
     ServiceError, ValidationError, NotFoundError, BusinessRuleError
 )

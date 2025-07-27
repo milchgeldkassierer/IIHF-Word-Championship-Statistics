@@ -9,6 +9,9 @@ TEAM_ISO_CODES = {
     "QF": None, "SF": None, "L(SF)": None, "W(SF)": None
 }
 
+# Team names mapping (reverse lookup from ISO codes to team names)
+TEAM_NAMES = {v: k for k, v in TEAM_ISO_CODES.items() if v is not None}
+
 # Tournament round definitions
 PRELIM_ROUNDS = ["Preliminary Round", "Group Stage", "Round Robin"]
 PLAYOFF_ROUNDS = ["Quarterfinals", "Quarterfinal", "Semifinals", "Semifinal", "Final", "Bronze Medal Game", "Gold Medal Game", "Playoff"]
