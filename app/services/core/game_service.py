@@ -1,13 +1,13 @@
 """
-Game Service for IIHF World Championship Statistics
+Game Service with Repository Pattern
 Handles all business logic related to games, scores, and game statistics
 """
 
 from typing import Dict, List, Optional, Tuple, Any
 from models import Game, ChampionshipYear, TeamStats, ShotsOnGoal, GameOverrule, Goal, Penalty, db
-from services.base import BaseService
+from app.services.base import BaseService
+from app.repositories.core import GameRepository
 from services.exceptions import ServiceError, ValidationError, NotFoundError, BusinessRuleError
-from repositories.game_repository import GameRepository
 from utils.playoff_resolver import PlayoffResolver
 from utils import check_game_data_consistency, is_code_final
 from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES, TEAM_ISO_CODES
@@ -18,13 +18,20 @@ logger = logging.getLogger(__name__)
 
 class GameService(BaseService[Game]):
     """
-    Service for game-related business logic
+    Service for game-related business logic using repository pattern
     Manages games, scores, shots on goal, and game statistics
     """
     
-    def __init__(self):
-        super().__init__(Game)
-        self.repository = GameRepository()  # Repository für Datenbankzugriff
+    def __init__(self, repository: Optional[GameRepository] = None):
+        """
+        Initialize service with repository
+        
+        Args:
+            repository: GameRepository instance (optional, will create if not provided)
+        """
+        if repository is None:
+            repository = GameRepository()
+        super().__init__(repository)
         self._playoff_resolver_cache = {}
     
     def update_game_score(self, game_id: int, team1_score: Optional[int], 
@@ -46,7 +53,7 @@ class GameService(BaseService[Game]):
             ValidationError: If scores are invalid
             ServiceError: If update fails
         """
-        game = self.repository.find_by_id(game_id)
+        game = self.get_by_id(game_id)
         if not game:
             raise NotFoundError("Game", game_id)
         
@@ -84,7 +91,10 @@ class GameService(BaseService[Game]):
                     team1_score, team2_score, result_type
                 )
             
+            # Use repository for update
+            self.flush()  # Ensure changes are flushed
             self.commit()
+            
             logger.info(f"Updated game {game_id} score: {team1_score}-{team2_score} ({result_type})")
             return game
             
@@ -139,7 +149,7 @@ class GameService(BaseService[Game]):
             NotFoundError: If game not found
             ServiceError: If update fails
         """
-        game = self.repository.find_by_id(game_id)
+        game = self.get_by_id(game_id)
         if not game:
             raise NotFoundError("Game", game_id)
         
@@ -225,7 +235,7 @@ class GameService(BaseService[Game]):
     
     def _get_current_sog_data(self, game_id: int) -> Dict[str, Dict[int, int]]:
         """Get current SOG data for a game"""
-        sog_entries = self.repository.get_shots_on_goal(game_id)
+        sog_entries = ShotsOnGoal.query.filter_by(game_id=game_id).all()
         sog_data = {}
         
         for entry in sog_entries:
@@ -253,13 +263,14 @@ class GameService(BaseService[Game]):
         if not year_obj:
             raise NotFoundError("Championship year", year_id)
         
-        game = self.repository.find_by_id(game_id)
+        game = self.get_by_id(game_id)
         if not game:
             raise NotFoundError("Game", game_id)
         
         # Get or create playoff resolver
         if year_id not in self._playoff_resolver_cache:
-            games_raw = self.repository.find_by_year(year_id)
+            # Use repository to get all games
+            games_raw = self.repository.get_games_by_year(year_id)
             self._playoff_resolver_cache[year_id] = PlayoffResolver(year_obj, games_raw)
         
         resolver = self._playoff_resolver_cache[year_id]
@@ -283,9 +294,12 @@ class GameService(BaseService[Game]):
         Raises:
             NotFoundError: If game not found
         """
-        game = self.repository.find_by_id(game_id)
-        if not game:
+        # Use repository method to get game with statistics
+        game_stats = self.repository.get_game_statistics(game_id)
+        if not game_stats or not game_stats.get('game'):
             raise NotFoundError("Game", game_id)
+        
+        game = game_stats['game']
         
         # Resolve team names
         team1_name, team2_name = self.resolve_team_names(game.year_id, game_id)
@@ -299,10 +313,10 @@ class GameService(BaseService[Game]):
             sog_totals[team_code] = sum(periods.values())
         
         # Get goals
-        goals = self.repository.get_goals(game_id)
+        goals = Goal.query.filter_by(game_id=game_id).all()
         
         # Get penalties
-        penalties = self.repository.get_penalties(game_id)
+        penalties = Penalty.query.filter_by(game_id=game_id).all()
         
         # Calculate PIM totals
         pim_totals = {team1_name: 0, team2_name: 0}
@@ -326,9 +340,6 @@ class GameService(BaseService[Game]):
                 elif goal.team_code == team2_name:
                     pp_goals[team2_name] += 1
         
-        # Get overrule if exists
-        overrule = self.repository.get_overrule(game_id)
-        
         return {
             'game': game,
             'team1_resolved': team1_name,
@@ -342,7 +353,7 @@ class GameService(BaseService[Game]):
             'pim_totals': pim_totals,
             'pp_opportunities': pp_opportunities,
             'pp_goals': pp_goals,
-            'overrule': overrule
+            'overrule': game_stats.get('overrule')
         }
     
     def _calculate_powerplay_opportunities(self, penalties: List[Penalty], 
@@ -401,7 +412,7 @@ class GameService(BaseService[Game]):
             NotFoundError: If game not found
             ValidationError: If reason is empty
         """
-        game = self.repository.find_by_id(game_id)
+        game = self.get_by_id(game_id)
         if not game:
             raise NotFoundError("Game", game_id)
         
@@ -448,7 +459,7 @@ class GameService(BaseService[Game]):
         Raises:
             NotFoundError: If game not found
         """
-        game = self.repository.find_by_id(game_id)
+        game = self.get_by_id(game_id)
         if not game:
             raise NotFoundError("Game", game_id)
         
@@ -479,7 +490,8 @@ class GameService(BaseService[Game]):
         Returns:
             List of games with optional statistics
         """
-        games = self.repository.find_by_year(year_id)
+        # Use repository method
+        games = self.repository.get_games_by_year(year_id)
         
         if not include_stats:
             return games
@@ -495,3 +507,78 @@ class GameService(BaseService[Game]):
                 games_with_stats.append({'game': game, 'error': str(e)})
         
         return games_with_stats
+    
+    def search_games(self, criteria: Dict[str, Any]) -> List[Game]:
+        """
+        Search games with advanced criteria
+        
+        Args:
+            criteria: Search criteria dictionary
+            
+        Returns:
+            List of matching games
+        """
+        return self.repository.search_games(criteria)
+    
+    def get_playoff_games(self, year_id: int) -> List[Game]:
+        """
+        Get all playoff games for a year
+        
+        Args:
+            year_id: Championship year ID
+            
+        Returns:
+            List of playoff games
+        """
+        return self.repository.get_playoff_games(year_id)
+    
+    def get_head_to_head_record(self, team1_code: str, team2_code: str,
+                               year_id: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Get head-to-head record between two teams
+        
+        Args:
+            team1_code: First team code
+            team2_code: Second team code
+            year_id: Optional year filter
+            
+        Returns:
+            Dictionary with head-to-head statistics
+        """
+        games = self.repository.get_head_to_head_games(team1_code, team2_code, year_id)
+        
+        # Calculate statistics
+        team1_wins = 0
+        team2_wins = 0
+        team1_goals = 0
+        team2_goals = 0
+        
+        for game in games:
+            if game.team1_score is None or game.team2_score is None:
+                continue
+            
+            # Determine which team is which in this game
+            if game.team1_code == team1_code:
+                team1_goals += game.team1_score
+                team2_goals += game.team2_score
+                if game.team1_score > game.team2_score:
+                    team1_wins += 1
+                else:
+                    team2_wins += 1
+            else:
+                team1_goals += game.team2_score
+                team2_goals += game.team1_score
+                if game.team2_score > game.team1_score:
+                    team1_wins += 1
+                else:
+                    team2_wins += 1
+        
+        return {
+            'games': games,
+            'total_games': len(games),
+            f'{team1_code}_wins': team1_wins,
+            f'{team2_code}_wins': team2_wins,
+            f'{team1_code}_goals': team1_goals,
+            f'{team2_code}_goals': team2_goals,
+            'goal_differential': team1_goals - team2_goals
+        }

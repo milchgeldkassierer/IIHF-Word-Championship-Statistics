@@ -187,3 +187,60 @@ class StandingsCalculator:
             Tuple mit (reguläre Niederlagen, OT-Niederlagen, SO-Niederlagen)
         """
         return (team.l, team.otl, team.sol)
+    
+    def handle_overtime(self, team1: 'Team', team2: 'Team', winner: str) -> None:
+        """
+        Handle overtime result
+        
+        Args:
+            team1: Team 1 object
+            team2: Team 2 object
+            winner: 'team1' or 'team2'
+        """
+        if winner == 'team1':
+            team1.otw += 1
+            team1.pts += 2
+            team2.otl += 1
+            team2.pts += 1
+        else:
+            team2.otw += 1
+            team2.pts += 2
+            team1.otl += 1
+            team1.pts += 1
+    
+    def handle_shootout(self, team1: 'Team', team2: 'Team', winner: str) -> None:
+        """
+        Handle shootout result
+        
+        Args:
+            team1: Team 1 object
+            team2: Team 2 object
+            winner: 'team1' or 'team2'
+        """
+        if winner == 'team1':
+            team1.sow += 1
+            team1.pts += 2
+            team2.sol += 1
+            team2.pts += 1
+        else:
+            team2.sow += 1
+            team2.pts += 2
+            team1.sol += 1
+            team1.pts += 1
+    
+    def calculate_points(self, wins: int, ot_wins: int = 0, so_wins: int = 0, 
+                        ot_losses: int = 0, so_losses: int = 0) -> int:
+        """
+        Calculate total points based on different types of wins and losses
+        
+        Args:
+            wins: Regular wins
+            ot_wins: Overtime wins
+            so_wins: Shootout wins
+            ot_losses: Overtime losses
+            so_losses: Shootout losses
+            
+        Returns:
+            Total points
+        """
+        return (wins * 3) + (ot_wins * 2) + (so_wins * 2) + ot_losses + so_losses

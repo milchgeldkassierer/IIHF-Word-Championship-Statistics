@@ -9,6 +9,8 @@ from utils import convert_time_to_seconds, check_game_data_consistency, is_code_
 from utils.fixture_helpers import resolve_fixture_path
 from utils.standings import calculate_complete_final_ranking
 from utils.playoff_resolver import PlayoffResolver
+from services.game_service import GameService
+from services.exceptions import NotFoundError, ValidationError, BusinessRuleError
 
 # Import the blueprint from the parent package
 from . import year_bp
@@ -654,3 +656,86 @@ def remove_overrule(year_id, game_id):
         db.session.rollback()
         current_app.logger.error(f"Error removing overrule: {str(e)}")
         return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+
+# Neue Route mit Service Layer - Proof of Concept
+@year_bp.route('/api/game/<int:game_id>/update-score', methods=['POST'])
+def update_game_score_via_service(game_id):
+    """
+    Update game score using the GameService (Service Layer Implementation)
+    Dies ist ein Proof of Concept für die Service Layer Architektur
+    """
+    try:
+        # Service Layer nutzen statt direktem Datenbankzugriff
+        game_service = GameService()
+        
+        # Daten aus Request holen
+        data = request.get_json()
+        team1_score = data.get('team1_score')
+        team2_score = data.get('team2_score')
+        result_type = data.get('result_type', 'REG')
+        
+        # Service aufrufen - alle Geschäftslogik ist im Service gekapselt
+        updated_game = game_service.update_game_score(
+            game_id=game_id,
+            team1_score=team1_score,
+            team2_score=team2_score,
+            result_type=result_type
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Spielstand erfolgreich aktualisiert!',
+            'game': {
+                'id': updated_game.id,
+                'team1_score': updated_game.team1_score,
+                'team2_score': updated_game.team2_score,
+                'team1_points': updated_game.team1_points,
+                'team2_points': updated_game.team2_points,
+                'result_type': updated_game.result_type
+            }
+        })
+        
+    except NotFoundError as e:
+        return jsonify({'success': False, 'message': str(e)}), 404
+    except ValidationError as e:
+        return jsonify({'success': False, 'message': f'Validierungsfehler: {str(e)}', 'field': e.field}), 400
+    except BusinessRuleError as e:
+        return jsonify({'success': False, 'message': f'Geschäftsregel verletzt: {str(e)}'}), 400
+    except Exception as e:
+        current_app.logger.error(f"Unerwarteter Fehler beim Update: {str(e)}")
+        return jsonify({'success': False, 'message': 'Ein unerwarteter Fehler ist aufgetreten'}), 500
+
+
+@year_bp.route('/api/game/<int:game_id>/sog', methods=['POST'])
+def update_shots_on_goal_via_service(game_id):
+    """
+    Update shots on goal using the GameService (Service Layer Implementation)
+    Dies demonstriert die Verwendung des Repository Patterns
+    """
+    try:
+        # Service Layer nutzen
+        game_service = GameService()
+        
+        # Daten aus Request
+        data = request.get_json()
+        sog_data = data.get('sog_data', {})
+        
+        # Service aufrufen
+        result = game_service.add_shots_on_goal(game_id, sog_data)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Shots on Goal erfolgreich aktualisiert!',
+            'made_changes': result['made_changes'],
+            'sog_data': result['sog_data'],
+            'consistency': result['consistency']
+        })
+        
+    except NotFoundError as e:
+        return jsonify({'success': False, 'message': str(e)}), 404
+    except ValidationError as e:
+        return jsonify({'success': False, 'message': f'Validierungsfehler: {str(e)}'}), 400
+    except Exception as e:
+        current_app.logger.error(f"Fehler beim SOG Update: {str(e)}")
+        return jsonify({'success': False, 'message': 'Ein Fehler ist aufgetreten'}), 500

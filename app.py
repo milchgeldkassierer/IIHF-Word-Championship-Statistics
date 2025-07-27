@@ -7,6 +7,7 @@ from models import db
 from routes.blueprints import main_bp
 from routes.year import year_bp
 from routes.records import record_bp
+from routes.test_service import test_service_bp
 
 # --- Configuration ---
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -27,6 +28,7 @@ def create_app():
     app.register_blueprint(main_bp)
     app.register_blueprint(year_bp)
     app.register_blueprint(record_bp)
+    app.register_blueprint(test_service_bp)
 
     # --- CLI commands for DB ---
     @app.cli.command("init-db")

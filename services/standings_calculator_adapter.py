@@ -114,3 +114,47 @@ class StandingsCalculator:
             self.update_team_stats(standings, game)
         
         return standings
+    
+    def calculate_points(self, wins: int, ot_wins: int = 0, so_wins: int = 0, 
+                        ot_losses: int = 0, so_losses: int = 0) -> int:
+        """
+        Calculate total points based on different types of wins and losses
+        
+        IIHF Point System:
+        - Regular win: 3 points
+        - OT/SO win: 2 points
+        - OT/SO loss: 1 point
+        - Regular loss: 0 points
+        
+        Args:
+            wins: Regular wins
+            ot_wins: Overtime wins
+            so_wins: Shootout wins
+            ot_losses: Overtime losses
+            so_losses: Shootout losses
+            
+        Returns:
+            Total points
+        """
+        points = (wins * 3) + (ot_wins * 2) + (so_wins * 2) + ot_losses + so_losses
+        return points
+    
+    def handle_overtime(self, team1_stats: TeamStats, team2_stats: TeamStats, winner: str) -> None:
+        """
+        Handle overtime result
+        
+        Args:
+            team1_stats: Team 1 statistics object
+            team2_stats: Team 2 statistics object  
+            winner: 'team1' or 'team2'
+        """
+        if winner == 'team1':
+            team1_stats.otw += 1
+            team1_stats.pts += 2
+            team2_stats.otl += 1
+            team2_stats.pts += 1
+        else:
+            team2_stats.otw += 1
+            team2_stats.pts += 2
+            team1_stats.otl += 1
+            team1_stats.pts += 1
