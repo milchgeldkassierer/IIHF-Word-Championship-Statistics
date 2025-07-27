@@ -1,5 +1,5 @@
 from typing import Tuple
-from constants import PIM_MAP, GOAL_TYPE_DISPLAY_MAP
+from constants import PIM_MAP, GOAL_TYPE_DISPLAY_MAP, PERIOD_3_END
 from .time_helpers import convert_time_to_seconds
 from models import db, Game, Penalty
 from sqlalchemy import func, case
@@ -135,7 +135,7 @@ def check_game_data_consistency(game_display, sog_data=None):
                 
                 # Check if goal was scored after 60:00 (overtime)
                 goal_seconds = convert_time_to_seconds(goal_time)
-                if goal_seconds > 3600:  # 60 minutes = 3600 seconds
+                if goal_seconds > PERIOD_3_END:  # 60 Minuten = Ende 3. Drittel
                     overtime_goals.append({
                         'team': goal_team,
                         'time': goal_time,

@@ -4,6 +4,7 @@ import re, os, json
 from constants import TEAM_ISO_CODES, PIM_MAP
 from utils import resolve_game_participants, get_resolved_team_code, is_code_final, _apply_head_to_head_tiebreaker
 from utils.data_validation import calculate_tournament_penalty_minutes, calculate_tournament_penalty_count
+from utils.playoff_resolver import PlayoffResolver  # Verwende zentralisierten PlayoffResolver
 from sqlalchemy import func, case
 
 
@@ -154,16 +155,10 @@ def get_all_resolved_games():
                 if team_code not in teams_stats: 
                     teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
-            for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
-                for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
-                                                           (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
-                    stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
-                    
-                    if stats.group == grp: 
-                         stats.gp+=1; stats.gf+=gf; stats.ga+=ga; stats.pts+=pts
-                         if res=='REG': stats.w+=1 if gf>ga else 0; stats.l+=1 if ga>gf else 0 
-                         elif res=='OT': stats.otw+=1 if gf>ga else 0; stats.otl+=1 if ga>gf else 0
-                         elif res=='SO': stats.sow+=1 if gf>ga else 0; stats.sol+=1 if ga>gf else 0
+            # Verwende StandingsCalculator für die Berechnung der Teamstatistiken (ternary style)
+            from services.standings_calculator_adapter import StandingsCalculator
+            calculator = StandingsCalculator()
+            teams_stats = calculator.calculate_standings_from_games([pg for pg in prelim_games if pg.team1_score is not None])
             
             standings_by_group = {}
             if teams_stats:
@@ -245,40 +240,13 @@ def get_all_resolved_games():
                 playoff_team_map['SF1'] = str(sf_game_numbers[0])
                 playoff_team_map['SF2'] = str(sf_game_numbers[1])
 
+            # Erstelle PlayoffResolver für dieses Jahr
+            resolver = PlayoffResolver(year_obj, games_raw)
+            
+            # Wrapper-Funktion für Kompatibilität mit bestehendem Code
             def get_resolved_code(placeholder_code, current_map):
-                max_depth = 5 
-                current_code = placeholder_code
-                for _ in range(max_depth):
-                    if current_code in current_map:
-                        next_code = current_map[current_code]
-                        if next_code == current_code: return current_code 
-                        current_code = next_code
-                    elif (current_code.startswith('W(') or current_code.startswith('L(')) and current_code.endswith(')'):
-                        match = re.search(r'\(([^()]+)\)', current_code) 
-                        if match:
-                            inner_placeholder = match.group(1)
-                            if inner_placeholder.isdigit():
-                                game_num = int(inner_placeholder)
-                                game = games_dict_by_num.get(game_num)
-                                if game and game.team1_score is not None:
-                                    raw_winner = game.team1_code if game.team1_score > game.team2_score else game.team2_code
-                                    raw_loser = game.team2_code if game.team1_score > game.team2_score else game.team1_code
-                                    outcome_based_code = raw_winner if current_code.startswith('W(') else raw_loser
-                                    next_code = current_map.get(outcome_based_code, outcome_based_code)
-                                    if next_code == current_code: return next_code 
-                                    current_code = next_code 
-                                else: return current_code 
-                            else: 
-                                resolved_inner = current_map.get(inner_placeholder, inner_placeholder)
-                                if resolved_inner == inner_placeholder: return current_code 
-                                if resolved_inner.isdigit():
-                                     current_code = f"{'W' if current_code.startswith('W(') else 'L'}({resolved_inner})"
-                                else: 
-                                     return resolved_inner 
-                        else: return current_code 
-                    else: 
-                        return current_code
-                return current_code
+                # current_map wird ignoriert - PlayoffResolver verwaltet seine eigene Map
+                return resolver.get_resolved_code(placeholder_code)
 
             for _pass_num in range(max(3, len(games_raw) // 2)): 
                 changes_in_pass = 0

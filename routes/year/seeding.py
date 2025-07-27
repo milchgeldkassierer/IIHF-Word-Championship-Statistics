@@ -5,6 +5,7 @@ from flask import request, jsonify, current_app
 from models import db, ChampionshipYear, Game, TeamStats, GameOverrule
 from utils import _apply_head_to_head_tiebreaker, is_code_final
 from utils.fixture_helpers import resolve_fixture_path
+from utils.playoff_resolver import PlayoffResolver
 
 # Import the blueprint from the parent package
 from . import year_bp
@@ -207,25 +208,12 @@ def get_semifinal_seeding(year_id):
             if team_code not in teams_stats: 
                 teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
-        for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
-            for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
-                                                       (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
-                stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
-                
-                if stats.group == grp: 
-                    stats.gp += 1
-                    stats.gf += gf
-                    stats.ga += ga
-                    stats.pts += pts
-                    if res == 'REG':
-                        stats.w += 1 if gf > ga else 0
-                        stats.l += 1 if ga > gf else 0 
-                    elif res == 'OT':
-                        stats.otw += 1 if gf > ga else 0
-                        stats.otl += 1 if ga > gf else 0
-                    elif res == 'SO':
-                        stats.sow += 1 if gf > ga else 0
-                        stats.sol += 1 if ga > gf else 0
+        # Verwende StandingsCalculator für die Berechnung der Teamstatistiken
+        from services.standings_calculator_adapter import StandingsCalculator
+        calculator = StandingsCalculator()
+        teams_stats = calculator.calculate_standings_from_games(
+            [pg for pg in prelim_games if pg.team1_score is not None]
+        )
         
         # Standings by group
         standings_by_group = {}
@@ -291,46 +279,8 @@ def get_semifinal_seeding(year_id):
                     qf_game_numbers = [57, 58, 59, 60]
                     sf_game_numbers = [61, 62]
 
-        # Get resolved code function (simplified version)
-        def get_resolved_code(placeholder_code, current_map):
-            max_depth = 5 
-            current_code = placeholder_code
-            for _ in range(max_depth):
-                if current_code in current_map:
-                    next_code = current_map[current_code]
-                    if next_code == current_code:
-                        return current_code 
-                    current_code = next_code
-                elif (current_code.startswith('W(') or current_code.startswith('L(')) and current_code.endswith(')'):
-                    match = re.search(r'\(([^()]+)\)', current_code) 
-                    if match:
-                        inner_placeholder = match.group(1)
-                        if inner_placeholder.isdigit():
-                            game_num = int(inner_placeholder)
-                            game = games_dict_by_num.get(game_num)
-                            if game and game.team1_score is not None:
-                                raw_winner = game.team1_code if game.team1_score > game.team2_score else game.team2_code
-                                raw_loser = game.team2_code if game.team1_score > game.team2_score else game.team1_code
-                                outcome_based_code = raw_winner if current_code.startswith('W(') else raw_loser
-                                next_code = current_map.get(outcome_based_code, outcome_based_code)
-                                if next_code == current_code:
-                                    return next_code 
-                                current_code = next_code 
-                            else:
-                                return current_code 
-                        else: 
-                            resolved_inner = current_map.get(inner_placeholder, inner_placeholder)
-                            if resolved_inner == inner_placeholder:
-                                return current_code 
-                            new_placeholder = current_code.replace(inner_placeholder, resolved_inner)
-                            if new_placeholder == current_code:
-                                return current_code 
-                            current_code = new_placeholder
-                    else:
-                        return current_code 
-                else:
-                    return current_code 
-            return current_code
+        # Erstelle PlayoffResolver-Instanz für Team-Code-Auflösung
+        resolver = PlayoffResolver(year_obj, games_raw)
 
         # Quarterfinal winners logic
         qf_winners_teams = []
@@ -339,7 +289,7 @@ def get_semifinal_seeding(year_id):
         if qf_game_numbers and len(qf_game_numbers) == 4:
             for qf_game_num in qf_game_numbers:
                 winner_placeholder = f'W({qf_game_num})'
-                resolved_qf_winner = get_resolved_code(winner_placeholder, playoff_team_map)
+                resolved_qf_winner = resolver.get_resolved_code(winner_placeholder)
 
                 if is_code_final(resolved_qf_winner):
                     qf_winners_teams.append(resolved_qf_winner)
@@ -580,25 +530,12 @@ def get_quarterfinal_seeding(year_id):
                 teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
         # Calculate team statistics
-        for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
-            for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
-                                                       (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
-                stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
-                
-                if stats.group == grp: 
-                    stats.gp += 1
-                    stats.gf += gf
-                    stats.ga += ga
-                    stats.pts += pts
-                    if res == 'REG':
-                        stats.w += 1 if gf > ga else 0
-                        stats.l += 1 if ga > gf else 0 
-                    elif res == 'OT':
-                        stats.otw += 1 if gf > ga else 0
-                        stats.otl += 1 if ga > gf else 0
-                    elif res == 'SO':
-                        stats.sow += 1 if gf > ga else 0
-                        stats.sol += 1 if ga > gf else 0
+        # Verwende StandingsCalculator für die Berechnung der Teamstatistiken
+        from services.standings_calculator_adapter import StandingsCalculator
+        calculator = StandingsCalculator()
+        teams_stats = calculator.calculate_standings_from_games(
+            [pg for pg in prelim_games if pg.team1_score is not None]
+        )
         
         # Get standings by group
         standings_by_group = {}

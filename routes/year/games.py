@@ -4,10 +4,11 @@ import re
 import traceback
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from models import db, ChampionshipYear, Game, Player, Goal, Penalty, ShotsOnGoal, TeamStats, TeamOverallStats, GameDisplay, GameOverrule
-from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, GOAL_TYPE_DISPLAY_MAP, POWERPLAY_PENALTY_TYPES
+from constants import TEAM_ISO_CODES, PENALTY_TYPES_CHOICES, PENALTY_REASONS_CHOICES, PIM_MAP, GOAL_TYPE_DISPLAY_MAP, POWERPLAY_PENALTY_TYPES, PERIOD_1_END, PERIOD_2_END, PERIOD_3_END, QUARTERFINAL_1, QUARTERFINAL_2, QUARTERFINAL_3, QUARTERFINAL_4
 from utils import convert_time_to_seconds, check_game_data_consistency, is_code_final, _apply_head_to_head_tiebreaker
 from utils.fixture_helpers import resolve_fixture_path
 from utils.standings import calculate_complete_final_ranking
+from utils.playoff_resolver import PlayoffResolver
 
 # Import the blueprint from the parent package
 from . import year_bp
@@ -107,16 +108,10 @@ def game_stats_view(year_id, game_id):
         if team_code not in teams_stats: 
             teams_stats[team_code] = TeamStats(name=team_code, group=group_name)
 
-    for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
-        for code, grp, gf, ga, pts, res, is_t1 in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type, True),
-                                                   (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type, False)]:
-            stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
-            
-            if stats.group == grp: 
-                 stats.gp+=1; stats.gf+=gf; stats.ga+=ga; stats.pts+=pts
-                 if res=='REG': stats.w+=1 if gf>ga else 0; stats.l+=1 if ga>gf else 0 
-                 elif res=='OT': stats.otw+=1 if gf>ga else 0; stats.otl+=1 if ga>gf else 0
-                 elif res=='SO': stats.sow+=1 if gf>ga else 0; stats.sol+=1 if ga>gf else 0
+    # Verwende StandingsCalculator für die Berechnung der Teamstatistiken (ultra-compact style beibehalten)
+    from services.standings_calculator_adapter import StandingsCalculator
+    calculator = StandingsCalculator()
+    teams_stats = calculator.calculate_standings_from_games([pg for pg in prelim_games if pg.team1_score is not None])
     
     standings_by_group = {}
     if teams_stats:
@@ -186,51 +181,60 @@ def game_stats_view(year_id, game_id):
         except Exception as e: 
             current_app.logger.error(f"Could not parse fixture {year_obj.fixture_path} for playoff game numbers. Error: {e}") 
             if year_obj.year == 2025: 
-                qf_game_numbers = [57, 58, 59, 60]
+                qf_game_numbers = [QUARTERFINAL_1, QUARTERFINAL_2, QUARTERFINAL_3, QUARTERFINAL_4]
                 sf_game_numbers = [61, 62]
                 bronze_game_number = 63
                 gold_game_number = 64
                 tournament_hosts = ["SWE", "DEN"]
 
-    if sf_game_numbers and len(sf_game_numbers) >= 2 and all(isinstance(item, int) for item in sf_game_numbers):
-        playoff_team_map['SF1'] = str(sf_game_numbers[0])
-        playoff_team_map['SF2'] = str(sf_game_numbers[1])
+    # SF1/SF2 Mappings werden jetzt in playoff_mapping._build_playoff_team_map_for_year() erstellt
+    # if sf_game_numbers and len(sf_game_numbers) >= 2 and all(isinstance(item, int) for item in sf_game_numbers):
+    #     playoff_team_map['SF1'] = str(sf_game_numbers[0])
+    #     playoff_team_map['SF2'] = str(sf_game_numbers[1])
 
-    # Use the same get_resolved_code function as year_view
+    # Initialisiere PlayoffResolver für die Auflösung von Team-Codes
+    playoff_resolver = PlayoffResolver(year_obj, games_raw)
+    
+    # Verwende die zentrale get_resolved_code Methode des PlayoffResolver
+    # mit Fallback auf die lokale playoff_team_map für spezielle Fälle
     def get_resolved_code(placeholder_code, current_map):
-        max_depth = 5 
-        current_code = placeholder_code
-        for _ in range(max_depth):
-            if current_code in current_map:
-                next_code = current_map[current_code]
-                if next_code == current_code: return current_code 
-                current_code = next_code
-            elif (current_code.startswith('W(') or current_code.startswith('L(')) and current_code.endswith(')'):
-                match = re.search(r'\(([^()]+)\)', current_code) 
-                if match:
-                    inner_placeholder = match.group(1)
-                    if inner_placeholder.isdigit():
-                        game_num = int(inner_placeholder)
-                        game = games_dict_by_num.get(game_num)
-                        if game and game.team1_score is not None:
-                            raw_winner = game.team1_code if game.team1_score > game.team2_score else game.team2_code
-                            raw_loser = game.team2_code if game.team1_score > game.team2_score else game.team1_code
-                            outcome_based_code = raw_winner if current_code.startswith('W(') else raw_loser
-                            next_code = current_map.get(outcome_based_code, outcome_based_code)
-                            if next_code == current_code: return next_code 
-                            current_code = next_code 
-                        else: return current_code 
-                    else: 
-                        resolved_inner = current_map.get(inner_placeholder, inner_placeholder)
-                        if resolved_inner == inner_placeholder: return current_code 
-                        if resolved_inner.isdigit():
-                             current_code = f"{'W' if current_code.startswith('W(') else 'L'}({resolved_inner})"
-                        else: 
-                             return resolved_inner 
-                else: return current_code 
-            else: 
-                return current_code
-        return current_code
+        # Prüfe zuerst die lokale Map (enthält ggf. aktuellere Daten)
+        if placeholder_code in current_map:
+            local_result = current_map[placeholder_code]
+            # Wenn das lokale Ergebnis ein finaler Code ist, verwende es
+            if local_result and len(local_result) == 3 and local_result.isalpha() and local_result.isupper():
+                return local_result
+        
+        # Für Platzhalter wie W(SF1), L(SF1), etc. müssen wir sicherstellen,
+        # dass der PlayoffResolver die SF1/SF2 Mappings kennt
+        if re.match(r"^[WL]\(SF[12]\)$", placeholder_code):
+            # Extrahiere SF1 oder SF2
+            match = re.match(r"^([WL])\((SF[12])\)$", placeholder_code)
+            if match:
+                prefix = match.group(1)
+                sf_code = match.group(2)
+                # Hole die Spielnummer aus der lokalen Map
+                if sf_code in current_map:
+                    game_num = current_map[sf_code]
+                    # Erstelle den neuen Platzhalter mit der Spielnummer
+                    new_placeholder = f"{prefix}({game_num})"
+                    # Lasse den PlayoffResolver dies auflösen
+                    return playoff_resolver.get_resolved_code(new_placeholder)
+        
+        # Ansonsten nutze den PlayoffResolver für die Auflösung
+        resolver_result = playoff_resolver.get_resolved_code(placeholder_code)
+        
+        # Wenn der Resolver einen finalen Code zurückgibt, verwende ihn
+        if resolver_result and len(resolver_result) == 3 and resolver_result.isalpha() and resolver_result.isupper():
+            return resolver_result
+        
+        # Falls der Resolver keinen finalen Code liefert, prüfe nochmal die lokale Map
+        # Dies ist wichtig für Zwischenschritte wie SF1/SF2 -> Spielnummern
+        if placeholder_code in current_map:
+            return current_map[placeholder_code]
+        
+        # Fallback: Gib das Ergebnis des Resolvers zurück (oder den ursprünglichen Code)
+        return resolver_result
 
     # Create GameDisplay objects and resolve them using the same logic as year_view
     games_processed = [GameDisplay(id=g.id, year_id=g.year_id, date=g.date, start_time=g.start_time, round=g.round, group=g.group, game_number=g.game_number, location=g.location, venue=g.venue, team1_code=g.team1_code, team2_code=g.team2_code, original_team1_code=g.team1_code, original_team2_code=g.team2_code, team1_score=g.team1_score, team2_score=g.team2_score, result_type=g.result_type, team1_points=g.team1_points, team2_points=g.team2_points) for g in games_raw]
@@ -393,9 +397,9 @@ def game_stats_view(year_id, game_id):
             sf1_game_number = sf_game_numbers[0]  # First semifinal game
             sf2_game_number = sf_game_numbers[1]  # Second semifinal game
             
-            # Add mappings for SF1 and SF2 placeholders
-            playoff_team_map['SF1'] = str(sf1_game_number)
-            playoff_team_map['SF2'] = str(sf2_game_number)
+            # SF1/SF2 Mappings werden bereits in playoff_mapping._build_playoff_team_map_for_year() erstellt
+            # playoff_team_map['SF1'] = str(sf1_game_number)
+            # playoff_team_map['SF2'] = str(sf2_game_number)
             
             # Bronze Medal Game: L(SF1) vs L(SF2) -> L(61) vs L(62)
             sf1_loser_placeholder = f'L({sf1_game_number})'
@@ -524,9 +528,9 @@ def game_stats_view(year_id, game_id):
     for goal in goals_raw: # goal.team_code is the resolved name of the scoring team
         time_sec = convert_time_to_seconds(goal.minute)
         period = 4 
-        if time_sec <= 1200: period = 1
-        elif time_sec <= 2400: period = 2
-        elif time_sec <= 3600: period = 3
+        if time_sec <= PERIOD_1_END: period = 1
+        elif time_sec <= PERIOD_2_END: period = 2
+        elif time_sec <= PERIOD_3_END: period = 3
 
         scoring_team_resolved_name = goal.team_code # Directly use the resolved name from DB
 
@@ -548,9 +552,9 @@ def game_stats_view(year_id, game_id):
     for goal in goals_raw: # goal.team_code is the resolved name of the scoring team
         time_sec = convert_time_to_seconds(goal.minute)
         period_disp = "OT"; 
-        if time_sec <= 1200: period_disp = "1st Period"
-        elif time_sec <= 2400: period_disp = "2nd Period"
-        elif time_sec <= 3600: period_disp = "3rd Period"
+        if time_sec <= PERIOD_1_END: period_disp = "1st Period"
+        elif time_sec <= PERIOD_2_END: period_disp = "2nd Period"
+        elif time_sec <= PERIOD_3_END: period_disp = "3rd Period"
         
         event_team_display_name = goal.team_code # Use resolved name from DB directly
 

@@ -7,6 +7,7 @@ from routes.blueprints import main_bp
 from utils import is_code_final, _apply_head_to_head_tiebreaker, get_resolved_team_code
 from utils.fixture_helpers import resolve_fixture_path
 from utils.seeding_helpers import get_custom_seeding_from_db
+from utils.playoff_resolver import PlayoffResolver
 from constants import PIM_MAP, POWERPLAY_PENALTY_TYPES, PRELIM_ROUNDS, PLAYOFF_ROUNDS
 
 
@@ -57,25 +58,12 @@ def get_team_yearly_stats(team_code):
                 if team_code_prelim not in teams_stats: 
                     teams_stats[team_code_prelim] = TeamStats(name=team_code_prelim, group=group_name)
 
-            for g in [pg for pg in prelim_games if pg.team1_score is not None]: 
-                for code, grp, gf, ga, pts, res in [(g.team1_code, g.group, g.team1_score, g.team2_score, g.team1_points, g.result_type),
-                                                   (g.team2_code, g.group, g.team2_score, g.team1_score, g.team2_points, g.result_type)]:
-                    stats = teams_stats.setdefault(code, TeamStats(name=code, group=grp))
-                    
-                    if stats.group == grp: 
-                        stats.gp += 1
-                        stats.gf += gf
-                        stats.ga += ga
-                        stats.pts += pts
-                        if res == 'REG':
-                            stats.w += 1 if gf > ga else 0
-                            stats.l += 1 if ga > gf else 0 
-                        elif res == 'OT':
-                            stats.otw += 1 if gf > ga else 0
-                            stats.otl += 1 if ga > gf else 0
-                        elif res == 'SO':
-                            stats.sow += 1 if gf > ga else 0
-                            stats.sol += 1 if ga > gf else 0
+            # Verwende StandingsCalculator für die Berechnung der Teamstatistiken
+            from services.standings_calculator_adapter import StandingsCalculator
+            calculator = StandingsCalculator()
+            teams_stats = calculator.calculate_standings_from_games(
+                [pg for pg in prelim_games if pg.team1_score is not None]
+            )
             
             standings_by_group = {}
             if teams_stats:
@@ -153,45 +141,13 @@ def get_team_yearly_stats(team_code):
                 playoff_team_map['SF1'] = str(sf_game_numbers[0])
                 playoff_team_map['SF2'] = str(sf_game_numbers[1])
 
+            # Initialisiere PlayoffResolver für die Auflösung von Playoff-Codes
+            playoff_resolver = PlayoffResolver(year_obj, games_raw)
+            
+            # Wrapper-Funktion für Kompatibilität mit existierendem Code
             def get_resolved_code(placeholder_code, current_map):
-                max_depth = 5 
-                current_code = placeholder_code
-                for _ in range(max_depth):
-                    if current_code in current_map:
-                        next_code = current_map[current_code]
-                        if next_code == current_code:
-                            return current_code 
-                        current_code = next_code
-                    elif (current_code.startswith('W(') or current_code.startswith('L(')) and current_code.endswith(')'):
-                        match = re.search(r'\(([^()]+)\)', current_code) 
-                        if match:
-                            inner_placeholder = match.group(1)
-                            if inner_placeholder.isdigit():
-                                game_num = int(inner_placeholder)
-                                game = games_dict_by_num.get(game_num)
-                                if game and game.team1_score is not None:
-                                    raw_winner = game.team1_code if game.team1_score > game.team2_score else game.team2_code
-                                    raw_loser = game.team2_code if game.team1_score > game.team2_score else game.team1_code
-                                    outcome_based_code = raw_winner if current_code.startswith('W(') else raw_loser
-                                    next_code = current_map.get(outcome_based_code, outcome_based_code)
-                                    if next_code == current_code:
-                                        return next_code 
-                                    current_code = next_code 
-                                else:
-                                    return current_code 
-                            else: 
-                                resolved_inner = current_map.get(inner_placeholder, inner_placeholder)
-                                if resolved_inner == inner_placeholder:
-                                    return current_code 
-                                if resolved_inner.isdigit():
-                                    current_code = f"{'W' if current_code.startswith('W(') else 'L'}({resolved_inner})"
-                                else: 
-                                    return resolved_inner 
-                        else:
-                            return current_code 
-                    else: 
-                        return current_code
-                return current_code
+                # Verwende PlayoffResolver für die Auflösung
+                return playoff_resolver.get_resolved_code(placeholder_code)
 
             # Create games_processed exactly like in year_view
             games_processed = [GameDisplay(id=g.id, year_id=g.year_id, date=g.date, start_time=g.start_time, round=g.round, group=g.group, game_number=g.game_number, location=g.location, venue=g.venue, team1_code=g.team1_code, team2_code=g.team2_code, original_team1_code=g.team1_code, original_team2_code=g.team2_code, team1_score=g.team1_score, team2_score=g.team2_score, result_type=g.result_type, team1_points=g.team1_points, team2_points=g.team2_points) for g in games_raw]
@@ -427,19 +383,38 @@ def get_team_yearly_stats(team_code):
             sog = soga = ppgf = ppga = ppf = ppa = 0
             
             # Filter games based on game_type parameter before processing
-            def should_include_game(game_obj, resolved_game_obj, game_type_filter):
-                """Helper function to determine if a game should be included based on game type filter"""
+            def should_include_game(game_obj, resolved_game_obj, game_type_filter, target_team_code):
+                """Helper function to determine if a game should be included based on game type filter
+                
+                For playoff games, we need to check if the resolved game includes our team,
+                since raw playoff games have placeholder codes that don't match team names.
+                """
+                # Prüfe ob es ein Playoff-Spiel ist
+                playoff_indicators = ['Quarter', 'Semi', 'Final', 'Bronze', 'Gold', 'Playoff']
+                is_playoff_game = (game_obj.round in PLAYOFF_ROUNDS or 
+                                 any(indicator in game_obj.round for indicator in playoff_indicators))
+                
                 if game_type_filter == 'all':
-                    return True
+                    # Bei 'all' müssen wir trotzdem prüfen, ob das Team im aufgelösten Playoff-Spiel ist
+                    if is_playoff_game:
+                        # Für Playoff-Spiele: Prüfe, ob das aufgelöste Spiel unser Team enthält
+                        team_in_resolved = (resolved_game_obj.team1_code.upper() == target_team_code.upper() or
+                                          resolved_game_obj.team2_code.upper() == target_team_code.upper())
+                        return team_in_resolved
+                    else:
+                        # Für Vorrunden-Spiele: Immer einschließen bei 'all'
+                        return True
                 elif game_type_filter == 'preliminary':
-                    # Debug: print the round for debugging
+                    # Nur Vorrunden-Spiele
                     return game_obj.round in PRELIM_ROUNDS
                 elif game_type_filter == 'playoffs':
-                    # Debug: print the round for debugging
-                    # Check for various playoff round names that might exist in the database
-                    playoff_indicators = ['Quarter', 'Semi', 'Final', 'Bronze', 'Gold', 'Playoff']
-                    return (game_obj.round in PLAYOFF_ROUNDS or 
-                            any(indicator in game_obj.round for indicator in playoff_indicators))
+                    # Nur Playoff-Spiele, die das Team enthalten
+                    if is_playoff_game:
+                        # Für Playoff-Spiele: Prüfe, ob das aufgelöste Spiel unser Team enthält
+                        team_in_resolved = (resolved_game_obj.team1_code.upper() == target_team_code.upper() or
+                                          resolved_game_obj.team2_code.upper() == target_team_code.upper())
+                        return team_in_resolved
+                    return False
                 return True
             
             # Use the EXACT same logic as year_view lines 714-779 - this includes ALL games (preliminary + playoffs)
@@ -452,16 +427,25 @@ def get_team_yearly_stats(team_code):
 
                 # Filter out games based on game type - use the resolved game for filtering
                 # since playoff games have placeholder codes that get resolved
-                if not should_include_game(raw_game_obj_this_iter, resolved_game_this_iter, game_type):
+                if not should_include_game(raw_game_obj_this_iter, resolved_game_this_iter, game_type, team_code):
                     continue
 
                 # CRITICAL FIX: The logic needs to determine which team (team1 or team2) in the RAW game
-                # corresponds to our target team. We do this by checking which resolved team matches our target.
+                # corresponds to our target team. We check BOTH raw and resolved games:
+                # 1. For preliminary games: the team is directly in the raw game
+                # 2. For playoff games: the team appears in the resolved game (placeholders resolved)
                 is_current_team_t1_in_raw_game = False
                 team_found_in_game = False
 
-                # Case-insensitive comparison to be safe
-                if resolved_game_this_iter.team1_code.upper() == team_code.upper():
+                # First check if team is directly in the raw game (for preliminary games)
+                if raw_game_obj_this_iter.team1_code and raw_game_obj_this_iter.team1_code.upper() == team_code.upper():
+                    is_current_team_t1_in_raw_game = True
+                    team_found_in_game = True
+                elif raw_game_obj_this_iter.team2_code and raw_game_obj_this_iter.team2_code.upper() == team_code.upper():
+                    is_current_team_t1_in_raw_game = False
+                    team_found_in_game = True
+                # If not found in raw game, check resolved game (for playoff games with placeholders)
+                elif resolved_game_this_iter.team1_code.upper() == team_code.upper():
                     is_current_team_t1_in_raw_game = True
                     team_found_in_game = True
                 elif resolved_game_this_iter.team2_code.upper() == team_code.upper():
@@ -470,6 +454,8 @@ def get_team_yearly_stats(team_code):
                 
                 if not team_found_in_game:
                     continue
+                
+                
 
                 if raw_game_obj_this_iter.team1_score is not None and raw_game_obj_this_iter.team2_score is not None: 
                     team_participated = True
@@ -478,6 +464,7 @@ def get_team_yearly_stats(team_code):
                     opponent_score = raw_game_obj_this_iter.team2_score if is_current_team_t1_in_raw_game else raw_game_obj_this_iter.team1_score
                     gf += current_team_score
                     ga += opponent_score
+                    
                     
                     # Debug logging removed
                     

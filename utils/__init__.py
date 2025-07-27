@@ -21,6 +21,11 @@ from .playoff_mapping import (
     _build_playoff_team_map_for_year,
 )
 
+from .playoff_resolver import (
+    PlayoffResolver,
+    resolve_playoff_code,
+)
+
 from .data_validation import (
     check_game_data_consistency,
     check_powerplay_penalty_consistency,
@@ -227,6 +232,10 @@ __all__ = [
     
     # Playoff mapping
     '_build_playoff_team_map_for_year',
+    
+    # Playoff resolver
+    'PlayoffResolver',
+    'resolve_playoff_code',
     
     # Data validation
     'check_game_data_consistency',

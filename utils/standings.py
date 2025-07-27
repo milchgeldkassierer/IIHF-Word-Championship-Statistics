@@ -39,37 +39,10 @@ def _calculate_basic_prelim_standings(prelim_games_for_year: List[Game]) -> Dict
             standings[game.team2_code].group = current_game_group
 
 
-        team1_stats = standings[game.team1_code]
-        team2_stats = standings[game.team2_code]
-
-        team1_stats.gp += 1
-        team2_stats.gp += 1
-        team1_stats.gf += game.team1_score
-        team1_stats.ga += game.team2_score
-        team2_stats.gf += game.team2_score
-        team2_stats.ga += game.team1_score
-
-        if game.result_type == 'REG':
-            if game.team1_score > game.team2_score:
-                team1_stats.w += 1; team1_stats.pts += 3
-                team2_stats.l += 1
-            else:
-                team2_stats.w += 1; team2_stats.pts += 3
-                team1_stats.l += 1
-        elif game.result_type == 'OT':
-            if game.team1_score > game.team2_score:
-                team1_stats.otw += 1; team1_stats.pts += 2
-                team2_stats.otl += 1; team2_stats.pts += 1
-            else:
-                team2_stats.otw += 1; team2_stats.pts += 2
-                team1_stats.otl += 1; team1_stats.pts += 1
-        elif game.result_type == 'SO': # Shootout
-            if game.team1_score > game.team2_score:
-                team1_stats.sow += 1; team1_stats.pts += 2
-                team2_stats.sol += 1; team2_stats.pts += 1
-            else:
-                team2_stats.sow += 1; team2_stats.pts += 2
-                team1_stats.sol += 1; team1_stats.pts += 1
+        # Verwende StandingsCalculator für die Aktualisierung der Statistiken
+        from services.standings_calculator_adapter import StandingsCalculator
+        calculator = StandingsCalculator()
+        calculator.update_team_stats(standings, game)
     
     # Calculate rank_in_group with head-to-head comparison
     grouped_standings_for_ranking: Dict[str, List[TeamStats]] = {}
@@ -388,50 +361,24 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
         team_map = {}
         prelim_games = [g for g in games_this_year if g.round in PRELIM_ROUNDS and is_code_final(g.team1_code) and is_code_final(g.team2_code)]
         
-        group_standings = {}
-        for game in prelim_games:
-            if game.team1_score is None or game.team2_score is None:
-                continue
-                
-            group = game.group
-            if not group:
-                continue
-                
-            if group not in group_standings:
-                group_standings[group] = {}
-                
-            for team in [game.team1_code, game.team2_code]:
-                if team not in group_standings[group]:
-                    group_standings[group][team] = {'pts': 0, 'gf': 0, 'ga': 0}
-            
-            t1_score, t2_score = game.team1_score, game.team2_score
-            group_standings[group][game.team1_code]['gf'] += t1_score
-            group_standings[group][game.team1_code]['ga'] += t2_score
-            group_standings[group][game.team2_code]['gf'] += t2_score  
-            group_standings[group][game.team2_code]['ga'] += t1_score
-            
-            if game.result_type == 'REG':
-                if t1_score > t2_score:
-                    group_standings[group][game.team1_code]['pts'] += 3
-                else:
-                    group_standings[group][game.team2_code]['pts'] += 3
-            elif game.result_type in ['OT', 'SO']:
-                if t1_score > t2_score:
-                    group_standings[group][game.team1_code]['pts'] += 2
-                    group_standings[group][game.team2_code]['pts'] += 1
-                else:
-                    group_standings[group][game.team2_code]['pts'] += 2
-                    group_standings[group][game.team1_code]['pts'] += 1
+        # Verwende StandingsCalculator für die Berechnung der Gruppenstandings
+        from services.standings_calculator_adapter import StandingsCalculator
+        calculator = StandingsCalculator()
+        all_team_stats = calculator.calculate_standings_from_games(
+            [g for g in prelim_games if g.team1_score is not None]
+        )
         
-        for group, teams in group_standings.items():
-            team_stats_list = []
-            for team_name, stats in teams.items():
-                ts = TeamStats(name=team_name, group=group)
-                ts.pts = stats['pts']
-                ts.gf = stats['gf'] 
-                ts.ga = stats['ga']
-                team_stats_list.append(ts)
-            
+        # Gruppiere Teams nach ihrer Gruppe
+        group_standings = {}
+        for team_code, team_stats in all_team_stats.items():
+            group = team_stats.group
+            if group and group != "N/A":
+                if group not in group_standings:
+                    group_standings[group] = []
+                group_standings[group].append(team_stats)
+        
+        # Sortiere und berechne Ränge für jede Gruppe
+        for group, team_stats_list in group_standings.items():
             team_stats_list.sort(key=lambda x: (x.pts, x.gd, x.gf), reverse=True)
             team_stats_list = _apply_head_to_head_tiebreaker(team_stats_list, prelim_games)
             
@@ -588,28 +535,10 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
                                 elif prelim_stats_map[team_code_val].group == "N/A" and current_game_group != "N/A":
                                     prelim_stats_map[team_code_val].group = current_game_group
                             
-                            t1_stats = prelim_stats_map[game_prelim.team1_code]
-                            t2_stats = prelim_stats_map[game_prelim.team2_code]
-
-                            t1_stats.gp += 1; t2_stats.gp += 1
-                            t1_stats.gf += game_prelim.team1_score; t1_stats.ga += game_prelim.team2_score
-                            t2_stats.gf += game_prelim.team2_score; t2_stats.ga += game_prelim.team1_score
-
-                            if game_prelim.result_type == 'REG':
-                                if game_prelim.team1_score > game_prelim.team2_score: 
-                                    (t1_stats.w, t1_stats.pts, t2_stats.l) = (t1_stats.w+1, t1_stats.pts+3, t2_stats.l+1)
-                                else: 
-                                    (t2_stats.w, t2_stats.pts, t1_stats.l) = (t2_stats.w+1, t2_stats.pts+3, t1_stats.l+1)
-                            elif game_prelim.result_type == 'OT':
-                                if game_prelim.team1_score > game_prelim.team2_score: 
-                                    (t1_stats.otw, t1_stats.pts, t2_stats.otl, t2_stats.pts) = (t1_stats.otw+1, t1_stats.pts+2, t2_stats.otl+1, t2_stats.pts+1)
-                                else: 
-                                    (t2_stats.otw, t2_stats.pts, t1_stats.otl, t1_stats.pts) = (t2_stats.otw+1, t2_stats.pts+2, t1_stats.otl+1, t1_stats.pts+1)
-                            elif game_prelim.result_type == 'SO':
-                                if game_prelim.team1_score > game_prelim.team2_score: 
-                                    (t1_stats.sow, t1_stats.pts, t2_stats.sol, t2_stats.pts) = (t1_stats.sow+1, t1_stats.pts+2, t2_stats.sol+1, t2_stats.pts+1)
-                                else: 
-                                    (t2_stats.sow, t2_stats.pts, t1_stats.sol, t1_stats.pts) = (t2_stats.sow+1, t2_stats.pts+2, t1_stats.sol+1, t1_stats.pts+1)
+                            # Verwende StandingsCalculator für die Aktualisierung der Statistiken
+                            from services.standings_calculator_adapter import StandingsCalculator
+                            calculator = StandingsCalculator()
+                            calculator.update_team_stats(prelim_stats_map, game_prelim)
 
                         # Sort teams by group using proper tiebreaker
                         for group_name in group_standings:
@@ -795,28 +724,10 @@ def calculate_complete_final_ranking(year_obj, games_this_year, playoff_map, yea
             elif prelim_stats_map[team_code].group == "N/A" and current_game_group != "N/A":
                 prelim_stats_map[team_code].group = current_game_group
         
-        t1_stats = prelim_stats_map[game.team1_code]
-        t2_stats = prelim_stats_map[game.team2_code]
-        
-        t1_stats.gp += 1; t2_stats.gp += 1
-        t1_stats.gf += game.team1_score; t1_stats.ga += game.team2_score
-        t2_stats.gf += game.team2_score; t2_stats.ga += game.team1_score
-        
-        if game.result_type == 'REG':
-            if game.team1_score > game.team2_score: 
-                t1_stats.w += 1; t1_stats.pts += 3; t2_stats.l += 1
-            else: 
-                t2_stats.w += 1; t2_stats.pts += 3; t1_stats.l += 1
-        elif game.result_type == 'OT':
-            if game.team1_score > game.team2_score: 
-                t1_stats.otw += 1; t1_stats.pts += 2; t2_stats.otl += 1; t2_stats.pts += 1
-            else: 
-                t2_stats.otw += 1; t2_stats.pts += 2; t1_stats.otl += 1; t1_stats.pts += 1
-        elif game.result_type == 'SO':
-            if game.team1_score > game.team2_score: 
-                t1_stats.sow += 1; t1_stats.pts += 2; t2_stats.sol += 1; t2_stats.pts += 1
-            else: 
-                t2_stats.sow += 1; t2_stats.pts += 2; t1_stats.sol += 1; t1_stats.pts += 1
+        # Verwende StandingsCalculator für die Aktualisierung der Statistiken
+        from services.standings_calculator_adapter import StandingsCalculator
+        calculator = StandingsCalculator()
+        calculator.update_team_stats(prelim_stats_map, game)
     
     standings_by_group = {}
     for ts in prelim_stats_map.values():

@@ -11,7 +11,7 @@ TEAM_ISO_CODES = {
 
 # Tournament round definitions
 PRELIM_ROUNDS = ["Preliminary Round", "Group Stage", "Round Robin"]
-PLAYOFF_ROUNDS = ["Quarterfinals", "Semifinals", "Final", "Bronze Medal Game", "Gold Medal Game", "Playoff"]
+PLAYOFF_ROUNDS = ["Quarterfinals", "Quarterfinal", "Semifinals", "Semifinal", "Final", "Bronze Medal Game", "Gold Medal Game", "Playoff"]
 
 # Hauptrunden-Spiele Konstanten
 MAX_PRELIM_GAMES_PER_TEAM = 7  # Maximale Anzahl der Hauptrundenspiele pro Team
@@ -57,4 +57,34 @@ GOAL_TYPE_DISPLAY_MAP = {
     "PP": "PP", 
     "SH": "SH", 
     "PS": "PS"
-} 
+}
+
+# Playoff-Spielnummern Konstanten
+QUARTERFINAL_1 = 57  # Viertelfinale 1
+QUARTERFINAL_2 = 58  # Viertelfinale 2
+QUARTERFINAL_3 = 59  # Viertelfinale 3
+QUARTERFINAL_4 = 60  # Viertelfinale 4
+SEMIFINAL_1 = 61     # Halbfinale 1
+SEMIFINAL_2 = 62     # Halbfinale 2
+BRONZE_MEDAL = 63    # Spiel um Platz 3 (Bronze)
+GOLD_MEDAL = 64      # Finale (Gold)
+
+# Gruppierte Spielnummern für einfachere Verwendung
+QUARTERFINAL_GAME_NUMBERS = [QUARTERFINAL_1, QUARTERFINAL_2, QUARTERFINAL_3, QUARTERFINAL_4]
+SEMIFINAL_GAME_NUMBERS = [SEMIFINAL_1, SEMIFINAL_2]
+MEDAL_GAME_NUMBERS = [BRONZE_MEDAL, GOLD_MEDAL]
+ALL_PLAYOFF_GAME_NUMBERS = QUARTERFINAL_GAME_NUMBERS + SEMIFINAL_GAME_NUMBERS + MEDAL_GAME_NUMBERS
+
+# Zeit-Konstanten (in Sekunden)
+PERIOD_1_END = 1200  # Ende 1. Drittel (20 Minuten)
+PERIOD_2_END = 2400  # Ende 2. Drittel (40 Minuten)
+PERIOD_3_END = 3600  # Ende 3. Drittel (60 Minuten)
+SECONDS_PER_MINUTE = 60  # Sekunden pro Minute
+REGULATION_TIME_SECONDS = 3600  # 60 Minuten reguläre Spielzeit
+OVERTIME_DURATION_SECONDS = 300  # 5 Minuten Verlängerung
+PENALTY_SHOT_TIME_SECONDS = 0  # Penalty-Schießen hat keine feste Zeit
+
+# Anzeige-Limit Konstanten
+TOP_3_DISPLAY = 3    # Top 3 Spieler/Teams anzeigen
+TOP_5_DISPLAY = 5    # Top 5 Spieler/Teams anzeigen  
+MAX_RECORDS = 10     # Maximale Anzahl von Datensätzen für Rekorde 

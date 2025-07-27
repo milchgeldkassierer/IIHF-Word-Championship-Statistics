@@ -4,7 +4,7 @@ import json
 from typing import Dict, List
 
 from models import Game, ChampionshipYear, TeamStats
-from constants import PLAYOFF_ROUNDS
+from constants import PLAYOFF_ROUNDS, QUARTERFINAL_1, QUARTERFINAL_2, QUARTERFINAL_3, QUARTERFINAL_4, SEMIFINAL_1, SEMIFINAL_2
 from .team_resolution import is_code_final, get_resolved_team_code, resolve_fixture_path_local
 
 
@@ -33,15 +33,15 @@ def _build_playoff_team_map_for_year(
                 with open(absolute_fixture_path, 'r', encoding='utf-8') as f:
                     fixture_data = json.load(f)
                 # Use .get for game numbers list, falling back to constants if key missing or empty
-                qf_game_numbers = fixture_data.get("qf_game_numbers") or [57, 58, 59, 60]
-                sf_game_numbers = fixture_data.get("sf_game_numbers") or [61, 62]
+                qf_game_numbers = fixture_data.get("qf_game_numbers") or [QUARTERFINAL_1, QUARTERFINAL_2, QUARTERFINAL_3, QUARTERFINAL_4]
+                sf_game_numbers = fixture_data.get("sf_game_numbers") or [SEMIFINAL_1, SEMIFINAL_2]
                 host_team_codes = fixture_data.get("host_teams", []) 
             except (json.JSONDecodeError, OSError) as e:
-                qf_game_numbers = [57, 58, 59, 60]
-                sf_game_numbers = [61, 62]
+                qf_game_numbers = [QUARTERFINAL_1, QUARTERFINAL_2, QUARTERFINAL_3, QUARTERFINAL_4]
+                sf_game_numbers = [SEMIFINAL_1, SEMIFINAL_2]
     else:
-        qf_game_numbers = [57, 58, 59, 60]
-        sf_game_numbers = [61, 62]
+        qf_game_numbers = [QUARTERFINAL_1, QUARTERFINAL_2, QUARTERFINAL_3, QUARTERFINAL_4]
+        sf_game_numbers = [SEMIFINAL_1, SEMIFINAL_2]
 
     # 1. Initial population from prelim standings (A1, B2, etc.)
     # prelim_standings_by_group is Dict[str (group_name), List[TeamStats (sorted by rank)]]
@@ -119,6 +119,13 @@ def _build_playoff_team_map_for_year(
                 if playoff_team_map.get(l_placeholder) != loser_actual_code:
                     playoff_team_map[l_placeholder] = loser_actual_code
                     changed_in_pass = True
+    
+    # 2.5 SF Mapping für Medal Games
+    # Die Bronze/Gold Medal Games verwenden L(SF1), L(SF2), W(SF1), W(SF2) Platzhalter
+    # Diese müssen zu den Spielnummern 61 und 62 gemappt werden
+    if sf_game_numbers and len(sf_game_numbers) >= 2:
+        playoff_team_map['SF1'] = str(sf_game_numbers[0])  # Normalerweise 61
+        playoff_team_map['SF2'] = str(sf_game_numbers[1])  # Normalerweise 62
     
     # 3. SF Seeding Logic (Post-QF resolution)
     # This part is for specific reseeding rules if they exist beyond fixed W(X) paths.

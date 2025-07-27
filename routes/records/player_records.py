@@ -1,6 +1,6 @@
 from collections import defaultdict
 from models import db, Goal, Player, ChampionshipYear, Game, Penalty
-from constants import PIM_MAP
+from constants import PIM_MAP, TOP_3_DISPLAY
 
 
 def get_most_scorers_tournament():
@@ -36,7 +36,7 @@ def get_most_scorers_tournament():
     
     # Sort by points descending and return top 3
     all_performances.sort(key=lambda x: x['points'], reverse=True)
-    return all_performances[:3]
+    return all_performances[:TOP_3_DISPLAY]
 
 
 def get_most_goals_player_tournament():
@@ -67,7 +67,7 @@ def get_most_goals_player_tournament():
     
     # Sort by goals descending and return top 3
     all_performances.sort(key=lambda x: x['goals'], reverse=True)
-    return all_performances[:3]
+    return all_performances[:TOP_3_DISPLAY]
 
 
 def get_most_assists_player_tournament():
@@ -101,7 +101,7 @@ def get_most_assists_player_tournament():
     
     # Sort by assists descending and return top 3
     all_performances.sort(key=lambda x: x['assists'], reverse=True)
-    return all_performances[:3]
+    return all_performances[:TOP_3_DISPLAY]
 
 
 def get_most_penalty_minutes_tournament():
@@ -134,4 +134,4 @@ def get_most_penalty_minutes_tournament():
     
     # Sort by penalty minutes descending and return top 3
     all_performances.sort(key=lambda x: x['pim'], reverse=True)
-    return all_performances[:3]
+    return all_performances[:TOP_3_DISPLAY]
